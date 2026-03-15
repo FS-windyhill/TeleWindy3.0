@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>TeleWindy</title>
+    
+    <!-- PWA 相关 -->
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="icon" href="./icon192.png">
+    <link rel="apple-touch-icon" href="./icon192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+    <!-- 仿原生状态栏 -->
+    <div id="app-status-bar" class="app-status-bar">
+        <!-- <div class="sb-left">
+            <span id="sb-time">00:00</span>
+        </div>
+        <div class="sb-right">
+            <span id="sb-battery-text">100%</span>
+            <div class="sb-battery-icon">
+                <div id="sb-battery-level" class="sb-battery-level"></div>
+            </div>
+        </div> -->
+    </div>
+
+    
+
+    <div id="app-container">
+        
+        <!-- ======================= -->
+        <!-- 页面 1：好友列表 (首页) -->
+        <!-- ======================= -->
+        <div id="view-contact-list" class="page-view">
+            <header class="app-header">
+                
+                <h1>通讯录</h1>
+                <button id="add-contact-btn" class="header-icon-btn right" title="添加新角色">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                </button>
+                <button id="main-settings-btn" class="header-icon-btn left" title="全局设置">
+                    <!-- 将 SVG 直接粘在按钮里 -->
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </button>
+            </header>
+            
+            <!-- 新增这一层：统一的毛玻璃容器 -->
+            <div id="contact-list-wrapper">
+                <div id="contact-list-container">
+                    <!-- 这里的列表由 JS 动态生成（保持原来的结构不变） -->
+                    <!-- 示例（实际由 JS 生成）：
+                    <div class="contact-item" data-id="1">
+                        <img src="xxx.jpg" class="contact-avatar">
+                        <div class="contact-info">
+                            <h3>张三</h3>
+                            <p>最后一句消息预览...</p>
+                        </div>
+                    </div>
+                    -->
+                </div>
+            </div>
+
+
+
+        </div>
+
+
+                
+        <!-- ================================================= -->
+        <!-- 新增模块：探索与心迹 -->
+        <!-- ================================================= -->
+
+        <!-- ================= 1. 底部导航栏 ================= -->
+        <!-- 注意：它和 #view-contact-list 平级，放在 #app-container 内部的最底下 -->
+        <div id="bottom-tab-bar" class="tab-bar">
+            <button id="tab-chat" class="tab-btn active">聊天</button>
+            <button id="tab-explore" class="tab-btn">探索</button>
+        </div>
+
+        <!-- ================= 2. 探索列表视图 (默认隐藏) ================= -->
+        <div id="view-explore" class="page-view" style="display: none;">
+            <header class="app-header">
+                <button id="explore-back-btn" class="header-icon-btn left" title="返回联系人">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
+                <h1>探索</h1>
+            </header>
+            <ul class="explore-list">
+                <!-- 给了它一个 ID：explore-moments-btn -->
+                <li id="explore-moments-btn">
+                    <span class="icon">
+                        <!-- 替换 ✨︎ (Sparkles) -->
+                        <svg width="1em" height="1em" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg" style="vertical-align: -0.125em;">
+                            <path d="M10 6C10 10.5 13.5 14 18 14C13.5 14 10 17.5 10 22C10 17.5 6.5 14 2 14C6.5 14 10 10.5 10 6ZM18 1C18 3.5 19.5 5 22 5C19.5 5 18 6.5 18 9C18 6.5 16.5 5 14 5C16.5 5 18 3.5 18 1ZM5 2C5 3.5 6 4.5 7.5 4.5C6 4.5 5 5.5 5 7C5 5.5 4 4.5 2.5 4.5C4 4.5 5 3.5 5 2Z" />
+                        </svg>
+                    </span>
+                    <span class="text">心迹</span>
+                    <span class="arrow">
+                        <!-- 替换 > (Greater-than) -->
+                        <svg width="1.5em" height="1.5em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" style="vertical-align: -0.125em;">
+                            <path d="M9 6L16 12L9 18" />
+                        </svg>
+                    </span>
+                </li>
+                <!-- 未来可以加：AI朋友圈、世界画廊等 -->
+
+
+
+                <!-- 👇 新加的：原本的“查看日志”按钮，现在伪装成了列表项 👇 -->
+                <!-- 重点：保留 ID="btn-show-log"，这样你的 JS 依然能找到它！ -->
+                <li id="btn-show-log">
+                    <span class="icon">
+                        <!-- 替换原先的 emoji -->
+                        <svg width="0.9em" height="0.9em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                            <!-- 外面的矩形框 -->
+                            <rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect>
+                            <!-- 内部的横线 -->
+                            <path d="M9 8h6"></path> <!-- 第一行短一点或居中 -->
+                            <path d="M8 12h8"></path> <!-- 第二行长 -->
+                            <path d="M8 16h8"></path> <!-- 第三行长 -->
+                        </svg>
+                    </span>
+                    <span class="text">上下文日志</span>
+                    <span class="arrow">
+                        <!-- 右侧箭头保持不变 -->
+                        <svg width="1.5em" height="1.5em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" style="vertical-align: -0.125em;">
+                            <path d="M9 6L16 12L9 18" />
+                        </svg>
+                    </span>
+                </li>
+
+            </ul>
+        </div>
+
+        <!-- ================= 3. 心迹主界面 (默认隐藏) ================= -->
+        <div id="view-moments" class="page-view" style="display: none;">
+            <!-- 顶部导航 (和你聊天页面一样的精美样式) -->
+            <header class="app-header">
+                <button id="moments-back-btn" class="header-icon-btn left" title="返回探索">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
+                
+                <h1>我的心迹</h1>
+
+                <button id="moments-settings-btn" class="header-icon-btn right" title="心迹设置">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </button>
+            </header>
+
+            <!-- ★★★ 新增：悬浮在右下角的撰写按钮 ★★★ -->
+            <button id="btn-write-moment" class="floating-write-btn" title="发布心迹">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            </button>
+            
+            <!-- 心迹滚动区域 -->
+            <div id="moments-scroll-area" class="moments-scroll">
+
+                <!-- ★★★ 新增：两个隐藏的文件输入框，用于更换背景和头像 ★★★ -->
+                <input type="file" id="m-bg-upload-input" accept="image/*" style="display: none;">
+                <input type="file" id="m-avatar-upload-input" accept="image/*" style="display: none;">
+
+
+                <!-- 朋友圈头部：背景、头像、签名 -->
+                <div class="moments-header">
+                    <img id="moments-bg" class="m-bg clickable-img" src="wallpaper.jpg" title="点击更换背景">
+                    
+                    <div class="m-user-info">
+                        <!-- 新增：将文字内容包在一起 -->
+                        <div class="m-text-info">
+                            <span id="moments-username" class="m-username" title="点击修改名字">你的名字</span>
+                            <span id="moments-signature" class="m-signature" title="点击修改签名">写下你的个性签名...</span>
+                        </div>
+                        
+                        <!-- 头像 -->
+                        <img id="moments-avatar" class="m-avatar clickable-img" src="avatar.jpg" title="点击更换头像">
+                    </div>
+                </div>
+
+
+
+                <!-- 心迹流 -->
+                <div id="moments-feed"></div>
+                
+                <!-- 加载更多 -->
+                <button id="btn-load-more-moments" style="display: none;">加载更多</button>
+            </div>
+        </div>
+
+        <!-- ================= 4. 心迹设置 Modal ================= -->
+        <div id="modal-moments-settings" class="modal-overlay hidden">
+            <div class="modal.extra-layout glass-panel">
+                <h3 id="modal-title">心迹设置</h3>
+                <div class="m-modal-scroll-container">
+                    <div class="input-group">
+                        <label>评论 API 预设 (节省Token用):</label>
+                        <select id="m-setting-api-preset"></select>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label>谁可以评论我 (留空则所有人):</label>
+                        <div id="m-setting-allowed-chars" class="checkbox-group">
+                            <!-- JS 动态渲染复选框 -->
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="modal-buttons fixed-footer">
+                    <button id="btn-close-m-settings" class="cancel-btn">取消</button>
+                    <button id="btn-save-m-settings" class="save-btn">保存</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= 5. 撰写心迹 Modal ================= -->
+        <div id="modal-write-moment" class="modal-overlay hidden">
+            <div class="edit-box glass-panel"> 
+                <!-- 保留原本的 ID，同时加上新的 class 保证样式 -->
+                <h3 id="modal-title" class="bianjixiaoxi">发布心迹</h3>
+                
+                <textarea id="m-write-text" placeholder="这一刻的想法..." rows="5"></textarea>
+                
+                <div class="edit-buttons">
+                    <button id="btn-close-m-write" class="cancel-btn">取消</button>
+                    <button id="btn-publish-m-write" class="primary">发布</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================================================= -->
+        <!-- TEMPLATES (模板区，不在页面直接显示，供JS调用) -->
+        <!-- ================================================= -->
+        
+        <!-- 联系人列表项模板 -->
+        <template id="tpl-contact-item">
+            <div class="contact-item">
+                <div class="contact-main-content">
+                    <!-- 头像容器 -->
+                    <div class="avatar-wrapper"></div>
+                    
+                    <!-- 信息容器 -->
+                    <div class="contact-info">
+                        <h3 class="contact-name">角色名称</h3>
+                        <p class="contact-preview">消息预览...</p>
+                    </div>
+                </div>
+                
+                <!-- 红点 (默认隐藏) -->
+                <div class="badge-count" style="display: none;">0</div>
+            </div>
+        </template>
+
+        <!-- ======================= -->
+        <!-- 页面 2：聊天窗口 (隐藏) -->
+        <!-- ======================= -->
+        <div id="view-chat" class="page-view"> 
+            <header class="app-header">
+                <!-- 左上角返回按钮 -->
+                <button id="back-btn" class="header-icon-btn left" title="返回列表">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
+                
+                <h1 id="chat-title">角色名</h1>
+                <!-- 状态文本 -->
+                <p id="typing-status">在线</p>
+
+                <!-- 右上角设置按钮 (原来的清空按钮改成了这个，或者并在设置里) -->
+                <button id="chat-settings-btn" class="header-icon-btn right" title="设置/清空">
+                    <!-- 将 SVG 直接粘在按钮里 -->
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </button>
+            </header>
+            
+            <div id="chat-window">
+                <div id="chat-messages">
+                    <!-- 消息由 JS 动态插入 -->
+                </div>
+            </div>
+
+
+
+            <footer class="app-footer">
+                <!-- ★★★ 1. 把预览容器放在 footer 标签内部的第一行 ★★★ -->
+                <div id="image-preview-container">
+                    <div style="position: relative;">
+                        <img id="image-preview-img" src="">
+                        <button id="clear-image-btn" style="position: absolute; top: -8px; right: -8px; background: red; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px;">×</button>
+                    </div>
+                </div>
+
+                <!-- 2. 隐藏的文件输入框 -->
+                <input type="file" id="image-upload-input" accept="image/*" style="display: none;">
+
+                <!-- Reroll: 把 '✦' 换成了 星星/魔法图标 -->
+                <button id="reroll-footer-btn" class="footer-btn" title="重新生成">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2L14.8 8.4L22 12L14.8 15.6L12 22L9.2 15.6L2 12L9.2 8.4L12 2Z"/>
+                    </svg>
+                </button>
+
+                <textarea type="text" id="task-input" rows="1" placeholder="说点什么..."></textarea>
+
+                <!-- Upload: 把 '+' 换成了 圆角加号图标 -->
+                <button id="upload-image-btn" class="footer-btn" title="上传图片">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                </button>
+
+                <!-- Send: 把 '➤' 换成了 纸飞机图标 -->
+                <button id="send-button" title="发送">
+                    <svg viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                    </svg>
+                </button>
+            </footer>
+
+
+        </div>
+
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 新增：消息气泡模板 (Template)               -->
+    <!-- 这是一个隐藏的模具，JS 会复制它来生成消息    -->
+    <!-- ========================================== -->
+    <template id="msg-template">
+        <div class="message-wrapper">
+            <!-- 1. 头像 -->
+            <div class="avatar-container">
+                <img class="avatar-img" src="" alt="avatar">
+                <div class="avatar-text" style="display:none;"></div>
+            </div>
+            
+            <!-- 2. 气泡内容 -->
+            <div class="message-content">
+                <div class="message-bubble"></div>
+            </div>
+
+            <!-- 3. 时间戳 (放在气泡外面) -->
+            <span class="msg-time"></span>
+        </div>
+    </template>
+
+    <!-- ======================= -->
+    <!-- 弹窗：编辑/添加角色 -->
+    <!-- ======================= -->
+    <!-- ======================= -->
+    <!-- 弹窗：编辑/添加角色 -->
+    <!-- ======================= -->
+    <div id="modal-overlay" class="hidden">
+        <div class="modal extra-layout" style="background: transparent; box-shadow: none; border: none;">
+            
+            <!-- ==================== 顶部：固定标题 ==================== -->
+            <h2 id="modal-title">编辑角色</h2>
+            
+            <!-- ==================== 中间：可滚动的内容区域 ==================== -->
+            <!-- 新增一个容器包裹所有输入框 -->
+            <!-- 【改动2】：把 "glass-panel" 加在这里！ -->
+            <!-- 这样只有中间这部分会有白底和毛玻璃效果 -->
+            <div class="modal-scroll-container glass-panel">
+                
+                <div class="input-group">
+                    <label>名字</label>
+                    <input type="text" id="edit-name" placeholder="例如：AI助手">
+                </div>
+
+                <!-- 角色头像上传 -->
+                <div class="input-group avatar-upload-group">
+                    <label>角色头像</label>
+                    <div class="avatar-preview-wrapper">
+                        <img id="edit-avatar-preview" class="avatar-preview" src="./char.jpg" alt="预览">
+                        <input type="file" id="edit-avatar-file" accept="image/*" style="display:none;">
+                        <button type="button" id="edit-avatar-upload-btn" class="small-btn">上传本地图片</button>
+                    </div>
+                </div>
+
+                <!-- 用户头像上传 -->
+                <div class="input-group avatar-upload-group">
+                    <label>我的头像（用户头像）</label>
+                    <div class="avatar-preview-wrapper">
+                        <img id="user-avatar-preview" class="avatar-preview" src="./user.jpg" alt="预览">
+                        <input type="file" id="user-avatar-file" accept="image/*" style="display:none;">
+                        <button type="button" id="user-avatar-upload-btn" class="small-btn">上传本地图片</button>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                    <label>User Prompt</label>
+                    <textarea id="edit-prompt" rows="5" placeholder="你是一个..."></textarea>
+                </div>
+
+                <!-- 角色专属模型选择 -->
+                <div class="input-group">
+                    <label>专属模型 (API 预设)</label>
+                    <select id="edit-char-preset" class="setting-input">
+                        <option value="">-- 跟随全局默认设置 --</option>
+                    </select>
+                    <p class="input-hint">
+                        选择后，该角色将使用此模型聊天。
+                    </p>
+                </div>
+
+                <!-- 聊天记录导入导出区域 -->
+                <div id="history-manager-section" class="input-group">
+                    <label>聊天记录管理</label>
+                    <div class="history-buttons">
+                        <button id="btn-export-history" class="history-btn">📤 导出记录</button>
+                        <button id="btn-import-history" class="history-btn">📥 导入记录</button>
+                        <input type="file" id="file-import-history" accept=".json">
+                    </div>
+                </div>
+
+
+                
+                <!-- 危险区也放在这里面 -->
+                <div class="modal-danger-zone">
+                    <button id="modal-clear-history" class="danger-btn outline">清空聊天记录</button>
+                    <button id="modal-delete" class="danger-btn">【危险操作】删除此角色</button>
+                </div>
+
+            </div> <!-- 滚动区域结束 -->
+
+            <!-- 按钮：现在它也在白盒子外面了 -->
+            <div class="modal-buttons fixed-footer">
+                <button id="modal-cancel">取消</button>
+                <button id="modal-save" class="primary">保存</button>
+            </div>
+
+        </div>
+    </div>
+
+
+
+
+    <!-- 新增：主设置（复用 modal-overlay 的结构，JS 里会切换内容） -->
+    <div id="main-modal" class="modal-overlay hidden">
+    <div class="settings-modal glass-panel">
+        <!-- 标题 -->
+        <h2 class="settings-title">设置中心</h2>
+
+        <div class="settings-container">
+            <!-- ==================== 左侧竖排目录 ==================== -->
+            <div class="settings-sidebar">
+                <div class="tab-item active" data-target="appearance">
+                    <span class="tab-text">外观</span>
+                </div>
+                <div class="tab-item" data-target="model">
+                    <span class="tab-text">模型</span>
+                </div>
+                <div class="tab-item" data-target="storage">
+                    <span class="tab-text">存储</span>
+                </div>
+                <!-- ★ 新增世界书目录 ★ -->
+                <div class="tab-item" data-target="worldbook">
+                    <span class="tab-text">世界书</span>
+                </div>
+            </div>
+
+            <!-- ==================== 右侧内容区 ==================== -->
+            <div class="settings-content">
+
+                <!-- ====================== 1. 外观 ====================== -->
+                <div class="tab-pane active" id="appearance">
+
+                    <!-- 自定义壁纸 -->
+                    <h3 class="section-title">自定义壁纸</h3>
+                    <div class="main-options">
+
+                        <label class="wallpaper-option upload main-option">
+                            <input type="file" id="wallpaper-file-input" accept="image/*">
+                            <span>从相册选择本地图片</span>
+                        </label>
+
+                        <div id="wallpaper-preview" class="wallpaper-preview hidden" style="margin: 10px auto; text-align: center;">
+                            <img id="wallpaper-preview-img" src="" alt="预览" style="display: block; max-width: 100%; max-height: 200px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                        </div>
+                    </div>
+
+                    <!-- 显示模式 -->
+                    <h3 class="section-title">显示模式</h3>
+                    <div class="main-options">
+                        <label class="main-option" style="justify-content: space-between; cursor: pointer;">
+                            <div style="display:flex; align-items:center;">
+                                <span style="font-size: 18px; margin-right: 10px;">☀️</span>
+                                <span>日间模式</span>
+                            </div>
+                            <input type="radio" name="theme-select" id="theme-light" value="light" style="accent-color: #666;">
+                        </label>
+
+                        <label class="main-option" style="justify-content: space-between; cursor: pointer;">
+                            <div style="display:flex; align-items:center;">
+                                <span style="font-size: 18px; margin-right: 10px;">🌙</span>
+                                <span>夜间模式</span>
+                            </div>
+                            <input type="radio" name="theme-select" id="theme-dark" value="dark" style="accent-color: #666;">
+                        </label>
+
+                        <!-- 新增：自定义模式 -->
+                        <label class="main-option custom-theme-trigger">
+                            <div class="option-content">
+                                <span class="option-icon">🎨</span>
+                                <span>自定义 (CSS)</span>
+                            </div>
+                            <input type="radio" name="theme-select" id="theme-custom" value="custom">
+                        </label>
+
+                        <!-- 新增：自定义CSS控制面板 (默认隐藏，JS控制显示) -->
+                        <div id="custom-css-panel" class="main-options hidden">
+                            
+                            <!-- 第1行：预设下拉框 -->
+                            <div class="panel-row">
+                                <select id="css-preset-select" class="setting-input">
+                                    <option value="">-- 选择样式预设 --</option>
+                                </select>
+                            </div>
+
+                            <!-- 第2行：操作按钮 -->
+                            <div class="panel-row btn-group">
+                                <button id="save-css-btn" class="icon-btn">保存预设</button>
+                                <button id="del-css-btn" class="icon-btn danger">删除预设</button>
+                            </div>
+
+                            <!-- 第3行：CSS 编辑区域 -->
+                            <textarea id="custom-css-input" class="setting-input code-editor" placeholder="/* 在这里输入 CSS 代码 */&#10;.message-wrapper.user .message-bubble {&#10;    background: #95ec69;&#10;    color: black;&#10;}&#10;.msg-time（时间戳） {}等等"></textarea>
+                        </div>
+
+                    </div> 
+
+                    <!-- 字体大小调整 (保持不变) -->
+                    <h3 class="section-title">字体大小</h3>
+                    <div class="main-options">
+                        <div class="main-option" style="flex-direction: column; align-items: stretch; padding: 15px;">
+                            <div style="display:flex; justify-content: space-between; color: var(--text-color);">
+                                <span style="font-size: 0.9rem;">聊天文字缩放</span>
+                                <span id="font-size-value" style="font-weight:bold;">16px</span>
+                            </div>
+                            <input type="range" id="font-size-slider" min="12" max="24" step="1" value="16" style="width: 100%; accent-color: #666;">
+                        </div>
+                    </div>
+
+                    
+                </div>
+
+                <!-- ====================== 2. 模型 ====================== -->
+                <div class="tab-pane" id="model">
+
+                    <h3 class="section-title">文字模型</h3>
+                    <div class="main-options api-section">
+
+                        <!-- ★★★ 新增：预设管理区域 ★★★ -->
+                        <!-- 这里的 ID 必须和 JS 里对应，不要改 ID，class 可以随便改 -->
+                        <div id="api-preset-container" class="preset-row">
+                            <select id="preset-select" class="setting-input" style="flex:1;">
+                                <option value="">-- 选择 API 预设 --</option>
+                            </select>
+
+                        </div>
+                        <!-- ★★★ 结束 ★★★ -->
+
+                        <!-- API 地址 -->
+                        <div class="main-option api-input-card">
+                            <label class="api-label">API 地址，结尾可加v1/chat/completions</label>
+                            <input type="url" id="custom-api-url" class="setting-input" 
+                                placeholder="例如: https://api.openai.com/v1">
+                        </div>
+
+                        <!-- API 密钥 -->
+                        <div class="main-option api-input-card">
+                            <label class="api-label">API 密钥</label>
+                            <input type="password" id="custom-api-key" class="setting-input" 
+                                placeholder="sk-XXXXXXXXXXXXXXXXXXXXXXXX" autocomplete="off">
+                        </div>
+
+
+                        <!-- 模型选择 -->
+                        <div class="main-option model-card">
+                            <label for="custom-model-select" class="api-label2">模型</label>
+
+
+                            <!-- 模型设置区域 -->
+                            <div class="model-setting-group">
+                                
+                                <!-- 1. 输入框 (去掉了右边的小图标) -->
+                                <input type="text" id="custom-model-select" list="model-options" class="model-select" placeholder="手动输入或点击拉取...">
+                                <datalist id="model-options"></datalist>
+
+                                <!-- 2. 按钮组 (模仿 Gist 的排版，左右并排) -->
+                                <div class="api-buttons-row">
+                                    <button type="button" id="fetch-models-btn" class="api-btn primary">
+                                        拉取模型
+                                    </button>
+                                    <button type="button" id="test-api-btn" class="api-btn">
+                                        测试 API
+                                    </button>
+                                </div>
+
+                                <!-- 3. 测试结果显示 (放在按钮下面) -->
+                                <div id="test-api-status" class="api-status-text status-idle">- API测试准备就绪 -</div>
+
+                            </div>
+
+
+                        </div>
+
+
+
+                        <!-- ★★★ 修改为：模型参数设置 ★★★ -->
+                        <div class="main-option param-card">
+
+                                <!-- ★★★ 1. 新增：上下文条数输入框 ★★★ -->
+                            <div class="param-item">
+                                <label class="api-label" for="custom-context-limit">上下文条数</label>
+                                <input type="number" id="custom-context-limit" class="setting-input" 
+                                    placeholder="默认: 30" step="1" min="1" max="100">
+                            </div>
+
+                            <!-- 第一个参数行 -->
+                             
+                           <div class="param-item">
+                                <label class="api-label" for="custom-temperature">温度</label>
+                                <input type="number" id="custom-temperature" class="setting-input" 
+                                    placeholder="默认: 1.1" step="0.1" min="0" max="2">
+                            </div>
+                         
+                            <!-- 第二个参数行 -->
+                            
+                            <div class="param-item">
+                                <label class="api-label" for="custom-max-tokens">Max Tokens</label>
+                                <input type="number" id="custom-max-tokens" class="setting-input" 
+                                    placeholder="默认: 32700" step="1000" min="1">
+                            </div>
+
+                        </div>
+
+
+                        <div class="preset-btn-group">
+                            <button id="save-preset-btn" type="button" class="icon-btn">保存</button>
+                            <button id="del-preset-btn" type="button" class="icon-btn danger">删除</button>
+                        </div>
+
+
+                    </div>
+
+
+                    <!-- ====================== 视觉模型设置 (重构版) ====================== -->
+
+                    <!-- 分割线与标题 -->
+                    <h3 class="section-title" style="margin-top: 10px; border-top: 3px solid #ccc; padding-top: 20px;">视觉模型（可选）</h3>
+
+                    <div class="main-options api-section">
+
+                        <!-- ★★★ 新增：视觉预设管理区域 ★★★ -->
+                        <div id="vision-preset-container" class="preset-row">
+                            <select id="vision-preset-select" class="setting-input" style="flex:1;">
+                                <option value="">-- 选择视觉预设 --</option>
+                            </select>
+
+                        </div>
+                        <!-- ★★★ 结束 ★★★ -->
+
+                        <!-- 视觉 API 地址 -->
+                        <div class="main-option api-input-card">
+                            <label class="api-label">视觉 API 地址</label>
+                            <input type="url" id="vision-api-url" class="setting-input" 
+                                placeholder="例如: https://api.siliconflow.cn/v1/chat/completions">
+                        </div>
+
+                        <!-- 视觉 API Key -->
+                        <div class="main-option api-input-card">
+                            <label class="api-label">视觉 API Key (留空则共用上方)</label>
+                            <input type="password" id="vision-api-key" class="setting-input" 
+                                placeholder="sk-..." autocomplete="off">
+                        </div>
+
+                        <!-- 视觉 模型选择 (带拉取和测试) -->
+                        <div class="main-option model-card">
+                            <label for="vision-model-name" class="api-label2">视觉模型</label>
+
+                            <!-- 模型设置区域 (与主模型一致的布局) -->
+                            <div class="model-setting-group">
+                                
+                                <!-- 1. 输入框 (绑定 datalist) -->
+                                <input type="text" id="vision-model-name" list="vision-model-options" class="model-select" 
+                                    placeholder="手动输入或点击拉取..." value="Qwen/Qwen3-VL-30B-A3B-Instruct">
+                                <datalist id="vision-model-options"></datalist>
+
+                                <!-- 2. 按钮组 -->
+                                <div class="api-buttons-row">
+                                    <button type="button" id="fetch-vision-models-btn" class="api-btn primary">
+                                        拉取模型
+                                    </button>
+                                    <button type="button" id="test-vision-api-btn" class="api-btn">
+                                        测试 API
+                                    </button>
+                                </div>
+
+                                <!-- 3. 测试结果显示 -->
+                                <div id="test-vision-api-status" class="api-status-text status-idle">- 视觉API待测试 -</div>
+
+                            </div>
+                        </div>
+
+                        <!-- 视觉 提示词 -->
+                        <div class="main-option api-input-card">
+                            <label class="api-label">识图提示词 (Prompt)</label>
+                            <textarea id="vision-prompt" class="setting-input" rows="3" style="resize: vertical;">请详细地描述这张图片的内容。不要发表评论，只需客观描述。</textarea>
+                        </div>
+
+                    </div>
+
+
+                    <div class="preset-btn-group">
+                        <button id="save-vision-preset-btn" type="button" class="icon-btn">保存</button>
+                        <button id="del-vision-preset-btn" type="button" class="icon-btn danger">删除</button>
+                    </div>
+
+
+                </div>
+
+                <!-- ====================== 3. 存储 ====================== -->
+                <div class="tab-pane" id="storage">
+
+                    <!-- A. 本地文件导入导出 (保持不变) -->
+                    <h3 class="section-title">本地文件备份</h3>
+                    <div class="main-options">
+                        <!-- 导出按钮 -->
+                        <div class="main-option" onclick="exportData()" style="justify-content: center; font-weight: 500;">
+                            <span>导出配置（下载 .json 文件）</span>
+                        </div>
+
+                        <!-- 导入按钮 (通过 hidden input 实现) -->
+                        <label class="main-option" style="justify-content: center; font-weight: 500; cursor: pointer;">
+                            <span>从文件恢复配置</span>
+                            <input type="file" id="file" accept=".json,application/json" 
+                                style="display: none;" onchange="importData(this)">
+                        </label>
+                    </div>
+
+                    <!-- B. 云端同步区域 (双模版) -->
+                    <h3 class="section-title">云端同步</h3>
+                    <div class="gist-sync-card">
+                        
+                        <!-- 1. 模式选择下拉菜单 -->
+                        <div class="input-group">
+                            <label class="input-label">选择同步方式</label>
+                            <select id="sync-provider" class="setting-input" onchange="CloudSync.toggleMode()">
+                                <option value="gist">GitHub Gist (公共云)</option>
+                                <option value="custom">自定义服务器 (私有云)</option>
+                            </select>
+                        </div>
+
+                        <!-- 2. 服务器地址 (自定义模式显示，Gist模式隐藏) -->
+                        <!-- 注意 id="group-custom-url" 对应 JS 里的控制逻辑 -->
+                        <div class="input-group" id="group-custom-url">
+                            <label class="input-label">后端 API 地址</label>
+                            <input type="text" id="custom-url" class="setting-input" 
+                                placeholder="例如: https://sync.your-url.com/api/data">
+                        </div>
+
+                        <!-- 3. Gist ID (Gist模式显示，自定义模式隐藏) -->
+                        <div class="input-group" id="group-gist-id" style="display:none;">
+                            <label class="input-label">Gist ID</label>
+                            <!-- Flex 布局：左边输入框，右边查找按钮 -->
+                            <div style="display: flex; gap: 8px;">
+                                <input type="text" id="gist-id-input" class="setting-input" 
+                                    placeholder="新建留空，恢复必填" style="flex: 1;">
+                                
+                                <button type="button" class="gist-btn" onclick="CloudSync.findBackup()" 
+                                    style="width: auto; padding: 0 12px; font-size: 0.9em; white-space: nowrap;">
+                                    🔍 自动查找
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 4. 密码/Token 输入框 (共用) -->
+                        <!-- id="auth-label" 用于 JS 动态修改文字 (Secret Key 或 Token) -->
+                        <div class="input-group">
+                            <label class="input-label" id="auth-label">访问密码 (Secret Key)</label>
+                            <input type="password" id="gist-token" class="setting-input" autocomplete="off">
+                            <small class="input-hint">新填写的key，上传完请【先】点击页面下方“保存设置”以记住密码，再同步/恢复</small>
+                        </div>
+
+                        <!-- 5. 操作按钮 -->
+                        <div class="gist-buttons">
+                            <!-- 直接绑定 onclick 事件，防止 main.js 里漏绑 -->
+                            <button type="button" id="gist-backup" class="gist-btn primary" onclick="CloudSync.updateBackup()">
+                                上传 / 同步
+                            </button>
+                            <button type="button" id="gist-restore" class="gist-btn" onclick="CloudSync.restoreBackup()">
+                                拉取 / 恢复
+                            </button>
+                        </div>
+
+                        <!-- 6. 状态显示 -->
+                        <div id="gist-status" class="gist-status">
+                            准备就绪
+                        </div>
+                    </div>
+                </div>
+
+
+
+                <!-- ★★★★★ 4. 新增：世界书 (Refactored for Books) ★★★★★ -->
+                <div id="worldbook" class="tab-pane">
+                    <h3 class="section-title">世界书设置</h3>
+                    <div class="wi-container">
+                        
+                        <!-- 1. 顶部：大分类（书）管理栏 -->
+                        <div class="wi-toolbar glass-card">
+                            <div class="wi-toolbar-group main-select">
+                                <label>当前世界书:</label>
+                                <!-- 选择大分类 -->
+                                <select id="wi-book-select" class="wi-select setting-input">
+                                    <!-- JS会自动填充 -->
+                                </select>
+                            </div>
+
+                            <div class="wi-toolbar-divider"></div>
+
+                            <!-- 针对书的操作 -->
+                            <div class="wi-toolbar-group actions">
+                                <button id="wi-rename-book-btn" class="wi-btn secondary" title="重命名当前书">重命名</button>
+                                <button id="wi-export-book-btn" class="wi-btn secondary" title="导出当前书为JSON">导出</button>
+                                <button id="wi-delete-book-btn" class="wi-btn danger" title="删除整本书">删书</button>
+                            </div>
+                            
+                            <div class="wi-toolbar-divider vertical"></div>
+
+                            <!-- 全局操作 -->
+                            <div class="wi-toolbar-group global-actions">
+                                <button id="wi-new-book-btn" class="wi-btn primary">+ 新建书</button>
+                                <button id="wi-import-btn" class="wi-btn primary">导入ST</button>
+                                <input type="file" id="wi-file-input" accept=".json" style="display: none;">
+                            </div>
+                        </div>
+
+                        <!-- 2. 下方主体：左右分栏 -->
+                        <div class="wi-main-layout">
+                            
+                            <!-- 左栏：当前书内的条目列表 -->
+                            <div class="wi-sidebar glass-card">
+                                <div class="wi-sidebar-header">
+                                    <span>条目列表</span>
+                                    <button id="wi-add-btn" class="wi-btn icon-only" title="添加条目">+</button>
+                                </div>
+                                
+                                <div id="wi-list-container" class="wi-list-scroll">
+                                    <!-- JS 会渲染条目到这里 -->
+                                </div>
+                            </div>
+
+                            <!-- 右栏：编辑区 -->
+                            <div class="wi-editor glass-card">
+                                
+                                <!-- A. 本书全局设定 -->
+                                <div class="wi-section-card">
+                                    <h4 class="wi-section-title">本书设定 <span class="sub-text">(对整本书生效)</span></h4>
+                                    <label class="wi-input-row">
+                                        <span>生效范围:</span>
+                                        <select id="wi-book-char-select" class="wi-select setting-input">
+                                            <option value="">全局 (对所有角色生效)</option>
+                                            <!-- JS会填充角色 -->
+                                        </select>
+                                    </label>
+                                </div>
+
+                                <!-- B. 单个条目编辑 -->
+                                <div class="wi-edit-area">
+                                    <div class="wi-edit-header">
+                                        <h4 class="wi-section-title">条目编辑</h4>
+                                        <div class="wi-checkbox-wrapper">
+                                            <input type="checkbox" id="wi-edit-constant">
+                                            <label for="wi-edit-constant">常驻 (无视关键词，永远生效)</label>
+                                        </div>
+                                    </div>
+
+                                    <input type="hidden" id="wi-edit-uid">
+
+                                    <!-- 示例 HTML 位置，请根据你的界面布局调整 -->
+                                    <div class="input-group">
+                                        <label>条目名称</label>
+                                        <!-- 给这个输入框起个ID，比如 wi-entry-comment -->
+                                        <input type="text" id="wi-edit-comment" placeholder="例如：Eldoria 森林简介" />
+                                    </div>
+                                    
+                                    <div class="wi-form-group">
+                                        <label>触发关键词 <span class="sub-text">(逗号分隔)</span></label>
+                                        <input type="text" id="wi-edit-keys" class="setting-input" placeholder="例如: 森林, 魔法 (留空仅依靠常驻生效)">
+                                    </div>
+
+                                    <div class="wi-form-group flex-grow">
+                                        <label>设定内容</label>
+                                        <textarea id="wi-edit-content" class="setting-input wi-textarea" placeholder="当检测到关键词时，注入给AI的内容..."></textarea>
+                                    </div>
+
+                                    <div class="wi-form-actions">
+                                        <button id="wi-delete-btn" class="wi-btn danger">删除条目</button>
+                                        <button id="wi-save-btn" class="wi-btn primary large">保存条目</button>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- 世界书结束 -->
+
+            </div>
+        </div>
+
+        <!-- 底部按钮 -->
+        <div class="modal-buttons" style="margin-top: 24px; display: flex; gap: 12px; justify-content: center;">
+            <button id="main-cancel" style="padding: 12px 28px; font-size: 16px;">取消</button>
+            <button id="main-confirm" class="primary" style="padding: 12px 32px; font-size: 16px;">应用并关闭</button>
+        </div>
+
+    </div>
+    </div>
+
+
+    <!-- 1. 长按上下文菜单 -->
+    <div id="msg-context-menu" class="msg-context-menu" style="display: none;">
+        <div class="menu-backdrop"></div>
+        <div class="menu-panel">
+            <!-- ★★★ 新增标题 ★★★ -->
+            <div class="menu-title">编辑整组</div>
+
+            <button data-action="edit">编辑</button>
+            <button data-action="copy">复制</button>
+            <button data-action="multi-select">多选</button>
+            <button data-action="toggle-hidden" id="btn-toggle-hidden">向Ta隐藏</button> 
+            
+            <!-- 删除通常是危险操作，用 CSS 单独标红 -->
+            <button data-action="delete">删除</button> 
+            
+            
+            <!-- 取消按钮与其他按钮稍微隔开一点 -->
+            <div class="menu-gap"></div>
+            <button data-action="cancel" class="btn-cancel">取消</button>
+        </div>
+    </div>
+
+    <!-- 2. 编辑消息的弹窗 (顺便检查下有没有加这个) -->
+    <div id="msg-edit-modal" class="modal-overlay" style="display: none;">
+        <div class="edit-box">
+            <h3 class="bianjixiaoxi">编辑消息</h3>  <!-- 加了个 class -->
+            <textarea id="edit-msg-textarea" placeholder="在这里输入..."></textarea>
+            <div class="edit-buttons">
+                <button id="btn-edit-cancel">取消</button>
+                <button id="btn-edit-confirm" class="primary">确定</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ================= 6. 心迹本身的长按操作菜单 Modal ================= -->
+        <div id="modal-moment-actions" class="modal-overlay hidden">
+            <!-- 这里用了一个底部弹出的样式结构 -->
+            <div class="action-sheet glass-panel">
+                <button id="btn-m-action-copy" class="momment-btn">复制内容</button>
+                <button id="btn-m-action-edit" class="momment-btn">编辑心迹</button>
+                <button id="btn-m-action-delete" class="momment-btn danger">删除心迹</button>
+                <div class="action-divider"></div>
+                <button id="btn-m-action-cancel" class="momment-btn cancel">取消</button>
+            </div>
+        </div>
+
+<!-- ================= 7. 心迹评论操作菜单 Modal (新增) ================= -->
+    <div id="modal-comment-actions" class="modal-overlay hidden">
+        <div class="action-sheet glass-panel">
+            <button id="btn-c-action-reply" class="momment-btn">回复</button>
+            <button id="btn-c-action-edit" class="momment-btn">编辑</button>
+            <button id="btn-c-action-copy" class="momment-btn">复制</button>
+            <button id="btn-c-action-regen" class="momment-btn">重新生成</button>
+            <div class="action-divider"></div>
+            <button id="btn-c-action-cancel" class="momment-btn cancel">取消</button>
+        </div>
+    </div>
+
+
+    <!-- ================= 8. 评论回复输入框 Modal撰写心迹 ================= -->
+    <div id="modal-reply-comment" class="modal-overlay hidden">
+        <div class="edit-box glass-panel">
+            <!-- 保留原本的 ID -->
+            <h3 id="modal-reply-title" class="bianjixiaoxi">回复</h3>
+            
+            <textarea id="m-reply-text" placeholder="写下你的回复..." rows="4"></textarea>
+            
+            <div class="edit-buttons">
+                <button id="btn-close-m-reply" class="cancel-btn">取消</button>
+                <button id="btn-publish-m-reply" class="primary">发送</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ========================================== -->
+    <!-- 新增：多选操作栏 (Action Bar)               -->
+    <!-- ========================================== -->
+    <div id="multi-select-bar" class="multi-select-bar hidden">
+        <div class="select-count">已选择 <span id="select-count-num">0</span> 条</div>
+        <div class="select-actions">
+            <button id="btn-batch-copy" class="action-btn">复制</button>
+            
+            <!-- ★★★ 新增：批量隐藏按钮 ★★★ -->
+            <button id="btn-batch-hide" class="action-btn">隐藏</button>
+
+            <button id="btn-batch-delete" class="action-btn delete">删除</button>
+            <button id="btn-exit-select" class="action-btn cancel">取消</button>
+        </div>
+    </div>
+
+   
+    <!-- 【新增弹窗】：专门用于显示日志的弹窗 -->
+    <div id="log-display-modal" class="log-modal hidden">
+        <div class="glass-panel log-modal-content">
+            <!-- 顶部：标题和关闭按钮 -->
+            <div class="log-modal-header">
+                <h3 class="shangxiawen">上下文日志 
+                    <span id="log-token-count">(Token: 0)</span>
+                </h3>
+                <button id="btn-close-log" class="log-close-btn">&times;</button>
+            </div>
+            
+            <!-- 内容区域：可滚动 -->
+            <div class="log-modal-body">
+                <pre><code id="log-content">暂无发送记录...</code></pre>
+            </div>
+            
+            <!-- 底部说明 -->
+            <div class="log-modal-footer">
+                * Token 为 prompt token。
+            </div>
+        </div>
+    </div>
+
+
+    <!-- 在这里，你的主脚本之前，引入这两个库 -->
+    <script src="./marked.min.js"></script>
+    <script src="./purify.min.js"></script>
+
+    <script src="./script.js"></script>
+</body>
+</html>
