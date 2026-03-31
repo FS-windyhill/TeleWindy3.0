@@ -249,7 +249,7 @@ const CONFIG = {
     MOMENTS_PAGE_SIZE: 15, // 心迹分页数
     GIST_ID_KEY: 'telewindy-gist-id',
 
-    MOMENTS_INJECT_COUNT: 3, // AI在聊天中感知新心迹的次数
+    MOMENTS_INJECT_COUNT: 5, // AI在聊天中感知新心迹的次数
 
     DEFAULT: {
         API_URL: 'https://api.siliconflow.cn/v1/chat/completions',
@@ -4272,9 +4272,8 @@ const App = {
     },
 
 
-
     // ===========================================
-    // 触发 AI 评论 (修复版)
+    // 触发 AI 评论 (修复版 + 引入世界书)
     // ===========================================
     async triggerAIComments(targetMoment) {
         // 1. 筛选允许评论的联系人
@@ -4290,19 +4289,20 @@ const App = {
             // 2.1 构造 Prompt
             let historyContext = "无";
             if (char.history && char.history.length > 0) {
-                // ★★★ 核心修改：使用 role 和 content ★★★
                 historyContext = char.history.slice(-5).map(h => {
-                    // 如果 role 是 'user' 显示为'用户'，否则显示为'你'
                     const roleName = h.role === 'user' ? '用户' : '你';
-                    // 获取内容
                     return `${roleName}: ${h.content}`;
                 }).join('\n');
             }
 
+            // ★★★ 新增：扫描世界书（将动态内容作为触发文本传入） ★★★
+            const worldInfoPrompt = WorldInfoEngine.scan(targetMoment.text, [], char.id, char.name);
+            let wiSection = worldInfoPrompt ? `\n【世界知识/环境信息】\n${worldInfoPrompt}\n` : "";
+
             const promptText = `
     【系统设定】
     ${char.prompt}
-
+    ${wiSection}
     【历史参考】
     以下是我们最近的聊天记录摘要：
     ${historyContext}
@@ -4316,14 +4316,13 @@ const App = {
     `;
 
             try {
-                // ★★★ 核心修复：构造符合 API.chat 要求的配置对象 ★★★
                 // 默认使用全局配置
                 let targetApiConfig = {
                     API_URL: STATE.settings.API_URL,
                     API_KEY: STATE.settings.API_KEY,
                     MODEL: STATE.settings.MODEL,
-                    MAX_TOKENS: STATE.settings.MAX_TOKENS || 200, // 评论不需要太长
-                    TEMPERATURE: 1.1 // 稍微活跃一点
+                    MAX_TOKENS: STATE.settings.MAX_TOKENS || 200, 
+                    TEMPERATURE: 1.1 
                 };
 
                 // 检查是否使用了心迹专属预设
@@ -4332,11 +4331,9 @@ const App = {
                     const preset = STATE.settings.API_PRESETS[presetIndex];
                     if (preset) {
                         console.log(`[心迹] 角色 ${char.name} 使用预设: ${preset.name}`);
-                        // 覆盖配置 (注意大小写转换)
                         targetApiConfig.API_URL = preset.url;
                         targetApiConfig.API_KEY = preset.key;
                         targetApiConfig.MODEL = preset.model;
-                        // 如果预设里有参数，也覆盖
                         if(preset.max_tokens) targetApiConfig.MAX_TOKENS = parseInt(preset.max_tokens);
                         if(preset.temperature) targetApiConfig.TEMPERATURE = parseFloat(preset.temperature);
                     }
@@ -4358,13 +4355,12 @@ const App = {
                 if (typeof Storage !== 'undefined' && Storage.saveMoments) {
                     Storage.saveMoments();
                 } else {
-                    this.saveMoments(); // 尝试直接调用
+                    this.saveMoments(); 
                 }
                 this.renderMomentsUI();
 
             } catch (err) {
                 console.error(`[心迹] 角色 ${char.name} 评论失败:`, err);
-                // 这里不再 alert，避免多个角色报错弹出多个窗口
             }
             
             // 简单的防并发延迟
@@ -4654,9 +4650,8 @@ const App = {
 
             console.log(`[心迹] 重新生成 ${ctx.charName} 的评论`);
 
-            // ★ 截取当前评论之前的上下文 (复用你的隐私过滤逻辑)
             let threadContext = momentData.comments
-                .slice(0, commentIndex) // 只取这条评论之前的对话
+                .slice(0, commentIndex)
                 .filter(c => {
                     if (c.senderId === ctx.charId) return true;
                     if (c.senderId === 'user') {
@@ -4675,16 +4670,22 @@ const App = {
                 }).join('\n');
 
             let promptText = "";
+            
+            // ★★★ 新增：扫描世界书（综合动态内容和评论区上下文来进行扫描） ★★★
+            const scanText = momentData.text + "\n" + threadContext;
+            const worldInfoPrompt = WorldInfoEngine.scan(scanText, [], targetChar.id, targetChar.name);
+            let wiSection = worldInfoPrompt ? `\n【世界知识/环境信息】\n${worldInfoPrompt}\n` : "";
+
             if (threadContext.trim() === "") {
                 // 没有上下文说明这是第一条原始评论
                 let historyContext = "无";
                 if (targetChar.history && targetChar.history.length > 0) {
                     historyContext = targetChar.history.slice(-5).map(h => `${h.role === 'user' ? '用户' : '你'}: ${h.content}`).join('\n');
                 }
-                promptText = `【系统设定】\n${targetChar.prompt}\n【历史参考】\n${historyContext}\n【当前情境】\n用户发布了一条动态：“${momentData.text}”\n【任务要求】\n请根据系统设定，以社交平台上的互动方式，对用户的这条动态进行评论。不需要括号描述任何环境、动作，直接输出你要说的内容即可。`;
+                promptText = `【系统设定】\n${targetChar.prompt}\n${wiSection}\n【历史参考】\n${historyContext}\n【当前情境】\n用户发布了一条动态：“${momentData.text}”\n【任务要求】\n请根据系统设定，以社交平台上的互动方式，对用户的这条动态进行评论。不需要括号描述任何环境、动作，直接输出你要说的内容即可。`;
             } else {
                 // 这是追问回复
-                promptText = `【系统设定】\n${targetChar.prompt}\n【动态内容】\n用户发布的动态：${momentData.text}\n【评论区对话流】\n${threadContext}\n【任务】\n用户刚刚在评论区专门回复了你。请根据你的人设，继续在评论区回复用户。保持简短，像朋友圈评论一样自然。不要输出动作描写。`;
+                promptText = `【系统设定】\n${targetChar.prompt}\n${wiSection}\n【动态内容】\n用户发布的动态：${momentData.text}\n【评论区对话流】\n${threadContext}\n【任务】\n用户刚刚在评论区专门回复了你。请根据你的人设，继续在评论区回复用户。保持简短，像朋友圈评论一样自然。不要输出动作描写。`;
             }
 
             // 先把界面改成加载中
@@ -4696,7 +4697,6 @@ const App = {
                     API_URL: STATE.settings.API_URL,
                     API_KEY: STATE.settings.API_KEY,
                     MODEL: STATE.settings.MODEL,
-                    // 这里默认最好设小一点，以防预设没读到时爆掉。朋友圈评论不需要3万字，设5000足够了
                     MAX_TOKENS: 5000, 
                     TEMPERATURE: 1.1
                 };
@@ -4707,9 +4707,6 @@ const App = {
                         targetApiConfig.API_URL = preset.url;
                         targetApiConfig.API_KEY = preset.key;
                         targetApiConfig.MODEL = preset.model;
-                        
-                        // ★★★ 核心修复：把这两行漏掉的加回来！ ★★★
-                        // 如果预设里填了 max_tokens，就用预设的；否则保持上面定义的 5000
                         if(preset.max_tokens) targetApiConfig.MAX_TOKENS = parseInt(preset.max_tokens);
                         if(preset.temperature) targetApiConfig.TEMPERATURE = parseFloat(preset.temperature);
                     }
@@ -4751,7 +4748,7 @@ const App = {
     },
 
     // ===========================================
-    // 执行回复并触发AI (完美继承你的上下文引擎)
+    // 执行回复并触发AI (完美继承你的上下文引擎 + 世界书)
     // ===========================================
     async executeCommentReply() {
         const ctx = STATE.selectedCommentContext;
@@ -4781,7 +4778,7 @@ const App = {
         });
         this.saveAndRenderMoments();
 
-        // 2. 触发 AI 追问 (完美复用你写的过滤代码)
+        // 2. 触发 AI 追问
         console.log(`[心迹] 触发追问回复: ${targetChar.name}`);
 
         let threadContext = targetMoment.comments
@@ -4802,10 +4799,15 @@ const App = {
                 return `${name}: ${cleanText}`;
             }).join('\n');
 
+        // ★★★ 新增：扫描世界书（用动态内容+用户回复的文本进行扫描） ★★★
+        const scanText = targetMoment.text + "\n" + userReplyText;
+        const worldInfoPrompt = WorldInfoEngine.scan(scanText, [], targetChar.id, targetChar.name);
+        let wiSection = worldInfoPrompt ? `\n【世界知识/环境信息】\n${worldInfoPrompt}\n` : "";
+
         const promptText = `
     【系统设定】
     ${targetChar.prompt}
-
+    ${wiSection}
     【动态内容】
     用户发布的动态：${targetMoment.text}
 
@@ -4822,7 +4824,6 @@ const App = {
                 API_URL: STATE.settings.API_URL,
                 API_KEY: STATE.settings.API_KEY,
                 MODEL: STATE.settings.MODEL,
-                // 同样修改默认值为安全值，防止全局设置的 32700 导致报错
                 MAX_TOKENS: 2000, 
                 TEMPERATURE: 1.1
             };
@@ -4834,8 +4835,6 @@ const App = {
                     targetApiConfig.API_URL = preset.url;
                     targetApiConfig.API_KEY = preset.key;
                     targetApiConfig.MODEL = preset.model;
-                    
-                    // ★★★ 核心修复：这里也要加回来 ★★★
                     if(preset.max_tokens) targetApiConfig.MAX_TOKENS = parseInt(preset.max_tokens);
                     if(preset.temperature) targetApiConfig.TEMPERATURE = parseFloat(preset.temperature);
                 }
@@ -6517,7 +6516,7 @@ function formatTimeForMoments(ts) {
     // 如果没有传时间戳，或者时间戳无效，才退化到当前时间
     const date = ts ? new Date(ts) : new Date();
     
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
     
     const month = months[date.getMonth()];
     const day = date.getDate();
@@ -6525,7 +6524,7 @@ function formatTimeForMoments(ts) {
     const minutes = String(date.getMinutes()).padStart(2, '0');
 
     // 保持和你聊天界面一致的风格：Jan.20 14:30
-    return `${month}.${day} ${hours}:${minutes}`;
+    return `${month}${day}日 ${hours}:${minutes}`;
 }
 
 
