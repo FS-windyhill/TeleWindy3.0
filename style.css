@@ -607,21 +607,24 @@ body {
     background: transparent;    /* 背景是壁纸，所以透明 */
     z-index: 10;
     transform: translateX(0);
+    height: 100%;
+    width: 100vw;
+
+    /* 防止多余的页面级滚动，把滚动交给列表容器 */
+    overflow: hidden; 
 
     opacity: 1;
     pointer-events: auto;
-
-    padding-bottom: 60px; /* 假设 TabBar 高度是 60px */
     box-sizing: border-box; 
 }
 
 /* 核心：悬浮的毛玻璃大卡片（固定 85% 大小，自动居中） */
 #contact-list-wrapper {
-    width: 100vw;
+    width: 100%;
     /* max-width: 520px;          手机/平板不会太宽 */
-    height: 100vh;
+    /* height: 100vh; */
     /* max-height: 800px; */
-    margin: auto;              /* 上下左右自动居中 */
+    /* margin: auto;              上下左右自动居中 */
     background: rgba(255, 255, 255, 0.72);     /* 亮色壁纸推荐 0.72 */
     backdrop-filter: blur(3px);
     -webkit-backdrop-filter: blur(3px);
@@ -631,19 +634,29 @@ body {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+
+    /* 关键：因为父元素现在是 100vh 了，flex: 1 就会把 Header 以下的空间全部霸占 */
+    flex: 1; 
+    margin: 0; 
 }
 
 /* 列表容器：只负责滚动和内边距 */
 #contact-list-container {
     flex: 1;
     overflow-y: auto;
-    padding: 10px 20px;           /* 左右留白，文字不贴边 */
-    width: 90vw;
+    padding: 10px 20px 80px 20px;           /* 左右留白，文字不贴边 */
+    width: 100%; /* 去掉原本的 90vw，改为 100% */
+    box-sizing: border-box; /* 关键：确保 padding 不会撑破 100% 的宽度 */
+
+    /* 允许纵向滚动 */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch; /* 丝滑的 iOS 滚动效果 */
+
     
     /* 美化滚动条（可选但强烈推荐） */
     scrollbar-width: thin;
     scrollbar-color: rgba(0,0,0,0.2) transparent;
-    -webkit-overflow-scrolling: touch;
+
 }
 #contact-list-container::-webkit-scrollbar {
     width: 6px;
