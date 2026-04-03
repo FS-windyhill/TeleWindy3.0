@@ -3566,7 +3566,7 @@ body.custom-mode .tab-btn.active { color: #dedede;  }
 
 body.custom-mode .explore-list li {
 
-    background: rgba(30, 30, 30, 0.75); /* 半透明卡片 */
+    background: rgb(39 39 39 / 70%); /* 半透明卡片 */
     border: 1px solid rgba(255, 255, 255, 0.3);
     transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
 }
@@ -4582,7 +4582,7 @@ body.dark-mode .tab-btn.active { color: #dedede;  }
 }
 
 body.dark-mode .explore-list li {
-    background: rgba(30, 30, 30, 0.75); /* 半透明卡片 */
+    background: rgb(39 39 39 / 70%); /* 半透明卡片 */
     border: 1px solid rgba(255, 255, 255, 0.3);
     transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
 }
