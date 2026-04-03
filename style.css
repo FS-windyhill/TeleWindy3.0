@@ -1645,7 +1645,7 @@ div#group-custom-url.input-group{
 }
 
 .wi-section-title {
-    margin: 0 0 10px 0;
+    margin: 0 0 7px 0;
     font-size: 14px;
     color: #444;
     display: flex;
@@ -4100,7 +4100,29 @@ body.custom-mode #upload-image-btn {
     background: rgba(60, 60, 60, 0.25) !important;
 }
 
+body.custom-mode .wi-toolbar-group label {
+    color: #ffffff;
+}
 
+body.custom-mode .wi-sidebar-header {
+    color: #ffffff;
+}
+
+body.custom-mode .wi-section-title {
+    margin: 0 0 7px 0;
+    font-size: 14px;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+body.custom-mode .wi-form-group label {
+    font-size: 13px;
+    color: #ffffff;
+    font-weight: 500;
+    margin-left: 4px;
+}
 
 
 
