@@ -4081,6 +4081,15 @@ body.custom-mode .contact-item {
 }
 
 
+body.custom-mode #upload-image-btn {
+    border: 1px solid #9d9d9dcc;
+    color: #ffffff;
+    background: rgba(60, 60, 60, 0.25) !important;
+}
+
+
+
+
 
 
 
