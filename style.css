@@ -3613,6 +3613,7 @@ body.custom-mode .moment-card {
 
     background: #454545;
     color: #ffffff;
+    /* box-shadow: 0 4px 16px rgba(255, 255, 255, 0.05); 增加柔和的投影，让卡片浮起来 */
 }
 
 
@@ -4736,8 +4737,8 @@ body.dark-mode #moments-scroll-area {
     padding: 15px 15px; 
     
     /* ★ 核心改动：增加外边距，让它变成独立卡片，两边留白 ★ */
-    margin: 0 20px 16px 20px; /* 上边距0，左右留白16px，下边距24px分隔下一个卡片 */
-    border-radius: 10px;      /* 增加好看的大圆角 */
+    margin: 0 20px 12px 20px; /* 上边距0，左右留白16px，下边距24px分隔下一个卡片 */
+    border-radius: 6px;      /* 增加好看的大圆角 */
     border: none;             /* 去掉以前的底部横线分隔 */
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05); /* 增加柔和的投影，让卡片浮起来 */
 
@@ -4754,6 +4755,7 @@ body.dark-mode .moment-card {
 
     background: #454545;
     color: #ffffff;
+    /* box-shadow: 0 4px 16px rgba(255, 255, 255, 0.05); 增加柔和的投影，让卡片浮起来 */
 }
 
 
