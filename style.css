@@ -617,17 +617,17 @@ body {
 
 /* 核心：悬浮的毛玻璃大卡片（固定 85% 大小，自动居中） */
 #contact-list-wrapper {
-    width: 90vw;
-    max-width: 520px;          /* 手机/平板不会太宽 */
-    height: 75vh;
-    max-height: 800px;
+    width: 100vw;
+    /* max-width: 520px;          手机/平板不会太宽 */
+    height: 100vh;
+    /* max-height: 800px; */
     margin: auto;              /* 上下左右自动居中 */
     background: rgba(255, 255, 255, 0.72);     /* 亮色壁纸推荐 0.72 */
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border-radius: 15px;
-    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.18);
-    border: 1px solid rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    /* border-radius: 15px; */
+    /* box-shadow: 0 24px 48px rgba(0, 0, 0, 0.18); */
+    /* border: 1px solid rgba(255, 255, 255, 0.5); */
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -638,6 +638,7 @@ body {
     flex: 1;
     overflow-y: auto;
     padding: 0 20px;           /* 左右留白，文字不贴边 */
+    width: 90vw;
     
     /* 美化滚动条（可选但强烈推荐） */
     scrollbar-width: thin;
@@ -1966,8 +1967,8 @@ body.dark-mode {
 /* 设置弹窗在夜间模式下的背景色 */
 body.dark-mode .modal.glass-panel,
 body.dark-mode #contact-list-wrapper {
-    background: rgba(52, 52, 52, 0.85); /* 深灰色毛玻璃 */
-    border: 1px solid rgba(255, 255, 255, 0.5);
+    background: rgb(39 39 39 / 70%); /* 深灰色毛玻璃 */
+    /* border: 1px solid rgba(255, 255, 255, 0.5); */
 }
 
 body.dark-mode .settings-title,
@@ -3565,8 +3566,8 @@ body.custom-mode .tab-btn.active { color: #dedede;  }
 
 body.custom-mode .explore-list li {
 
-    background: rgba(52,52,52, 0.85); /* 半透明卡片 */
-    border: 1px solid rgba(255, 255, 255, 0.4);
+    background: rgba(30, 30, 30, 0.75); /* 半透明卡片 */
+    border: 1px solid rgba(255, 255, 255, 0.3);
     transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
@@ -3720,8 +3721,8 @@ body.custom-mode #contact-list-container {
 }
 
 body.custom-mode .modal.glass-panel, body.custom-mode #contact-list-wrapper {
-    background: rgba(52, 52, 52, 0.85);
-    border: 1px solid rgba(255, 255, 255, 0.5);
+    background: rgb(39 39 39 / 70%);
+    /* border: 1px solid rgba(255, 255, 255, 0.5); */
 }
 
 body.custom-mode .settings-title, body.custom-mode .section-title, body.custom-mode .settings-section-title, body.custom-mode h2, body.custom-mode h3 {
@@ -4581,8 +4582,8 @@ body.dark-mode .tab-btn.active { color: #dedede;  }
 }
 
 body.dark-mode .explore-list li {
-    background: rgba(52,52,52, 0.85); /* 半透明卡片 */
-    border: 1px solid rgba(255, 255, 255, 0.4);
+    background: rgba(30, 30, 30, 0.75); /* 半透明卡片 */
+    border: 1px solid rgba(255, 255, 255, 0.3);
     transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
