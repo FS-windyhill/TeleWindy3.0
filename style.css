@@ -4150,6 +4150,30 @@ body.custom-mode .tab-item:hover:not(.active) {
 }
 
 
+body.custom-mode .history-btn {
+    background: var(--btn-color);
+    color: #ffffff;
+    border: 0.7px solid #a9a9a9;
+}
+
+body.custom-mode .danger-btn.outline {
+    background: rgba(255, 33, 33, 0.3);
+    color: #ffcaca;
+    border: 1px solid rgba(255, 80, 80, 0.9);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
