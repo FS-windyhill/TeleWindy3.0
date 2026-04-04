@@ -1193,7 +1193,7 @@ button#del-preset-btn.icon-btn.danger{
 /* --- 时间戳样式 (重点) --- */
 .msg-time {
     font-size: 11px;
-    color: rgba(255,255,255,0.9);
+    color: rgba(255,255,255,0.8);
     text-shadow: 0 0 2px rgba(0,0,0,0.8), 0 0 4px rgba(0,0,0,0.5);
     white-space: nowrap;
     opacity: 0.8;
@@ -1965,7 +1965,7 @@ body.dark-mode {
     --text-color: #ffffff; 
     --message-bg-user: #ffffff5e;
     --message-bg-ai: #3030309e;
-    --message-border-user: #ffffff70;
+    --message-border-user: rgba(255, 255, 255, 0.35);
     --message-border-ai: rgba(160, 160, 160, 0.5);
     
     --btn-color: #3a3a3a;          /* 按钮深色背景 */
@@ -3476,7 +3476,7 @@ body.custom-mode {
     --text-color: #ffffff; 
     --message-bg-user: #ffffff5e;
     --message-bg-ai: #3030309e;
-    --message-border-user: #ffffff70;
+    --message-border-user: rgba(255, 255, 255, 0.35);
     --message-border-ai: rgba(160, 160, 160, 0.5);
     
     --btn-color: #3a3a3a;          /* 按钮深色背景 */
