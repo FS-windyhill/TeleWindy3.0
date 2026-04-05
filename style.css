@@ -224,9 +224,9 @@ body {
 .message-wrapper {
     display: flex;
     align-items: flex-start;
-    gap: 5px; /* 稍微加大一点间距更好看 */
+    gap: 3px; /* 稍微加大一点间距更好看 */
     margin-bottom: 11px;
-    max-width: 96%;
+    max-width: 93%;
     
     /* ★★★ 关键修改：默认必须是可见的！去掉 opacity: 0 ★★★ */
     opacity: 1; 
