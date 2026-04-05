@@ -798,16 +798,30 @@ const WorldInfoEngine = {
 const API = {
     getProvider(url) {
         if (url.includes('anthropic')) return 'claude';
-        if (url.includes('googleapis')) return 'gemini';
+        // ★ 核心修复：如果是 Google 的域名，且 URL 里【不包含】 openai，才当做原生 gemini
+        if (url.includes('googleapis') && !url.includes('openai')) return 'gemini';
+        // 只要包含 openai (包括 Google 的兼容接口)，统统走 openai 标准逻辑！
         return 'openai'; 
     },
 
     async fetchModels(url, key) {
-        const modelsUrl = url.replace(/\/chat\/completions$/, '/models');
-        const res = await fetch(modelsUrl, {
+        let modelsUrl = url.replace(/\/chat\/completions$/, '/models');
+        let options = {
             method: 'GET',
-            headers: { 'Authorization': `Bearer ${key}` }
-        });
+            headers: {}
+        };
+
+        // 如果是原生 Gemini
+        if (url.includes('googleapis') && !url.includes('openai')) {
+            // 原生 Gemini 不支持 Bearer，必须把 Key 放在 URL 后面
+            // 把原 URL (例如 ../v1beta/models) 加上 key 参数
+            modelsUrl = url.includes('?') ? `${url}&key=${key}` : `${url}?key=${key}`;
+        } else {
+            // OpenAI, Claude 等标准格式，使用 Bearer
+            options.headers['Authorization'] = `Bearer ${key}`;
+        }
+
+        const res = await fetch(modelsUrl, options);
         if (!res.ok) throw new Error(`Status: ${res.status}`);
         return await res.json();
     },
@@ -916,11 +930,12 @@ const API = {
         } else if (provider === 'gemini') {
             fetchUrl = API_URL.endsWith(':generateContent') ? API_URL : `${API_URL}/${MODEL}:generateContent?key=${API_KEY}`;
             options.body = JSON.stringify({
-                contents: [{ role: 'user', parts: [{ text: lastUserMsg }] }],
-                system_instruction: { parts: [{ text: sysPrompts }] },
+                contents: [{ role: 'user', parts:[{ text: lastUserMsg }] }],
+                // ★ 修复：Gemini 原生要求驼峰命名 systemInstruction
+                systemInstruction: { parts: [{ text: sysPrompts }] }, 
                 generationConfig: { 
-                    temperature: TEMPERATURE, // 替换
-                    maxOutputTokens: MAX_TOKENS // 替换
+                    temperature: TEMPERATURE,
+                    maxOutputTokens: MAX_TOKENS
                 }
             });
         } else {
@@ -987,7 +1002,17 @@ const API = {
         }
                 
         if (provider === 'claude') return data.content[0].text.trim();
-        if (provider === 'gemini') return data.candidates[0].content.parts[0].text.trim();
+                // --- 替换原来的 gemini return 开始 ---
+        if (provider === 'gemini') {
+            const candidate = data?.candidates?.[0];
+            // 防御1：被安全过滤器拦截
+            if (candidate?.finishReason === 'SAFETY' || candidate?.finishReason === 'BLOCKLIST') {
+                throw new Error("❌ 回复失败：内容触发了 Google Gemini 的安全审查过滤。");
+            }
+            // 防御2：正常解析并使用可选链（?.）防止对象不存在导致崩溃
+            return candidate?.content?.parts?.[0]?.text?.trim() || "【API未返回有效文本】";
+        }
+        // --- 替换原来的 gemini return 结束 ---
         return data.choices[0].message.content.trim();
 
     },
@@ -4718,6 +4743,15 @@ const App = {
                 this.saveAndRenderMoments();
             }
         }
+        // ★★★ 新增：删除评论逻辑 ★★★
+        else if (action === 'delete') {
+            if (confirm("确定要删除这条评论吗？")) {
+                // 根据上面找到的索引，从 comments 数组中删掉这条评论
+                momentData.comments.splice(commentIndex, 1);
+                // 保存并重新渲染 UI
+                this.saveAndRenderMoments();
+            }
+        }
     },
 
     // ===========================================
@@ -5816,6 +5850,12 @@ const App = {
         document.getElementById('btn-c-action-regen')?.addEventListener('click', () => {
             if (typeof this.handleCommentAction === 'function') this.handleCommentAction('regen');
             else if (typeof App !== 'undefined' && typeof App.handleCommentAction === 'function') App.handleCommentAction('regen');
+        });
+
+        // ★★★ 新增：删除按钮的事件绑定 ★★★
+        document.getElementById('btn-c-action-delete')?.addEventListener('click', () => {
+            if (typeof this.handleCommentAction === 'function') this.handleCommentAction('delete');
+            else if (typeof App !== 'undefined' && typeof App.handleCommentAction === 'function') App.handleCommentAction('delete');
         });
         
         // 取消按钮

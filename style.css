@@ -4909,6 +4909,10 @@ body.dark-mode .moment-content {
     color: #333;
 }
 
+button#btn-c-action-delete.momment-btn{
+    color: #ff3b30;
+    font-weight: 600;
+}
 
 
 body.dark-mode .moment-comments {
