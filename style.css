@@ -4165,6 +4165,24 @@ body.custom-mode .danger-btn.outline {
 
 
 
+body.custom-mode details.thought-process .thought-content {
+    color: #dbdbdb;
+    border-top: 1px dashed rgb(255 255 255 / 30%);
+}
+
+
+
+body.custom-mode details.thought-process summary {
+
+    color: #c0c0c0; /* 灰色字 */
+
+}
+
+body.custom-mode details.thought-process {
+    border: 1px solid rgba(150, 150, 150, 0.3);
+    background-color: rgb(255 255 255 / 15%);
+
+}
 
 
 
@@ -5328,5 +5346,99 @@ body.dark-mode button#btn-save-m-settings.save-btn{
     text-align: center;
 
 }
+
+
+
+
+
+
+
+
+
+/* =====think思考气泡 =================== */
+/* AI 思考过程折叠面板样式 */
+details.thought-process {
+    border: 1px solid rgb(255 255 255 / 50%);
+    border-radius: 8px;
+    background-color: rgb(206 206 206 / 65%);
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+details.thought-process summary {
+    cursor: pointer;
+    padding: 5px 8px;
+    font-size: 0.85em; /* 字体调小 */
+    color: #585858; /* 灰色字 */
+    user-select: none;
+    outline: none;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+}
+
+/* 隐藏原生的三角形箭头（为了更美观可以自定义） */
+details.thought-process summary::marker,
+details.thought-process summary::-webkit-details-marker {
+    display: none;
+}
+
+/* 自定义展开/折叠的小图标 */
+details.thought-process summary::before {
+    content: "💡 思考过程 (点击展开)";
+    margin-right: 5px;
+}
+details[open].thought-process summary::before {
+    content: "💡 思考过程 (点击折叠)";
+}
+
+/* 思考内容的具体文字样式 */
+details.thought-process .thought-content {
+    padding: 8px 12px;
+    font-size: 0.9em;
+    color: #505050; /* 弱化颜色 */
+    font-style: italic; /* 斜体表现内心戏 */
+    border-top: 1px dashed rgb(0 0 0 / 35%);
+    white-space: pre-wrap; /* 保证换行符能正常显示 */
+
+    /* ★★★ 新增这行，让鼠标变小手 ★★★ */
+    cursor: pointer; 
+}
+
+
+body.dark-mode details.thought-process .thought-content {
+    color: #dbdbdb;
+    border-top: 1px dashed rgb(255 255 255 / 30%);
+}
+
+
+
+body.dark-mode details.thought-process summary {
+
+    color: #c0c0c0; /* 灰色字 */
+
+}
+
+body.dark-mode details.thought-process {
+    border: 1px solid rgba(150, 150, 150, 0.3);
+    background-color: rgb(255 255 255 / 15%);
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

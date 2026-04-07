@@ -5,231 +5,205 @@
 // 每个函数后附简要描述：这是用于干什么的。
 // 注意：属性（如常量）仅列出，不附描述；函数则说明作用。
 
-
-// 1. CONFIG & STATE (全局配置与运行时状态)
+// 1. CONFIG & STATE (配置与状态)
 //   - CONFIG: 应用程序的静态配置常量和默认值对象
-//     - STORAGE_KEY: localStorage 中存储角色/联系人数据的键名 ('teleWindy_char_data_v1')
-//     - SETTINGS_KEY: localStorage 中存储用户设置的键名 ('teleWindy_settings_v1')
-//     - WORLD_INFO_KEY: localStorage 中存储世界信息（World Info）的键名，已升级到 v2 ('teleWindy_world_info_v2')
+//     - STORAGE_KEY: localStorage中存储角色/联系人数据的键名
+//     - SETTINGS_KEY: localStorage中存储用户设置的键名
+//     - WORLD_INFO_KEY: localStorage中存储世界信息（World Info）的键名
+//     - MOMENTS_KEY: localStorage中存储心迹（朋友圈）数据的键名
+//     - MOMENTS_SETTINGS_KEY: localStorage中存储心迹设置的键名
 //     - CHAT_PAGE_SIZE: 聊天历史分页加载时每页显示的消息条数 (15)
-//     - GIST_ID_KEY: localStorage 中存储 GitHub Gist ID 的键名（用于云同步）
+//     - MOMENTS_PAGE_SIZE: 心迹列表分页加载时每页显示的条数 (15)
+//     - GIST_ID_KEY: localStorage中存储 GitHub Gist ID 的键名（用于云同步）
+//     - MOMENTS_INJECT_COUNT: AI在聊天中感知新心迹的默认次数 (5)
 //     - DEFAULT: 所有可配置项的默认值集合
-//       - API_URL: 默认文本生成 API 地址（SiliconFlow 示例）
-//       - MODEL: 默认使用的模型名称 (GLM-4.6)
-//       - API_KEY: 默认 API 密钥（空，需要用户填写）
+//       - API_URL: 默认文本生成 API 地址
+//       - MODEL: 默认使用的模型名称
+//       - API_KEY: 默认 API 密钥
 //       - WALLPAPER: 默认壁纸文件名
 //       - USER_AVATAR: 默认用户头像文件名
-//       - GIST_TOKEN: 默认 GitHub Gist Token（用于云备份）
+//       - GIST_TOKEN: 默认 GitHub Token
 //       - THEME: 默认主题 ('light')
-//       - FONT_SIZE: 默认全局字体大小（16px）
-//       - API_PRESETS: 默认 API 预设列表（空数组）
-//       - VISION_PRESETS: 默认视觉模型预设列表（空数组） ★★★ 新增 ★★★
-//       - CUSTOM_CSS: 默认用户自定义 CSS 内容（空字符串）
-//       - CSS_PRESETS: 默认 CSS 样式预设列表（空数组）
-//       - VISION_URL: 默认视觉模型 API 地址（阿里通义千问兼容模式示例）
-//       - VISION_KEY: 默认视觉 API 密钥（空）
-//       - VISION_MODEL: 默认视觉模型名称 (Qwen/Qwen3-VL-30B-A3B-Instruct)
-//       - VISION_PROMPT: 默认视觉描述提示词（要求客观、简洁）
-//     - SYSTEM_PROMPT: 所有角色默认使用的系统提示词模板，强调完全代入角色、沉浸式对话、自然分段、无需时间戳等
-
-//   - STATE: 应用程序当前的运行时动态状态（内存中，刷新会丢失，需从 storage 恢复）
-//     - contacts: 所有联系人（角色）数组，每个元素包含 id、name、avatar、history 等
-//     - worldInfoBooks: 世界信息“书”数组，每本书包含 id、name、characterId（可选绑定角色）、entries（条目列表）
-//     - currentContactId: 当前正在聊天的联系人 ID（字符串或 null）
-//     - currentBookId: 当前正在编辑/查看的世界信息书 ID（字符串或 null）
-//     - settings: 用户所有设置的运行时对象（从 localStorage 加载后覆盖 DEFAULT）
-//     - typingContactId: 当前正在“输入中”的联系人 ID（用于显示“对方正在输入...”），null 表示无人输入
-//     - visibleMsgCount: 当前聊天窗口已加载并显示的消息条数（用于实现“加载更多”分页，默认 15）
-//     - isSelectMode: 是否处于消息多选模式（用于批量操作，如删除、复制等）
-//     - selectedBubbles: 当前选中的消息气泡 DOM 元素集合（Set 对象）
-//     - pendingImage: 用户刚刚选择但尚未发送的图片（base64 字符串或 null，用于预览和上传）
+//       - FONT_SIZE: 默认字体大小 (16)
+//       - API_PRESETS: API预设数组默认值
+//       - VISION_PRESETS: 视觉模型预设数组默认值
+//       - MOMENTS_SETTINGS: 心迹设置的默认值对象
+//       - MAX_TOKENS: 默认最大token数 (32700)
+//       - TEMPERATURE: 默认温度参数 (1.1)
+//       - CONTEXT_LIMIT: 默认上下文消息条数限制 (30)
+//       - CUSTOM_CSS: 默认自定义CSS内容
+//       - CSS_PRESETS: CSS预设数组默认值
+//       - VISION_URL: 默认视觉API地址
+//       - VISION_KEY: 默认视觉API密钥
+//       - VISION_MODEL: 默认视觉模型名称
+//       - VISION_PROMPT: 默认视觉分析提示词
+//     - SYSTEM_PROMPT: 系统级提示词，用于引导AI行为
+//   - STATE: 应用程序的运行时全局状态
+//     - contacts: 存储所有联系人/角色的数组
+//     - worldInfoBooks: 存储所有世界书（知识库）的数组
+//     - currentContactId: 当前正在聊天的联系人ID
+//     - currentBookId: 当前正在编辑的世界书ID
+//     - settings: 存储当前生效的用户设置
+//     - typingContactId: 追踪哪个联系人正在“输入中”
+//     - visibleMsgCount: 当前聊天窗口显示的消息条数
+//     - isSelectMode: 标识是否处于消息多选模式
+//     - selectedBubbles: 存储多选模式下选中的气泡DOM元素
+//     - pendingImage: 暂存用户准备发送的图片 (Base64格式)
+//     - moments: 存储所有心迹数据的数组
+//     - momentsSettings: 存储心迹页面的设置（背景、头像、用户名等）
+//     - visibleMomentsCount: 当前心迹页面显示的条数
 
 // 1.5. DB UTILS (IndexedDB 简易封装)
-//   - DB: IndexedDB 操作对象
-//     - dbName: 'TeleWindyDB' 
-//     - storeName: 'store' 
-//     - version: 1 
-//     - open(): 打开数据库，返回Promise，处理升级和成功/错误事件。这是用于建立IndexedDB连接的函数。
-//     - get(key): 获取指定键的值，返回Promise。这是用于从数据库读取数据的函数。
-//     - set(key, value): 设置指定键的值，返回Promise。这是用于向数据库写入数据的函数。
-//     - remove(key): 删除指定键，返回Promise。这是用于从数据库删除数据的函数。
-//     - clear(): 清空整个存储，返回Promise。这是用于清空数据库所有数据的函数。
-//     - exportAll(): 导出所有数据，使用游标遍历，返回Promise。这是用于备份整个数据库的函数。
+//   - DB: 基于 IndexedDB 的异步存储工具
+//     - open(): 打开或创建数据库连接，返回Promise
+//     - get(key): 根据键名从数据库中异步读取数据
+//     - set(key, value): 将键值对异步写入数据库
+//     - remove(key): 根据键名异步删除数据库中的记录
+//     - clear(): 异步清空当前对象存储中的所有数据
+//     - exportAll(): 遍历并导出数据库中所有键值对，用于备份
 
 // 2. STORAGE SERVICE (本地持久化 - IndexedDB 版)
-//   - Storage: 本地存储服务对象
-//     - load(): 初始化加载数据，包括设置、联系人和世界书，支持数据迁移。这是用于从数据库加载所有状态的函数。
-//     - saveContacts(): 保存联系人数据。这是用于持久化联系人数组的函数。
-//     - saveSettings(): 保存设置数据。这是用于持久化设置对象的函数。
-//     - saveWorldInfo(): 保存世界书数据。这是用于持久化世界书数组的函数。
-//     - exportAllForBackup(): 导出所有数据用于备份，处理Token加密。这是用于准备备份数据的函数。
-//     - importFromBackup(data): 从备份导入数据，包括清空数据库和解密Token。这是用于恢复备份数据的函数。
+//   - Storage: 核心数据持久化服务，负责所有数据的读写和迁移
+//     - load(): 从IndexedDB加载所有数据（设置、联系人、世界书、心迹等），并处理从localStorage的旧数据迁移
+//     - saveContacts(): 将STATE.contacts保存到IndexedDB
+//     - saveSettings(): 将STATE.settings保存到IndexedDB
+//     - saveWorldInfo(): 将STATE.worldInfoBooks保存到IndexedDB
+//     - exportAllForBackup(): 导出所有数据用于备份，并对敏感Token进行简单加密
+//     - importFromBackup(data): 从备份数据中恢复，清空当前数据库并写入新数据
+//     - saveMoments(): 将STATE.moments保存到IndexedDB
+//     - saveMomentsSettings(): 将STATE.momentsSettings保存到IndexedDB
 
-// 3. WORLD INFO ENGINE (已修正)
-//   - WorldInfoEngine: 世界信息引擎对象
-//     - importFromST(jsonString, fileName): 从ST格式导入条目，创建新书。这是用于导入世界信息JSON的函数。
-//     - exportToST(book): 导出书到ST格式JSON。这是用于导出世界信息为JSON的函数。
-//     - scan(userText, history, currentContactId, currentContactName): 扫描上下文触发世界信息，返回触发的提示。这是用于在聊天中注入世界知识的函数。
+// 3. WORLD INFO ENGINE (世界书/知识库引擎)
+//   - WorldInfoEngine: 处理世界书（World Info）的导入、导出和在对话中的触发扫描
+//     - importFromST(jsonString, fileName): 解析从SillyTavern导出的JSON文件，将其转换为内部世界书格式
+//     - exportToST(book): 将内部世界书对象导出为兼容SillyTavern格式的JSON字符串
+//     - scan(userText, history, currentContactId, currentContactName): 根据用户输入和聊天历史扫描所有世界书，返回匹配条目的合并内容
 
-
-// 4. API SERVICE (LLM通信模块)
-//   - getProvider(url): 根据API地址判断当前使用的LLM提供商，返回 'claude'、'gemini' 或 'openai'（默认兼容OpenAI格式的都归为此类）
-//   - fetchModels(url, key): 请求 /models 接口获取可用模型列表（尝试将 /chat/completions 替换为 /models）
-//   - estimateTokens(text): 粗略估算文本的token数量（中文≈1.8 token/字，英文/符号≈0.35 token/字），用于没有返回usage时的保底统计
-//   - testConnection(url, key, model): 测试API连接是否可用，发送极简的“Ping”消息，只求通不通，不关心返回内容
-//   - chat(messages, settings): 核心聊天请求函数，根据不同提供商（Claude/Gemini/OpenAI兼容）构造不同的请求体，发送后处理响应、记录日志、提取token使用量、返回纯文本回复
-//   - analyzeImage(base64Image, visionSettings): 独立的视觉分析函数，使用专属的视觉API配置，向视觉模型发送base64图片+提示词，获取图片描述文本
+// 4. API SERVICE (LLM通信)
+//   - API: 管理与各种AI模型API的通信
+//     - getProvider(url): 根据API URL判断服务提供商类型（openai, claude, gemini）
+//     - fetchModels(url, key): 向API发送请求，获取可用的模型列表
+//     - estimateTokens(text): 估算一段文本大致消耗的Token数量
+//     - testConnection(url, key, model): 发送极简消息测试API连接是否正常
+//     - chat(messages, settings): 核心聊天函数，根据provider构造不同的请求体并发送，返回AI回复文本
+//     - analyzeImage(base64Image, visionSettings): 调用视觉模型API分析图片内容，返回描述文本
 
 // 5. CLOUD SYNC (终极混合版 - 含安全防御)
-//   - CloudSync: 云同步对象
-//     - els: DOM元素引用对象
-//       - provider 
-//       - urlInput 
-//       - gistIdInput 
-//       - token 
-//       - status 
-//       - groupUrl 
-//       - groupGistId 
-//       - authLabel 
-//     - init(): 初始化云同步UI，恢复保存的状态。这是用于设置初始云同步界面的函数。
-//     - toggleMode(): 切换同步模式（custom/gist），更新UI。这是用于切换云提供商的函数。
-//     - showStatus(msg, isError): 显示状态消息。这是用于更新UI状态的函数。
-//     - getAuth(): 获取认证Token，支持加密兼容。这是用于安全获取密码的函数。
-//     - _maskToken(token): 混淆Token。这是用于加密Token的内部函数。
-//     - _unmaskToken(maskedToken): 解混淆Token。这是用于解密Token的内部函数。
-//     - _preparePayload(): 准备上传数据，包括混淆Token。这是用于构建备份负载的函数。
-//     - updateBackup(): 更新备份，根据模式调用上传。这是用于执行云备份的函数。
-//     - findBackup(): 查找GitHub上的备份Gist。这是用于自动搜索备份的函数。
-//     - restoreBackup(): 从云端恢复备份。这是用于执行云恢复的函数。
-//     - _safeRestore(data): 安全恢复数据，包括解密和清空。这是用于处理恢复逻辑的内部函数。
-//     - _uploadToCustom(): 上传到自定义服务器。这是用于自定义云上传的内部函数。
-//     - _fetchFromCustom(password): 从自定义服务器拉取。这是用于自定义云下载的内部函数。
-//     - _uploadToGist(): 上传到Gist。这是用于Gist上传的内部函数。
-//     - _fetchFromGist(token): 从Gist拉取。这是用于Gist下载的内部函数。
+//   - CloudSync: 负责将数据备份到GitHub Gist或自定义服务器
+//     - init(): 初始化云同步模块，恢复上次选择的同步模式和配置
+//     - toggleMode(): 在自定义服务器和GitHub Gist模式间切换UI
+//     - showStatus(msg, isError): 在界面上显示同步状态信息
+//     - getAuth(): 获取并处理用户填写的认证凭据（Token/密码）
+//     - _maskToken(token): 简单混淆Token，防止明文存储到GitHub
+//     - _unmaskToken(maskedToken): 解混淆Token
+//     - _preparePayload(): 准备要上传的数据包，包含备份时间和应用标识
+//     - updateBackup(): 根据当前模式调用相应的上传方法
+//     - findBackup(): 在用户的GitHub Gist列表中查找名为"TeleWindy Backup"的备份
+//     - restoreBackup(): 从云端恢复数据的主入口
+//     - _safeRestore(data): 安全地执行数据恢复，包括解密和防溢出处理
+//     - _uploadToCustom(): 将数据上传到自定义服务器
+//     - _fetchFromCustom(password): 从自定义服务器拉取数据
+//     - _uploadToGist(): 将数据上传或更新到GitHub Gist
+//     - _fetchFromGist(token): 从指定的GitHub Gist拉取数据
 
+// 6. UI RENDERER (DOM 操作)
+//   - UI: 负责所有用户界面元素的渲染、更新和事件驱动逻辑
+//     - els: 存储页面关键DOM元素的引用
+//     - autoScrollEnabled: 标记是否允许聊天窗口自动滚动到底部
+//     - init(): 初始化UI，设置滚动监听、应用外观、渲染联系人列表等
+//     - applyAppearance(): 根据STATE.settings应用主题、字体大小、壁纸和自定义CSS
+//     - renderCssPresetMenu(): 渲染CSS预设的下拉选择菜单
+//     - toggleTheme(newTheme): 切换主题并保存
+//     - switchView(viewName): 切换主视图（聊天列表、聊天窗、探索页、心迹页）
+//     - renderVisionPresetMenu(): 渲染视觉模型预设的下拉选择菜单
+//     - renderContacts(): 使用模板渲染联系人列表，处理头像、消息预览和红点逻辑
+//     - renderBookSelect(): 渲染世界书的大分类下拉选择框
+//     - updateCurrentBookSettingsUI(): 更新当前世界书的绑定角色设置UI
+//     - renderWorldInfoList(): 渲染当前世界书中的所有条目列表
+//     - initWorldInfoTab(): 初始化世界书标签页的数据和下拉框
+//     - createSingleBubble(...): 创建单条消息气泡的DOM元素，支持文本、图片和时间戳
+//     - openImageLightbox(src): 打开一个简单的灯箱效果，用于放大查看聊天中的图片
+//     - showEditModal(oldText, onConfirmCallback): 显示编辑消息的模态框
+//     - removeLatestAiBubbles(): 删除聊天区域中最后一条AI消息的气泡
+//     - renderChatHistory(contact, isLoadMore, keepScrollPosition): 渲染聊天历史记录，支持分页加载和滚动位置保持
+//     - appendMessageBubble(...): 在消息组后追加单条消息气泡（用于流式生成后追加）
+//     - appendSeparator(shouldAnimate): 在聊天区域插入一个分隔符
+//     - scrollToBottom(): 将聊天滚动容器滚动到底部
+//     - setLoading(isLoading, contactId): 设置聊天界面的“正在输入”状态
+//     - updateRerollState(contact): 更新“重新生成”按钮的可用状态
+//     - playWaterfall(fullText, avatar, timestamp, historyIndex): 模拟流式打字机效果，逐段渲染AI回复
+//     - initStatusBar(): 初始化顶部状态栏，显示实时时间和设备电量
+//     - renderPresetMenu(): 渲染API预设的下拉菜单并绑定事件
 
-// 6. UI RENDERER (DOM 操作和UI渲染模块)
-//   - els: 所有主要DOM元素的引用对象，用于快速访问页面元素
-//     - viewList: 联系人列表视图
-//     - viewChat: 聊天视图
-//     - contactContainer: 联系人列表容器
-//     - chatMsgs: 聊天消息显示区域
-//     - chatTitle: 聊天窗口标题（显示当前联系人名字）
-//     - status: 输入框上方状态提示（如“对方正在输入”或“在线”）
-//     - input: 用户消息输入框
-//     - sendBtn: 发送按钮
-//     - rerollBtn: 重新生成按钮
-//     - modalOverlay: 主模态框遮罩层
-//     - mainModal: 主设置模态框
-//     - wiModal: 世界信息（World Info）模态框
-//     - wiList: 世界信息条目列表容器
-//     - wiBookSelect: 世界信息大分类（书）选择下拉框
-//     - wiBookCharSelect: 世界信息大分类绑定角色选择下拉框
-//     - settingUrl: API地址输入框
-//     - settingKey: API密钥输入框
-//     - settingModel: 模型选择下拉框
-//     - fetchBtn: 获取模型列表按钮
-//     - themeLight: 浅色主题单选按钮
-//     - themeDark: 深色主题单选按钮
-// - visionPresetSelect: 视觉预设下拉选择框 ★★★ 新增 ★★★
-// - saveVisionPresetBtn: 保存视觉预设按钮 ★★★ 新增 ★★★
-// - delVisionPresetBtn: 删除视觉预设按钮 ★★★ 新增 ★★★
-//     - settingVisionUrl: 视觉API地址输入框（新增）
-//     - settingVisionKey: 视觉API密钥输入框（新增）
-//     - settingVisionModel: 视觉模型名称输入框（新增）
-//     - settingVisionPrompt: 视觉提示词输入框（新增）
-//     - uploadBtn: 上传图片按钮（新增）
-//     - uploadInput: 图片上传文件输入框（新增）
-//     - previewContainer: 图片预览容器（新增）
-//     - previewImg: 图片预览图像元素（新增）
-//     - clearImgBtn: 清除预览图片按钮（新增）
-//
-//   - autoScrollEnabled: 是否允许自动滚动到底部的状态标志（新增，用于防止用户手动滚动时干扰）
-//
-//   - init(): 初始化UI，渲染联系人列表、初始化云同步、绑定字体滑块事件、监听滚动容器以控制自动滚动，最后应用外观设置
-//   - applyAppearance(): 根据保存的设置应用壁纸、主题、字体大小、自定义CSS，并同步相关UI控件状态
-//   - renderCssPresetMenu(): 渲染自定义CSS预设下拉菜单（从STATE中读取预设列表）
-//   - toggleTheme(newTheme): 切换主题（light/dark/custom），保存设置并重新应用外观
-//   - switchView(viewName): 切换主视图（联系人列表 <-> 聊天窗口），带动画优化和延迟渲染处理
-//   - renderContacts(): 渲染联系人列表，使用模板填充名字、头像、消息预览、未读红点等
-//   - renderBookSelect(): 渲染世界信息大分类（书）下拉框，并更新当前书的角色绑定UI
-//   - updateCurrentBookSettingsUI(): 更新当前世界信息书的角色绑定下拉框选中状态
-//   - renderWorldInfoList(): 渲染当前世界信息书中的条目列表，支持高亮正在编辑的条目
-//   - initWorldInfoTab(): 初始化世界信息Tab，填充角色下拉框、渲染书选择和条目列表、清空编辑器
-//   - createSingleBubble(text, sender, aiAvatarUrl, timestampRaw, historyIndex, shouldAnimate, partIndex, imageUrl): 创建单个消息气泡，支持文字、Markdown解析、图片（正常或过期占位）、动画、头像、时间戳等
-//   - openImageLightbox(src): 打开简单图片灯箱（点击聊天图片放大查看）
-//   - showEditModal(oldText, onConfirmCallback): 显示消息编辑模态框，填充旧内容并绑定确认/取消回调
-//   - removeLatestAiBubbles(): 删除最新的AI消息组（用于中断或重新生成时清理）
-//   - renderChatHistory(contact, isLoadMore, keepScrollPosition): 完整渲染聊天历史，支持分页加载更多、图片显示、隐藏消息、Markdown解析、分段气泡、图片单独气泡等，并优化滚动和显隐动画
-//   - appendMessageBubble(text, sender, aiAvatarUrl, timestampRaw, historyIndex): 追加单个消息气泡到现有或新消息组，支持动画
-//   - appendSeparator(shouldAnimate): 在聊天中追加分割线（---），支持入场动画
-//   - scrollToBottom(): 强制将聊天滚动到底部
-//   - setLoading(isLoading, contactId): 设置“对方正在输入”状态提示，仅在当前聊天窗口生效，并禁用/启用发送按钮
-//   - updateRerollState(contact): 根据是否有AI消息更新“重新生成”按钮的可点击状态和透明度
-//   - playWaterfall(fullText, avatar, timestamp, historyIndex): 实现AI回复的瀑布流逐段渲染效果，带延迟、分隔线、自动滚动控制
-//   - initStatusBar(): 初始化顶栏状态栏，实时显示时间和电量（使用Battery API）
-//   - renderPresetMenu(): 渲染API预设下拉菜单，并绑定保存、删除、加载事件
-// - renderVisionPresetMenu(): 渲染视觉API预设下拉菜单 ★★★ 新增 ★★★
-
-
-// 7. APP CONTROLLER (业务逻辑控制器)
-//     - init()                          // 初始化整个应用：加载数据 → 初始化UI → 绑定事件 → 渲染联系人列表 → 显示状态栏
-//     - enterChat(id)                   // 进入指定联系人的聊天界面，设置当前聊天对象，渲染历史消息，处理新消息标记
-//     - handleSend(isReroll = false)    // 处理用户发送消息（普通发送）或重滚（reroll），包含：识图 → 构造上下文 → 调用AI → 渲染回复
-//     - openSettings()                  // 打开主设置弹窗，并回填所有已保存的设置项（API、视觉、主题、壁纸、自定义CSS、世界书等）
-//     - switchWorldInfoBook(bookId)     // 切换当前正在编辑/查看的世界知识书，更新UI和状态
-//     - bindCurrentBookToChar(charId)   // 将当前世界书绑定到某个特定角色（或取消绑定）
-//     - loadWorldInfoEntry(uid)         // 加载某一条世界知识条目到编辑表单中（回显所有字段）
-//     - saveWorldInfoEntry()            // 保存（或新建）当前正在编辑的世界知识条目，包含名称、关键词、内容、常量标记
-//     - deleteWorldInfoEntry()          // 删除当前正在编辑的世界知识条目
-//     - clearWorldInfoEditor()          // 清空世界知识编辑表单的所有输入内容
-//     - createNewBook()                 // 创建一本新的世界知识书
-//     - renameCurrentBook()             // 重命名当前选中的世界知识书
-//     - deleteCurrentBook()             // 删除当前世界知识书（需保留至少一本）
-//     - exportCurrentBook()             // 导出当前世界知识书为 .json 文件（ST兼容格式）
-//     - handleImportWorldInfo(file)     // 从用户选择的文件导入世界知识书（支持ST格式）
-//     - handleSavePreset()              // 保存当前填写的API配置为一个命名预设（支持覆盖）
-//     - handleLoadPreset(index)         // 从下拉菜单加载选中的API预设，自动填充URL/Key/Model
-//     - handleDeletePreset()            // 删除选中的API预设
-// - handleSaveVisionPreset() // 保存当前视觉API配置（URL/Key/Model/Prompt）为一个命名预设 ★★★ 新增 ★★★
-// - handleLoadVisionPreset() // 从下拉菜单加载选中的视觉预设，自动填充所有相关输入框 ★★★ 新增 ★★★
-// - handleDeleteVisionPreset() // 删除选中的视觉API预设 ★★★ 新增 ★★★
-// - saveSettingsFromUI() // 从设置弹窗收集所有输入，修正URL格式，保存全部设置（含主题、CSS、视觉、壁纸等）
-
-//     - saveSettingsFromUI()            // 从设置弹窗收集所有输入，修正URL格式，保存全部设置（含主题、CSS、视觉、壁纸等）
-//     - handleMessageAction(action)     // 处理右键/长按消息菜单的各种操作：编辑、删除、复制、隐藏切换、多选等
-//     - enterSelectMode()               // 进入消息多选模式，显示底部操作栏，开启选择事件监听
-//     - exitSelectMode()                // 退出多选模式，清除所有选中状态，隐藏操作栏
-//     - toggleBubbleSelection(bubbleEl) // 切换单个消息气泡的选中/取消选中状态，并更新计数
-//     - updateSelectCount()             // 更新多选底部栏显示的已选中数量
-//     - bindSelectBarEvents()           // 为多选操作栏的按钮绑定一次性事件（退出、批量复制、批量删除、批量隐藏）
-//     - handleBatchCopy()               // 批量复制选中的消息段落（按顺序拼接纯文本到剪贴板）
-//     - handleBatchToggleHidden()       // 批量隐藏/取消隐藏选中的消息段落（智能判断：有可见的→全隐藏，否则全显示）
-//     - handleBatchDelete()             // 批量删除选中的消息段落（支持跨段落、整条删除）
-//     - hideMessageContextMenu()        // 隐藏消息右键菜单，并清空选中索引
-//     - showMessageContextMenu(msgIndex, rect)  // 在指定消息位置弹出右键菜单，支持动态调整“隐藏/取消隐藏”文字
-//     - bindEvents()                    // 绑定全应用几乎所有交互事件（发送、设置、上传、长按、主题、导入导出等）
-//     - readFile(file)                  // 辅助方法：将文件读取为 dataURL (base64) 格式，返回 Promise
-//     - handleTestConnection()          // 测试当前填写的API地址+密钥+模型是否可以连通
-//     - fetchModelsForUI()              // 从当前API地址拉取模型列表，填充datalist，并自动选择第一个
-//     - bindImageUpload(...)            // 为头像/图片上传控件绑定change事件，读取base64并设置预览图
-//     - handleVisionTestConnection(): 测试视觉模型 API 的连接是否可用
-//     - fetchVisionModelsForUI(): 从视觉 API 拉取可用模型列表并填充到 UI 的 datalist 中
-//     - openEditModal(id)               // 打开角色编辑/新建弹窗，回填数据，新建时隐藏危险按钮
-//     - saveContactFromModal()          // 从角色编辑弹窗保存（或新建）角色信息，包含名称、提示词、头像、预设绑定
-//     - handleSaveCssPreset()           // 将当前自定义CSS保存为命名预设（支持覆盖）
-//     - handleLoadCssPreset(index)      // 加载选中的CSS预设，填入编辑框并立即应用（若当前为custom模式）
-//     - handleDeleteCssPreset()         // 删除选中的CSS样式预设
-//     - prefixUserCss(rawCss)           // 为用户输入的CSS自动添加 body.custom-mode 前缀，提高样式权重
+// 7. APP CONTROLLER (业务逻辑)
+//   - App: 应用程序的核心控制器，处理所有业务逻辑和复杂交互
+//     - init(): 异步初始化应用，加载数据并绑定事件
+//     - enterChat(id): 进入聊天界面，加载聊天历史并更新UI状态
+//     - handleSend(isReroll): 处理发送消息和重新生成消息的核心逻辑，包括图片识别、上下文构建、API调用和心迹注入
+//     - openSettings(): 打开设置模态框，并回填所有当前设置值
+//     - switchWorldInfoBook(bookId): 切换当前编辑的世界书
+//     - bindCurrentBookToChar(charId): 将当前世界书绑定到指定角色
+//     - loadWorldInfoEntry(uid): 加载世界书条目到编辑器中进行编辑
+//     - saveWorldInfoEntry(): 保存当前编辑的世界书条目
+//     - deleteWorldInfoEntry(): 删除当前编辑的世界书条目
+//     - clearWorldInfoEditor(): 清空世界书编辑器表单
+//     - createNewBook(): 创建新的世界书
+//     - renameCurrentBook(): 重命名当前世界书
+//     - deleteCurrentBook(): 删除当前世界书
+//     - exportCurrentBook(): 导出当前世界书为JSON文件
+//     - handleImportWorldInfo(file): 处理导入世界书文件
+//     - handleSavePreset(): 保存当前的API配置为一个预设
+//     - handleLoadPreset(index): 加载指定的API预设
+//     - handleDeletePreset(): 删除指定的API预设
+//     - saveSettingsFromUI(): 将设置面板的当前值保存到STATE并持久化
+//     - handleMessageAction(action): 处理对单条消息的操作（编辑、删除、隐藏、复制、多选）
+//     - enterSelectMode(): 进入多选模式，高亮消息并显示底部操作栏
+//     - exitSelectMode(): 退出多选模式
+//     - toggleBubbleSelection(bubbleEl): 切换单个消息气泡的选中状态
+//     - updateSelectCount(): 更新多选模式下选中数量的显示
+//     - bindSelectBarEvents(): 绑定多选模式底部操作栏的按钮事件
+//     - handleBatchCopy(): 批量复制选中的消息内容
+//     - handleBatchToggleHidden(): 批量隐藏或显示选中的消息段落
+//     - handleBatchDelete(): 批量删除选中的消息段落或整条消息
+//     - hideMessageContextMenu(): 隐藏消息长按菜单
+//     - showMessageContextMenu(msgIndex, rect): 在指定位置显示消息长按操作菜单
+//     - renderMomentsUI(): 渲染心迹（朋友圈）列表，包括头像、背景、用户名、签名和动态卡片
+//     - loadMoreMoments(): 加载更多心迹
+//     - openMomentsSettings(): 打开心迹设置弹窗，并填充当前设置
+//     - saveMomentsSettings(): 保存心迹设置
+//     - publishMoment(): 发布新心迹，并初始化各角色的通知计数器
+//     - triggerAIComments(targetMoment): 触发所有相关角色对新心迹进行AI评论
+//     - openReplyModal(): 打开回复评论的输入框
+//     - executeCommentReply(): 执行回复AI评论的逻辑，发送用户回复并触发AI追问
+//     - getMomentsContextForChat(contactId): 为聊天生成心迹上下文，提取该角色未读的心迹作为背景知识
+//     - handleMomentAction(action): 处理对整条心迹的操作（复制、编辑、删除）
+//     - handleCommentAction(action): 处理对单条评论的操作（复制、编辑、重新生成、删除）
+//     - saveAndRenderMoments(): 保存心迹数据并刷新UI
+//     - bindEvents(): 绑定页面所有交互事件，包括按钮点击、输入框事件、长按菜单等
+//     - readFile(file): 将用户上传的文件读取为Base64字符串，返回Promise
+//     - handleTestConnection(): 测试API连接
+//     - fetchModelsForUI(): 获取模型列表并填充到UI
+//     - handleVisionTestConnection(): 测试视觉API连接
+//     - fetchVisionModelsForUI(): 获取视觉模型列表并填充到UI
+//     - bindImageUpload(...): 辅助函数，绑定图片上传和预览逻辑
+//     - handleSaveVisionPreset(): 保存当前视觉API配置为一个预设
+//     - handleLoadVisionPreset(): 加载指定的视觉API预设
+//     - handleDeleteVisionPreset(): 删除指定的视觉API预设
+//     - openEditModal(id): 打开角色编辑/新建模态框
+//     - saveContactFromModal(): 从模态框保存角色信息
+//     - handleSaveCssPreset(): 保存自定义CSS为一个预设
+//     - handleLoadCssPreset(index): 加载指定的CSS预设
+//     - handleDeleteCssPreset(): 删除指定的CSS预设
+//     - prefixUserCss(rawCss): 为用户自定义CSS添加作用域前缀
 
 // 8. UTILS & EXPORTS (工具与启动)
-//   - formatTimestamp(): 格式化时间戳。这是用于生成消息时间的函数。
-//   - window.exportData(): 导出数据。这是用于全局备份的函数。
-//   - window.importData(input): 导入数据。这是用于全局恢复的函数。
-//   - renderer: marked.Renderer对象，重写了table渲染。这是用于自定义Markdown的渲染器。
-//   - parseCustomMarkdown(text): 解析Markdown为HTML。这是用于渲染消息的函数。
-//   - cleanMarkdownForCopy(text): 清洗Markdown为纯文本。这是用于复制消息的函数。
-//   - window.onload: 启动App.init。这是用于页面加载的函数。
+//   - formatTimestamp(): 生成聊天消息的时间戳 (例如 "Jan.14 16:39")
+//   - formatTimeForMoments(ts): 生成心迹的时间戳 (例如 "1月14日 16:39")
+//   - parseCustomMarkdown(text): 使用marked.js和DOMPurify将Markdown文本安全地转换为HTML
+//   - cleanMarkdownForCopy(text): 清洗文本中的Markdown符号，用于复制操作
+//   - window.exportData: 全局导出函数，触发数据备份下载
+//   - window.importData: 全局导入函数，从备份文件恢复数据
+//   - window.onload: 应用启动入口，调用App.init()
 
 
 // =========================================
@@ -987,34 +961,41 @@ const API = {
         console.log(`[${provider}] Raw Response:`, data);
 
         if (data.usage && data.usage.prompt_tokens) {
-            // 完美情况：API 返回了 token
             if (window.LAST_API_LOG) {
                 window.LAST_API_LOG.tokens = data.usage.prompt_tokens;
                 window.LAST_API_LOG.isEstimated = false;
             }
             console.log(`API返回真实Token消耗: ${data.usage.prompt_tokens}`);
         } else {
-            // 保底情况：API 没返回，我们自己算
-            // ★ 修改点：这里不要用 jsonStr，直接用 window.LAST_API_LOG.content
             if (window.LAST_API_LOG && window.LAST_API_LOG.content) {
                 window.LAST_API_LOG.tokens = this.estimateTokens(window.LAST_API_LOG.content);
             }
         }
                 
         if (provider === 'claude') return data.content[0].text.trim();
-                // --- 替换原来的 gemini return 开始 ---
+        
         if (provider === 'gemini') {
             const candidate = data?.candidates?.[0];
-            // 防御1：被安全过滤器拦截
             if (candidate?.finishReason === 'SAFETY' || candidate?.finishReason === 'BLOCKLIST') {
                 throw new Error("❌ 回复失败：内容触发了 Google Gemini 的安全审查过滤。");
             }
-            // 防御2：正常解析并使用可选链（?.）防止对象不存在导致崩溃
             return candidate?.content?.parts?.[0]?.text?.trim() || "【API未返回有效文本】";
         }
-        // --- 替换原来的 gemini return 结束 ---
-        return data.choices[0].message.content.trim();
-
+        
+        // ==========================================
+        // ★★★ 核心修改：统一推理模型的输出格式 ★★★
+        // ==========================================
+        const messageObj = data.choices[0].message;
+        let finalContent = messageObj.content || "";
+        
+        // 检查是否存在特殊的推理字段 (DeepSeek-R1 / OpenAI o1 官方API格式)
+        if (messageObj.reasoning_content) {
+            // 强制将推理内容用 <think> 标签包裹，并在前面拼接到正文中
+            // 这样前端渲染历史记录和瀑布流时，正则全都能完美抓取！
+            finalContent = `<think>\n${messageObj.reasoning_content.trim()}\n</think>\n\n${finalContent}`;
+        }
+        
+        return finalContent.trim();
     },
 
 
@@ -1933,7 +1914,7 @@ const UI = {
     //     this.updateRerollState(contact);
     // },
 
-    createSingleBubble(text, sender, aiAvatarUrl, timestampRaw, historyIndex, shouldAnimate = true, partIndex = 0, imageUrl = null) {
+    createSingleBubble(text, sender, aiAvatarUrl, timestampRaw, historyIndex, shouldAnimate = true, partIndex = 0, imageUrl = null, isThought = false) {
         const template = document.getElementById('msg-template');
         const clone = template.content.cloneNode(true);
         
@@ -1946,7 +1927,39 @@ const UI = {
         wrapper.classList.add(sender);
 
         // 1. 设置文本
-        bubble.innerHTML = text; 
+        // 1. 设置文本 (★★★ 新增：判断是否为思考过程 ★★★)
+        if (isThought) {
+            bubble.innerHTML = `
+                <details class="thought-process">
+                    <summary></summary>
+                    <div class="thought-content">${text}</div>
+                </details>
+            `;
+            // 给它一个特殊类名，方便以后做额外处理（比如过滤复制等）
+            bubble.classList.add('is-thought-bubble');
+
+            // ★★★ 新增：点击内容区关闭气泡（同时兼容防误触复制） ★★★
+            const detailsEl = bubble.querySelector('details');
+            const contentEl = bubble.querySelector('.thought-content');
+            
+            contentEl.addEventListener('click', (e) => {
+                // 如果用户当前划选了文字准备复制，不要关闭气泡
+                if (window.getSelection().toString().length > 0) {
+                    return;
+                }
+                // 否则，移除 open 属性，实现关闭
+                detailsEl.removeAttribute('open');
+            });
+            // ★★★ 结束：点击内容区关闭气泡（同时兼容防误触复制）结束 ★★★
+
+
+
+        } else {
+            bubble.innerHTML = text; 
+        }
+
+
+
         
         // 2. ★★★ 插入图片 ★★★
         // 2. ★★★ 插入图片 (含过期处理) ★★★
@@ -2165,23 +2178,29 @@ const UI = {
 
             const msgTime = typeof msg === 'string' ? null : msg.timestamp;
 
+
+
+
+
+
             // ============================================
-            // ★★★ 修复点：displayImage 逻辑 (确保只定义一次)
+            // ★★★ 新增：提取历史消息中的思考过程 ★★★
             // ============================================
-            let displayImage = null; // 这里定义
-            
-            // 检查是否有图
+            let thoughtContent = null;
+            if (sender === 'ai') {
+                cleanText = cleanText.replace(/<(?:think|thinking|thought)>([\s\S]*?)<\/(?:think|thinking|thought)>/gi, (match, inner) => {
+                    thoughtContent = inner.trim();
+                    return '';
+                });
+            }
+
+            let displayImage = null; 
             if (msg.images && msg.images.length > 0) {
                 displayImage = msg.images[0];
             } else if (msg.isImageExpired) {
-                // 图片过期的占位符 (可选)
-                // ★★★ 核心修改：如果标记为过期，给一个特殊字符串 ★★★
                 displayImage = 'expired'; 
             }
 
-            // ============================================
-            // 切分段落逻辑
-            // ============================================
             const paragraphs = cleanText.split(/\n\s*\n/).filter(p => p.trim());
             const group = document.createElement('div');
             group.className = 'message-group';
@@ -2189,8 +2208,21 @@ const UI = {
             if (msg.isHidden) group.classList.add('is-hidden'); 
             group.dataset.msgIndex = historyIndex;
             group.dataset.sender = sender;
-
             const hiddenIndices = msg.hiddenIndices || [];
+
+            // ===============================================
+            // ★★★ 优先渲染思考气泡 ★★★
+            // ===============================================
+            if (thoughtContent) {
+                 const formattedThought = parseCustomMarkdown(thoughtContent);
+                 const thoughtBubble = this.createSingleBubble(
+                     formattedThought, sender, contact.avatar, msgTime, historyIndex, false, 'thought', null, true
+                 );
+                 // 如果整条消息被隐藏了，思考气泡也要隐藏
+                 if (msg.isHidden) thoughtBubble.querySelector('.message-bubble').classList.add('is-hidden-bubble');
+                 group.appendChild(thoughtBubble);
+            }
+            
 
             // ===============================================
             // ★★★ 第一步：先渲染所有的【文字气泡】 ★★★
@@ -2358,10 +2390,19 @@ const UI = {
         this.autoScrollEnabled = true;
         this.scrollToBottom(); // 初始先滚到底一次
 
-        // 1. Pre-process text
-        const processedText = fullText.replace(/(^|\n)>\s*/g, '\n\n');
-        const paragraphs = processedText.split(/\n\s*\n/).filter(p => p.trim());
+        // ============================================
+        // ★★★ 新增：前置提取思考过程 (防止被换行符切碎) ★★★
+        // ============================================
+        let thoughtContent = null;
+        let processedText = fullText.replace(/<(?:think|thinking|thought)>([\s\S]*?)<\/(?:think|thinking|thought)>/gi, (match, innerText) => {
+            thoughtContent = innerText.trim();
+            return ''; // 将思考内容从正文中抹除
+        });
 
+        // 1. Pre-process text
+        processedText = processedText.replace(/(^|\n)>\s*/g, '\n\n');
+        const paragraphs = processedText.split(/\n\s*\n/).filter(p => p.trim());
+        
         // 2. Create the container group
         const group = document.createElement('div');
         group.className = 'message-group';
@@ -2370,6 +2411,26 @@ const UI = {
 
         this.els.chatMsgs.appendChild(group);
         
+
+
+        // ============================================
+        // ★★★ 新增：优先渲染“思考折叠面板”气泡 ★★★
+        // ============================================
+        if (thoughtContent) {
+            // 解析里面可能的 Markdown，传入 isThought = true 参数
+            const htmlContent = parseCustomMarkdown(thoughtContent);
+            const thoughtBubble = this.createSingleBubble(
+                htmlContent, 'ai', avatar, timestamp, historyIndex, true, 'thought', null, true
+            );
+            group.appendChild(thoughtBubble);
+            
+            if (this.autoScrollEnabled) this.scrollToBottom();
+            // 给个小延迟，让动画自然点
+            await new Promise(r => setTimeout(r, 400)); 
+        }
+
+
+
         // 3. Loop through paragraphs
         for (let i = 0; i < paragraphs.length; i++) {
             if (i > 0) await new Promise(r => setTimeout(r, 400));
@@ -2382,7 +2443,8 @@ const UI = {
                 group.appendChild(separator);
             } else {
                 const htmlContent = parseCustomMarkdown(p);
-                const bubbleClone = this.createSingleBubble(htmlContent, 'ai', avatar, timestamp, historyIndex, true);
+                // 这里 isThought 默认为 false，正常渲染文本
+                const bubbleClone = this.createSingleBubble(htmlContent, 'ai', avatar, timestamp, historyIndex, true, i);
                 group.appendChild(bubbleClone);
             }
             
@@ -2765,6 +2827,17 @@ const App = {
             .slice(-limit) // <--- ★★★ 这里修改了！使用动态变量) 
             .map(msg => {
                 let content = msg.content || '';
+
+                // ============================================
+                // ★★★ 核心修改：发给 AI 前，抹除它以前的思考记录，节约 Token 防带偏
+                // ============================================
+                if (msg.role === 'assistant') {
+                    content = content.replace(/<(?:think|thinking|thought)>[\s\S]*?<\/(?:think|thinking|thought)>/gi, '').trim();
+                }
+
+
+
+
                 
                 // --- A. 分段隐藏处理 (保持你原有的逻辑) ---
                 if (msg.hiddenIndices && msg.hiddenIndices.length > 0) {
@@ -2803,7 +2876,7 @@ const App = {
 
                     // 3. 只有当图片【没有】被隐藏时，才注入描述
                     if (!isImageHidden) {
-                        content += `\n\n[System Info: The user sent an image with this message. Visual Description: ${msg.image_description}]`;
+                        content += `\n\n[System Info: 对方发送了一张图片，图片内容描述: ${msg.image_description}]`;
                     } else {
                         console.log("图片已隐藏，跳过注入描述");
                     }
