@@ -3742,35 +3742,31 @@ const App = {
 
         const contact = STATE.contacts.find(c => c.id === STATE.currentContactId);
         
-        // 1. 排序 (★★★ 修改点：兼容 'thought' 排序 ★★★)
+        // 1. 排序 (兼容 'thought' 排序)
         const sortedBubbles = Array.from(STATE.selectedBubbles).sort((a, b) => {
             const msgIndexA = parseInt(a.dataset.msgIndex);
             const msgIndexB = parseInt(b.dataset.msgIndex);
-            
-            // 如果不是同一条消息，按消息先后排
             if (msgIndexA !== msgIndexB) return msgIndexA - msgIndexB;
             
-            // 如果是同一条消息，按段落排。将 'thought' 视为 -1，保证它排在正文(0,1,2...)前面
             const getPartVal = (bubble) => {
                 const pIdx = bubble.dataset.partIndex;
                 return pIdx === 'thought' ? -1 : parseInt(pIdx);
             };
-            
             return getPartVal(a) - getPartVal(b);
         });
 
-        // 2. 提取内容 (这部分不用大改，innerText 能正确抓取到文本)
+        // 2. 提取内容 (★★★ 核心修改：直接从数据源读取，无视 DOM 折叠状态 ★★★)
         const textParts = sortedBubbles.map(bubble => {
             try {
                 const img = bubble.querySelector('img'); 
                 const expiredPlaceholder = bubble.querySelector('.expired-image-placeholder');
                 
+                const mIdx = parseInt(bubble.dataset.msgIndex);
+                const msg = contact ? contact.history[mIdx] : null;
+                
+                // A & B: 处理图片
                 if (img || expiredPlaceholder) {
                     if (!contact) return img ? "[图片]" : "[图片已清理]";
-                    
-                    const mIdx = parseInt(bubble.dataset.msgIndex);
-                    const msg = contact.history[mIdx];
-                    
                     if (msg && msg.image_description) {
                         return `[图片描述: ${msg.image_description}]`;
                     } else {
@@ -3778,8 +3774,47 @@ const App = {
                     }
                 } 
 
-                // 正常文本 (如果是思考块，也会正常提取 innerText)
-                return cleanMarkdownForCopy(bubble.innerText);
+                // C. 处理文本 / 思考块
+                // 如果找不到数据兜底用 DOM 提取
+                if (!msg) return cleanMarkdownForCopy(bubble.innerText); 
+
+                const rawPIdx = bubble.dataset.partIndex;
+                const pIdx = rawPIdx === 'thought' ? 'thought' : parseInt(rawPIdx);
+
+                let contentToParse = msg.content || '';
+                
+                // 1) 去除时间戳
+                if (msg.role === 'user') {
+                    contentToParse = contentToParse.replace(/^\[[A-Z][a-z]{2}\.\d{1,2}\s\d{2}:\d{2}\]\s/, '');
+                }
+                
+                // 2) AI 引用切分兼容
+                if (msg.role === 'assistant') {
+                    contentToParse = contentToParse.replace(/(^|\n)>\s*/g, '\n\n');
+                }
+
+                // 3) 把思考过程抽离出来
+                let thoughtText = '';
+                contentToParse = contentToParse.replace(/<(?:think|thinking|thought)>([\s\S]*?)<\/(?:think|thinking|thought)>/gi, (match, inner) => {
+                    thoughtText = inner.trim();
+                    return '';
+                });
+
+                // 4) 根据选中的索引，精准返回数据
+                if (pIdx === 'thought') {
+                    // 如果勾选的是思考过程，直接返回这段文字，不受界面折叠影响
+                    // 这里加了个 [思考过程] 标识，复制出来排版更清晰
+                    return `[思考过程]\n${cleanMarkdownForCopy(thoughtText)}`;
+                } else {
+                    // 如果勾选的是正文气泡
+                    const paragraphs = contentToParse.split(/\n\s*\n/).filter(p => p.trim());
+                    if (paragraphs[pIdx]) {
+                        return cleanMarkdownForCopy(paragraphs[pIdx]);
+                    } else {
+                        // 兜底防错
+                        return cleanMarkdownForCopy(bubble.innerText);
+                    }
+                }
                 
             } catch (e) {
                 console.error("提取单条消息失败:", e);
@@ -3787,11 +3822,14 @@ const App = {
             }
         });
 
+        // 拼接所有选中的内容
         const fullText = textParts.filter(t => t).join('\n\n');
         
         // 3. 执行复制
         navigator.clipboard.writeText(fullText)
-            .then(() => { /* 成功 */ })
+            .then(() => {
+                // console.log('复制成功');
+            })
             .catch(err => {
                 console.error('无法复制文本: ', err);
                 alert('复制失败，请检查浏览器权限');
