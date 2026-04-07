@@ -3880,85 +3880,91 @@ const App = {
         if (!currentContact) return;
 
         // 1. 将待删除项按 msgIndex 分组
-        // 结构: { msgIndex: [partIndex1, partIndex2, ...] }
         const deletionMap = {};
 
         STATE.selectedBubbles.forEach(bubble => {
             const mIdx = parseInt(bubble.dataset.msgIndex);
-            const pIdx = parseInt(bubble.dataset.partIndex);
+            // ★★★ 核心修改 1：兼容思考气泡的字符串索引 'thought' ★★★
+            const rawPIdx = bubble.dataset.partIndex;
+            const pIdx = rawPIdx === 'thought' ? 'thought' : parseInt(rawPIdx);
             
             if (!deletionMap[mIdx]) deletionMap[mIdx] = [];
             deletionMap[mIdx].push(pIdx);
         });
 
-        // 2. 遍历分组，执行删除 (从后往前删消息，防止索引错乱，虽然这里我们只修改内容)
-        // 注意：我们要修改的是 currentContact.history 里的对象
-        
-        // 获取所有涉及的消息索引，并从大到小排序 (虽然对于修改内容顺序无所谓，但如果整条删除就有所谓)
+        // 2. 遍历分组，执行删除 (从后往前删)
         const affectedIndices = Object.keys(deletionMap).map(Number).sort((a, b) => b - a);
 
         affectedIndices.forEach(msgIndex => {
             const msg = currentContact.history[msgIndex];
-            const partsToDelete = deletionMap[msgIndex]; // 这是一个数组，如 [0, 2]
+            const partsToDelete = deletionMap[msgIndex]; // 例如: [0, 2, 'thought']
 
-            // --- 解析原始消息 ---
             let content = msg.content || '';
             const timestampRegex = /^\[[A-Z][a-z]{2}\.\d{1,2}\s\d{2}:\d{2}\]\s/;
             let timestampPart = '';
             
-            // 提取时间戳 (如果有)
-            const match = content.match(timestampRegex);
-            if (match) {
+            if (match = content.match(timestampRegex)) {
                 timestampPart = match[0];
                 content = content.replace(timestampRegex, '');
             }
 
-            // --- 切分 (逻辑必须与 renderChatHistory 一致) ---
-            // 注意：这里要处理 AI 回复中可能存在的引用块
+            // ==============================================================
+            // ★★★ 核心修改 2：切分段落前，必须先将思考过程抽离，保证段落索引准确 ★★★
+            // ==============================================================
+            let thoughtMatchText = ""; 
             if (msg.role === 'assistant') {
+                // 找出并保存原生的 <think> 块，同时把它从 content 里挖掉
+                content = content.replace(/<(?:think|thinking|thought)>([\s\S]*?)<\/(?:think|thinking|thought)>/gi, (match) => {
+                    thoughtMatchText = match; 
+                    return ''; 
+                });
+                
                 content = content.replace(/(^|\n)>\s*/g, '\n\n');
             }
             
+            // 现在 content 里只有纯文本了，切分出来的索引绝对准确
             let paragraphs = content.split(/\n\s*\n/).filter(p => p.trim());
-            
-            // --- 过滤 (删除选中的段落) ---
-            // partsToDelete 包含要删除的索引。我们保留那些索引不在 partsToDelete 里的。
-             // ★★★ 关键：判断图片索引 ★★★
-            // 我们的规则是：图片的 partIndex = paragraphs.length (即紧跟在最后一段文字后面)
             const imagePartIndex = paragraphs.length;
             
             // --- B. 处理文本删除 ---
-            // 过滤掉那些在删除列表里的文本索引
             let newParagraphs = paragraphs.filter((_, index) => !partsToDelete.includes(index));
 
             // --- C. 处理图片删除 ---
-            // 如果删除列表里包含了图片的索引，就清空图片数据
             if (partsToDelete.includes(imagePartIndex)) {
                 msg.images = null;
-                msg.image_description = null; // 连描述一起删，或者保留描述看你需求
-                msg.isImageExpired = false;   // 删除了就不显示过期占位符了，彻底消失
+                msg.image_description = null; 
+                msg.isImageExpired = false;   
             }
 
             // --- D. 重组 ---
-            // 如果 文字也没了 AND 图片也没了，这消息就废了
             const hasImagesLeft = (msg.images && msg.images.length > 0) || msg.isImageExpired;
+            // ★★★ 判断思考气泡是否幸存（存在，且没被勾选删除） ★★★
+            const hasThoughtLeft = (msg.role === 'assistant' && thoughtMatchText && !partsToDelete.includes('thought'));
             
-            if (newParagraphs.length === 0 && !hasImagesLeft) {
+            // 如果 文字没了 AND 图片没了 AND 思考过程也没了，这消息就废了
+            if (newParagraphs.length === 0 && !hasImagesLeft && !hasThoughtLeft) {
                 // 彻底删除整条消息
                 currentContact.history.splice(msgIndex, 1);
             } else {
                 // 更新文本
                 let newContent = newParagraphs.join('\n\n');
-                if (msg.role === 'user') newContent = timestampPart + newContent;
-                msg.content = newContent;
+                
+                if (msg.role === 'user') {
+                    newContent = timestampPart + newContent;
+                } else if (msg.role === 'assistant') {
+                    // ★★★ 如果思考气泡幸存，把它拼回最前面 ★★★
+                    if (hasThoughtLeft) {
+                        newContent = thoughtMatchText + '\n\n' + newContent;
+                    }
+                }
+                
+                msg.content = newContent.trim();
             }
         });
-
 
         // 3. 保存并刷新
         Storage.saveContacts();
         this.exitSelectMode();
-        // 刷新页面，保持位置
         UI.renderChatHistory(currentContact, false, true);
     },
 
