@@ -5360,7 +5360,7 @@ body.dark-mode button#btn-save-m-settings.save-btn{
 details.thought-process {
     border: 1px solid rgb(255 255 255 / 50%);
     border-radius: 8px;
-    background-color: rgb(206 206 206 / 65%);
+    background-color: rgb(255 255 255 / 25%);
     overflow: hidden;
     transition: all 0.3s ease;
 }

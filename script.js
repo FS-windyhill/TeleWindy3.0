@@ -2218,8 +2218,12 @@ const UI = {
                  const thoughtBubble = this.createSingleBubble(
                      formattedThought, sender, contact.avatar, msgTime, historyIndex, false, 'thought', null, true
                  );
-                 // 如果整条消息被隐藏了，思考气泡也要隐藏
-                 if (msg.isHidden) thoughtBubble.querySelector('.message-bubble').classList.add('is-hidden-bubble');
+                 
+                 // ★★★ 核心修复：同时判断整条隐藏(msg.isHidden) 和 局部隐藏(hiddenIndices) ★★★
+                 if (msg.isHidden || hiddenIndices.includes('thought')) {
+                     thoughtBubble.querySelector('.message-bubble').classList.add('is-hidden-bubble');
+                 }
+                 
                  group.appendChild(thoughtBubble);
             }
             
@@ -3738,61 +3742,61 @@ const App = {
 
         const contact = STATE.contacts.find(c => c.id === STATE.currentContactId);
         
-        // 1. 排序
+        // 1. 排序 (★★★ 修改点：兼容 'thought' 排序 ★★★)
         const sortedBubbles = Array.from(STATE.selectedBubbles).sort((a, b) => {
             const msgIndexA = parseInt(a.dataset.msgIndex);
             const msgIndexB = parseInt(b.dataset.msgIndex);
+            
+            // 如果不是同一条消息，按消息先后排
             if (msgIndexA !== msgIndexB) return msgIndexA - msgIndexB;
-            return parseInt(a.dataset.partIndex) - parseInt(b.dataset.partIndex);
+            
+            // 如果是同一条消息，按段落排。将 'thought' 视为 -1，保证它排在正文(0,1,2...)前面
+            const getPartVal = (bubble) => {
+                const pIdx = bubble.dataset.partIndex;
+                return pIdx === 'thought' ? -1 : parseInt(pIdx);
+            };
+            
+            return getPartVal(a) - getPartVal(b);
         });
 
-        // 2. 提取内容
+        // 2. 提取内容 (这部分不用大改，innerText 能正确抓取到文本)
         const textParts = sortedBubbles.map(bubble => {
             try {
-                // A & B: 合并处理正常图片和过期图片的判断
                 const img = bubble.querySelector('img'); 
                 const expiredPlaceholder = bubble.querySelector('.expired-image-placeholder');
                 
-                // 如果气泡里有图片，或者有“过期占位符”
                 if (img || expiredPlaceholder) {
                     if (!contact) return img ? "[图片]" : "[图片已清理]";
                     
                     const mIdx = parseInt(bubble.dataset.msgIndex);
                     const msg = contact.history[mIdx];
                     
-                    // ★★★ 核心修改：只要历史记录里有描述，无论图片是否被清理，都优先复制描述 ★★★
                     if (msg && msg.image_description) {
                         return `[图片描述: ${msg.image_description}]`;
                     } else {
-                        // 如果连描述都没有（比如识图失败了），再根据当前状态返回占位符
                         return img ? "[图片]" : "[图片已清理或识图失败]";
                     }
                 } 
 
-                // C. 正常文本
+                // 正常文本 (如果是思考块，也会正常提取 innerText)
                 return cleanMarkdownForCopy(bubble.innerText);
                 
             } catch (e) {
                 console.error("提取单条消息失败:", e);
-                return ""; // 容错，防止整个复制失败
+                return ""; 
             }
         });
 
         const fullText = textParts.filter(t => t).join('\n\n');
         
-
         // 3. 执行复制
         navigator.clipboard.writeText(fullText)
-            .then(() => {
-                // 复制成功，给个反馈 (可选)
-                // alert('复制成功'); 
-            })
+            .then(() => { /* 成功 */ })
             .catch(err => {
                 console.error('无法复制文本: ', err);
                 alert('复制失败，请检查浏览器权限');
             })
             .finally(() => {
-                // ★★★ 关键：无论成功失败，都强制退出多选模式 ★★★
                 this.exitSelectMode();
             });
     },
@@ -3801,8 +3805,6 @@ const App = {
     // ==========================================
     // ★★★ 新增：批量隐藏/显示逻辑 ★★★
     // ==========================================
-    // 【APP CONTROLLER】
-    // 重写这个函数
     handleBatchToggleHidden() {
         if (STATE.selectedBubbles.size === 0) return;
 
@@ -3810,16 +3812,15 @@ const App = {
         if (!currentContact) return;
 
         // 1. 整理选中的目标
-        // 结构: { msgIndex: [partIndex1, partIndex2, ...] }
         const selectionMap = {};
-        
-        // 用于判断整体是“隐藏”还是“显示”的标志
-        // 逻辑：只要有一个选中的是“可见”的，那就把所有选中的都变成“隐藏”
         let anyVisibleFound = false;
 
         STATE.selectedBubbles.forEach(bubble => {
             const mIdx = parseInt(bubble.dataset.msgIndex);
-            const pIdx = parseInt(bubble.dataset.partIndex);
+            
+            // ★★★ 核心修改 1：兼容 'thought' 索引的解析 ★★★
+            const rawPIdx = bubble.dataset.partIndex;
+            const pIdx = rawPIdx === 'thought' ? 'thought' : parseInt(rawPIdx);
             
             if (!selectionMap[mIdx]) selectionMap[mIdx] = [];
             selectionMap[mIdx].push(pIdx);
@@ -3828,38 +3829,39 @@ const App = {
             const msg = currentContact.history[mIdx];
             const currentHiddenList = msg.hiddenIndices || [];
             
-            // 如果当前这个段落不在隐藏名单里，说明它是可见的
             if (!currentHiddenList.includes(pIdx)) {
                 anyVisibleFound = true;
             }
         });
 
-        // 2. 目标动作：如果发现有可见的，就全部隐藏(true)；否则全部显示(false)
+        // 2. 目标动作
         const shouldHide = anyVisibleFound;
 
         // 3. 执行更新
         Object.keys(selectionMap).forEach(key => {
             const mIdx = parseInt(key);
-            const pIndices = selectionMap[mIdx]; // 选中的段落索引数组
+            const pIndices = selectionMap[mIdx]; 
             const msg = currentContact.history[mIdx];
 
-            // 确保数组存在
             if (!msg.hiddenIndices) msg.hiddenIndices = [];
 
             pIndices.forEach(pIdx => {
                 if (shouldHide) {
-                    // 动作：隐藏 -> 加入名单 (去重)
                     if (!msg.hiddenIndices.includes(pIdx)) {
                         msg.hiddenIndices.push(pIdx);
                     }
                 } else {
-                    // 动作：显示 -> 移出名单
                     msg.hiddenIndices = msg.hiddenIndices.filter(id => id !== pIdx);
                 }
             });
             
-            // 排序一下，保持数据整洁 (可选)
-            msg.hiddenIndices.sort((a, b) => a - b);
+            // ★★★ 核心修改 2：兼容 'thought' 的排序逻辑 ★★★
+            // 让 'thought' 排在最前面，其他数字按大小排
+            msg.hiddenIndices.sort((a, b) => {
+                const valA = a === 'thought' ? -1 : a;
+                const valB = b === 'thought' ? -1 : b;
+                return valA - valB;
+            });
         });
 
         // 4. 保存并刷新
@@ -3867,7 +3869,6 @@ const App = {
         this.exitSelectMode();
         UI.renderChatHistory(currentContact, false, true);
     },
-
 
     // ==========================================
     // ★★★ 核心：批量删除逻辑 ★★★
