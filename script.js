@@ -4189,6 +4189,16 @@ const App = {
                     // ★★★ 核心修改：去掉onclick，加上 data-* 属性和 comment-sender-name 类名 ★★★
                     // 同时加了个 title 属性，鼠标悬浮时会提示“点击回复 XXX”
                     // ★★★ 核心修改：增加 data-comment-id 属性 ★★★
+                    // 在 c.comments.forEach 循环内部，修改生成评论 HTML 的部分：
+
+                    // ---------------- 替换开始 ----------------
+                    // 判断是否是结构化的回复，如果是，生成一个前缀标签（你可以自己加CSS美化，比如设为灰色）
+                    let replyPrefixHtml = '';
+                    if (c.replyToId && c.replyToName) {
+                        // 使用刚才在 CSS 中定义的类名 comment-reply-prefix
+                        replyPrefixHtml = `<span class="comment-reply-prefix">回复 ${c.replyToName}:</span>`;
+                    }
+
                     feedHtml += `
                         <div class="comment-item">
                             <span class="comment-name comment-sender-name" 
@@ -4197,9 +4207,12 @@ const App = {
                                 data-char-id="${c.senderId}" 
                                 data-char-name="${senderName}"
                                 title="点击操作 ${senderName}">${senderName}:</span> 
+                            
+                            ${replyPrefixHtml} <!-- 动态插入回复前缀 -->
                             <span>${c.text}</span>
                         </div>
                     `;
+                    // ---------------- 替换结束 ----------------
                     });
             }
             
@@ -4659,28 +4672,36 @@ const App = {
 
             console.log(`[心迹] 重新生成 ${ctx.charName} 的评论`);
 
-            let threadContext = momentData.comments
-                .slice(0, commentIndex)
+            // 提取对话流 (这里以 executeCommentReply 中的那段为例，regen 里的同理替换)
+            let threadContext = targetMoment.comments
                 .filter(c => {
                     if (c.senderId === ctx.charId) return true;
                     if (c.senderId === 'user') {
-                        if (c.text.startsWith('回复 ') && !c.text.startsWith(`回复 ${ctx.charName}:`)) return false;
-                        return true;
+                        // ★★★ 核心优雅逻辑：如果有 replyToId，直接精确比对ID，绝对不会错！
+                        if (c.replyToId) {
+                            return c.replyToId === ctx.charId;
+                        }
+                        // ★ 兼容老数据：如果老数据没有 replyToId，降级使用旧的字符串匹配
+                        if (c.text.startsWith('回复 ') && !c.text.startsWith(`回复 ${ctx.charName}:`)) return false; 
+                        return true; 
                     }
                     return false;
                 })
                 .map(c => {
                     let name = c.senderId === 'user' ? '用户' : ctx.charName;
                     let cleanText = c.text;
-                    if (c.senderId === 'user' && cleanText.startsWith(`回复 ${ctx.charName}: `)) {
+                    
+                    // ★ 兼容老数据：如果老数据自带前缀，还是给它切掉，避免喂给AI时啰嗦
+                    if (c.senderId === 'user' && !c.replyToId && cleanText.startsWith(`回复 ${ctx.charName}: `)) {
                         cleanText = cleanText.replace(`回复 ${ctx.charName}: `, '');
                     }
-                    // ★★★ 新增：过滤 AI 在评论流中的思考过程 ★★★
+
+                    // 过滤 AI 的思考过程
                     if (c.senderId !== 'user') {
-                        cleanText = cleanText.replace(/<(?:think|thinking|thought)>[\s\S]*?<\/(?:think|thinking|thought)>/gi, '').trim();
+                        cleanText = cleanText.replace(/<(?:think|thinking|thought)[^>]*>[\s\S]*?(?:<\/(?:think|thinking|thought)>|$)/gi, '').trim();
                     }
                     return `${name}: ${cleanText}`;
-                }).join('\n');
+                }).join('\n');  
 
             let promptText = "";
             
@@ -4812,7 +4833,11 @@ const App = {
         targetMoment.comments.push({
             id: 'c_' + Date.now(),
             senderId: 'user',
-            text: `回复 ${ctx.charName}: ${userReplyText}`, 
+            // ★ 改动1：只存用户真正输入的文本，不再硬拼接 "回复 xxx: "
+            text: userReplyText, 
+            // ★ 改动2：增加专属字段，明确记录这条评论是回复谁的
+            replyToId: ctx.charId,     
+            replyToName: ctx.charName, 
             timestamp: Date.now()
         });
         this.saveAndRenderMoments();
@@ -4820,10 +4845,16 @@ const App = {
         // 2. 触发 AI 追问
         console.log(`[心迹] 触发追问回复: ${targetChar.name}`);
 
+        // 提取对话流 (这里以 executeCommentReply 中的那段为例，regen 里的同理替换)
         let threadContext = targetMoment.comments
             .filter(c => {
                 if (c.senderId === ctx.charId) return true;
                 if (c.senderId === 'user') {
+                    // ★★★ 核心优雅逻辑：如果有 replyToId，直接精确比对ID，绝对不会错！
+                    if (c.replyToId) {
+                        return c.replyToId === ctx.charId;
+                    }
+                    // ★ 兼容老数据：如果老数据没有 replyToId，降级使用旧的字符串匹配
                     if (c.text.startsWith('回复 ') && !c.text.startsWith(`回复 ${ctx.charName}:`)) return false; 
                     return true; 
                 }
@@ -4832,14 +4863,15 @@ const App = {
             .map(c => {
                 let name = c.senderId === 'user' ? '用户' : ctx.charName;
                 let cleanText = c.text;
-                if (c.senderId === 'user' && cleanText.startsWith(`回复 ${ctx.charName}: `)) {
+                
+                // ★ 兼容老数据：如果老数据自带前缀，还是给它切掉，避免喂给AI时啰嗦
+                if (c.senderId === 'user' && !c.replyToId && cleanText.startsWith(`回复 ${ctx.charName}: `)) {
                     cleanText = cleanText.replace(`回复 ${ctx.charName}: `, '');
                 }
 
-
-                // ★★★ 新增：过滤 AI 在评论流中的思考过程 ★★★
+                // 过滤 AI 的思考过程
                 if (c.senderId !== 'user') {
-                    cleanText = cleanText.replace(/<(?:think|thinking|thought)>[\s\S]*?<\/(?:think|thinking|thought)>/gi, '').trim();
+                    cleanText = cleanText.replace(/<(?:think|thinking|thought)[^>]*>[\s\S]*?(?:<\/(?:think|thinking|thought)>|$)/gi, '').trim();
                 }
                 return `${name}: ${cleanText}`;
             }).join('\n');
@@ -4928,15 +4960,17 @@ const App = {
             // 提取该角色相关的评论
             // 规则：只包含“该角色发的”和“用户回复该角色的”
             // 或者是“用户发的且没有明确回复对象的”（可选，这里暂时只取对话流）
+            // 提取该角色相关的评论
             const chatThread = m.comments.filter(c => {
-                // 1. 角色自己发的
                 if (c.senderId === contactId) return true;
-                // 2. 用户发的
                 if (c.senderId === 'user') {
-                    // 如果是普通评论，算作相关
-                    if (!c.text.startsWith('回复 ')) return true;
-                    // 如果是回复别人的，排除
-                    // 如果是回复当前的角色的...
+                    // ★★★ 新优雅逻辑：直接看 ID
+                    if (c.replyToId) {
+                        return c.replyToId === contactId;
+                    }
+                    
+                    // ★ 兼容老数据
+                    if (!c.text.startsWith('回复 ')) return true; // 普通评论算相关
                     const contactName = STATE.contacts.find(ct => ct.id === contactId)?.name || "未知";
                     if (c.text.startsWith(`回复 ${contactName}:`)) return true;
                     return false;
@@ -4944,17 +4978,18 @@ const App = {
                 return false;
             }).map(c => {
                 const name = c.senderId === 'user' ? '用户' : '你';
-
                 let cleanText = c.text;
-                
-                // ★★★ 新增：当朋友圈评论注入到主聊天记录时，也要把当时的思考过程剔除 ★★★
-                if (c.senderId !== 'user') {
-                    cleanText = cleanText.replace(/<(?:think|thinking|thought)>[\s\S]*?<\/(?:think|thinking|thought)>/gi, '').trim();
+
+                // 兼容老数据的文本清理
+                if (c.senderId === 'user' && !c.replyToId && cleanText.startsWith('回复 ')) {
+                    const contactName = STATE.contacts.find(ct => ct.id === contactId)?.name || "未知";
+                    cleanText = cleanText.replace(`回复 ${contactName}: `, '').replace(`回复 ${contactName}:`, '');
                 }
-
-                // 将 c.text 改为 cleanText
+                
+                if (c.senderId !== 'user') {
+                    cleanText = cleanText.replace(/<(?:think|thinking|thought)[^>]*>[\s\S]*?(?:<\/(?:think|thinking|thought)>|$)/gi, '').trim();
+                }
                 return `${name}: ${cleanText}`;
-
             }).join('\n');
 
             const hasImage = m.image ? "[附带了一张图片]" : "";

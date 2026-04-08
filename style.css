@@ -4184,7 +4184,11 @@ body.custom-mode details.thought-process {
 
 }
 
+/* 心迹评论：回复某人的前缀样式 */
+body.custom-mode .comment-reply-prefix {
+    color: #8ea4d1; /* 微信朋友圈名字的经典蓝色 */
 
+}
 
 
 
@@ -5289,6 +5293,22 @@ body.dark-mode .m-modal-scroll-container{
 
     background: #333;
 }
+
+/* 心迹评论：回复某人的前缀样式 */
+.comment-reply-prefix {
+    color: #7585a9; /* 微信朋友圈名字的经典蓝色 */
+    margin: 0 4px;
+    font-weight: 500; /* 可选：让名字稍微加粗一点点，更好看 */
+}
+
+/* 心迹评论：回复某人的前缀样式 */
+body.dark-mode .comment-reply-prefix {
+    color: #8ea4d1; /* 微信朋友圈名字的经典蓝色 */
+
+}
+
+
+
 
 /* ==================心迹设置结束============ */
 
