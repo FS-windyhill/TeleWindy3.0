@@ -4426,13 +4426,19 @@ const App = {
 
         // 2. 逐个角色生成评论
         for (const char of validCommentators) {
+
             // 2.1 构造 Prompt
             let historyContext = "无";
             if (char.history && char.history.length > 0) {
+                // 1. 先不管三七二十一，把历史记录原样拼起来
                 historyContext = char.history.slice(-5).map(h => {
-                    const roleName = h.role === 'user' ? '用户' : '你';
+                    const roleName = (h.role === 'user' || h.sender === 'user') ? '用户' : '你';
                     return `${roleName}: ${h.content}`;
                 }).join('\n');
+
+                // 2. ★★★ 终极绝杀：对拼接好的整段历史记录进行全局正则清洗 ★★★
+                historyContext = historyContext.replace(/<(?:think|thinking|thought)[^>]*>[\s\S]*?(?:<\/(?:think|thinking|thought)>|$)/gi, '');
+            
             }
 
             // ★★★ 新增：扫描世界书（将动态内容作为触发文本传入） ★★★
@@ -4481,7 +4487,10 @@ const App = {
 
                 // 2.2 发送请求
                 const messages = [{ role: 'user', content: promptText }];
-                const aiReplyText = await API.chat(messages, targetApiConfig);
+                let aiReplyText = await API.chat(messages, targetApiConfig);
+
+                // ★★★ 新增：在存入心迹数组前，从源头剔除 AI 的思考过程 ★★★
+                aiReplyText = aiReplyText.replace(/<(?:think|thinking|thought)>[\s\S]*?<\/(?:think|thinking|thought)>/gi, '').trim();
 
                 // 2.3 写入评论
                 targetMoment.comments.push({
@@ -4508,146 +4517,6 @@ const App = {
         }
     },
 
-
-
-    // 用户与 AI 的多轮评论互动
-    // ===========================================
-    // 用户点击角色名字，指定回复某个 AI (优雅重构版)
-    // ===========================================
-//     async replyToSpecificChar(momentId, charId, charName) {
-//         // 1. 找到该条动态
-//         const targetMoment = STATE.moments.find(m => m.id === momentId);
-//         if (!targetMoment) return;
-
-//         // 2. 找到用户指定的 AI 角色数据
-//         const targetChar = STATE.contacts.find(c => c.id === charId);
-//         if (!targetChar) {
-//             alert("找不到该角色的数据！");
-//             return;
-//         }
-
-//         // 3. 用户输入 (弹窗显示: 回复XXX的评论：)
-//         const userReplyText = prompt(`回复${charName}的评论：`);
-//         if (!userReplyText) return; // 用户点击取消或输入为空则停止
-
-//         // 4. 存入用户回复 (可以在文字前加上 @角色名，看起来更逼真，比如："@XXX 你好呀")
-//         // 如果你不喜欢带@，直接写 text: userReplyText 即可
-//         targetMoment.comments.push({
-//             id: 'c_' + Date.now(),
-//             senderId: 'user',
-//             text: `回复 ${charName}: ${userReplyText}`, 
-//             timestamp: Date.now()
-//         });
-        
-//         // 保存并更新UI
-//         if (typeof Storage !== 'undefined' && Storage.saveMoments) Storage.saveMoments();
-//         else if (typeof this.saveMoments === 'function') this.saveMoments();
-        
-//         if (typeof this.renderMomentsUI === 'function') this.renderMomentsUI();
-
-//         // 5. 触发 AI 追问回复
-//         console.log(`[心迹] 触发追问回复: ${targetChar.name}`);
-
-//         // 构造评论区上下文 (让 AI 知道前面聊了什么)
-//         // ==========================================
-//         // 构造评论区上下文 (★ 核心隐私过滤修改 ★)
-//         // ==========================================
-//         let threadContext = targetMoment.comments
-//             .filter(c => {
-//                 // 1. 如果是当前目标 AI 发的评论，保留
-//                 if (c.senderId === charId) return true;
-                
-//                 // 2. 如果是用户发的话
-//                 if (c.senderId === 'user') {
-//                     // 因为我们前面把用户的回复加了 "回复 XXX: " 的前缀
-//                     // 如果这句话是回复别人的，我们就过滤掉它
-//                     if (c.text.startsWith('回复 ') && !c.text.startsWith(`回复 ${charName}:`)) {
-//                         return false; 
-//                     }
-//                     // 如果是普通留言，或者是回复当前目标 AI 的，就保留
-//                     return true; 
-//                 }
-                
-//                 // 3. 其他所有 AI 的评论，统统过滤掉（不给它看！）
-//                 return false;
-//             })
-//             .map(c => {
-//                 let name = c.senderId === 'user' ? '用户' : charName;
-//                 let cleanText = c.text;
-                
-//                 // 小优化：把传给 AI 的文本里的 "回复 XXX: " 前缀去掉
-//                 // 这样 AI 读取上下文时会更自然，不会被格式干扰
-//                 if (c.senderId === 'user' && cleanText.startsWith(`回复 ${charName}: `)) {
-//                     cleanText = cleanText.replace(`回复 ${charName}: `, '');
-//                 }
-                
-//                 return `${name}: ${cleanText}`;
-//             }).join('\n');
-
-//         // 打印出来看看发给AI的上下文是不是干净的（调试用，确认没问题后可删）
-//         console.log(`[调试] 传给 ${charName} 的专属上下文:\n`, threadContext);
-
-//         const promptText = `
-// 【系统设定】
-// ${targetChar.prompt}
-
-// 【动态内容】
-// 用户发布的动态：${targetMoment.text}
-
-// 【评论区对话流】
-// ${threadContext}
-
-// 【任务】
-// 用户刚刚在评论区专门回复了你。请根据你的人设，继续在评论区回复用户。
-// 注意：
-// 1. 保持简短，像朋友圈评论一样自然。
-// 2. 不要输出动作描写(如*笑*)，直接输出想说的话。
-// `;
-        
-//         try {
-//             // ★★★ 保留你原本的 API 配置构造逻辑 ★★★
-//             let targetApiConfig = {
-//                 API_URL: STATE.settings.API_URL,
-//                 API_KEY: STATE.settings.API_KEY,
-//                 MODEL: STATE.settings.MODEL,
-//                 MAX_TOKENS: STATE.settings.MAX_TOKENS || 200,
-//                 TEMPERATURE: 1.1
-//             };
-
-//             const presetIndex = STATE.momentsSettings?.apiPresetIndex;
-//             if (typeof presetIndex === 'number' && presetIndex >= 0) {
-//                 const preset = STATE.settings.API_PRESETS[presetIndex];
-//                 if (preset) {
-//                     targetApiConfig.API_URL = preset.url;
-//                     targetApiConfig.API_KEY = preset.key;
-//                     targetApiConfig.MODEL = preset.model;
-//                     if(preset.max_tokens) targetApiConfig.MAX_TOKENS = parseInt(preset.max_tokens);
-//                     if(preset.temperature) targetApiConfig.TEMPERATURE = parseFloat(preset.temperature);
-//                 }
-//             }
-
-//             // 调用 API 获取 AI 回复
-//             const aiReplyText = await API.chat([{role:'user', content: promptText}], targetApiConfig);
-            
-//             // 存入 AI 回复
-//             targetMoment.comments.push({
-//                 id: 'c_' + Date.now(),
-//                 senderId: targetChar.id,
-//                 text: aiReplyText,
-//                 timestamp: Date.now()
-//             });
-
-//             // 再次保存并更新UI
-//             if (typeof Storage !== 'undefined' && Storage.saveMoments) Storage.saveMoments();
-//             else if (typeof this.saveMoments === 'function') this.saveMoments();
-
-//             if (typeof this.renderMomentsUI === 'function') this.renderMomentsUI();
-
-//         } catch (e) {
-//             console.error("回复失败:", e);
-//             alert(`${targetChar.name} 的回复失败，请检查API配置或网络。`);
-//         }
-//     },
 
 
 
@@ -4806,6 +4675,10 @@ const App = {
                     if (c.senderId === 'user' && cleanText.startsWith(`回复 ${ctx.charName}: `)) {
                         cleanText = cleanText.replace(`回复 ${ctx.charName}: `, '');
                     }
+                    // ★★★ 新增：过滤 AI 在评论流中的思考过程 ★★★
+                    if (c.senderId !== 'user') {
+                        cleanText = cleanText.replace(/<(?:think|thinking|thought)>[\s\S]*?<\/(?:think|thinking|thought)>/gi, '').trim();
+                    }
                     return `${name}: ${cleanText}`;
                 }).join('\n');
 
@@ -4817,11 +4690,20 @@ const App = {
             let wiSection = worldInfoPrompt ? `\n【世界知识/环境信息】\n${worldInfoPrompt}\n` : "";
 
             if (threadContext.trim() === "") {
-                // 没有上下文说明这是第一条原始评论
+
                 let historyContext = "无";
                 if (targetChar.history && targetChar.history.length > 0) {
-                    historyContext = targetChar.history.slice(-5).map(h => `${h.role === 'user' ? '用户' : '你'}: ${h.content}`).join('\n');
+                    historyContext = targetChar.history.slice(-5).map(h => {
+                        const roleName = (h.role === 'user' || h.sender === 'user') ? '用户' : '你';
+                        return `${roleName}: ${h.content}`;
+                    }).join('\n');
+                    
+                    // ★★★ 直接清洗整段文本 ★★★
+                    historyContext = historyContext.replace(/<(?:think|thinking|thought)[^>]*>[\s\S]*?(?:<\/(?:think|thinking|thought)>|$)/gi, '');
+                
                 }
+
+
                 promptText = `【系统设定】\n${targetChar.prompt}\n${wiSection}\n【历史参考】\n${historyContext}\n【当前情境】\n用户发布了一条动态：“${momentData.text}”\n【任务要求】\n请根据系统设定，以社交平台上的互动方式，对用户的这条动态进行评论。不需要括号描述任何环境、动作，直接输出你要说的内容即可。`;
             } else {
                 // 这是追问回复
@@ -4829,6 +4711,7 @@ const App = {
             }
 
             // 先把界面改成加载中
+            const originalText = commentData.text; // 缓存原文本
             commentData.text = "...重新生成中...";
             this.saveAndRenderMoments();
 
@@ -4851,13 +4734,20 @@ const App = {
                         if(preset.temperature) targetApiConfig.TEMPERATURE = parseFloat(preset.temperature);
                     }
                 }
+                
+                // 【补上这行请求代码】
+                let aiReplyText = await API.chat([{role:'user', content: promptText}], targetApiConfig);
 
-                const aiReplyText = await API.chat([{role:'user', content: promptText}], targetApiConfig);
+                // ★★★ 新增：重新生成存入前，也必须剔除思考过程 ★★★
+                aiReplyText = aiReplyText.replace(/<(?:think|thinking|thought)>[\s\S]*?<\/(?:think|thinking|thought)>/gi, '').trim();
+                
                 commentData.text = aiReplyText;
                 this.saveAndRenderMoments();
+
             } catch (e) {
                 console.error("重新生成失败:", e);
-                commentData.text = "[生成失败，请重试]";
+                alert("重新生成失败，已恢复原评论");
+                commentData.text = originalText; // 回退原文本
                 this.saveAndRenderMoments();
             }
         }
@@ -4945,6 +4835,12 @@ const App = {
                 if (c.senderId === 'user' && cleanText.startsWith(`回复 ${ctx.charName}: `)) {
                     cleanText = cleanText.replace(`回复 ${ctx.charName}: `, '');
                 }
+
+
+                // ★★★ 新增：过滤 AI 在评论流中的思考过程 ★★★
+                if (c.senderId !== 'user') {
+                    cleanText = cleanText.replace(/<(?:think|thinking|thought)>[\s\S]*?<\/(?:think|thinking|thought)>/gi, '').trim();
+                }
                 return `${name}: ${cleanText}`;
             }).join('\n');
 
@@ -4989,8 +4885,13 @@ const App = {
                 }
             }
 
-            const aiReplyText = await API.chat([{role:'user', content: promptText}], targetApiConfig);
+            let aiReplyText = await API.chat([{role:'user', content: promptText}], targetApiConfig);
             
+
+            // ★★★ 新增：追问回复存入前，剔除思考过程 ★★★
+            aiReplyText = aiReplyText.replace(/<(?:think|thinking|thought)>[\s\S]*?<\/(?:think|thinking|thought)>/gi, '').trim();
+
+
             targetMoment.comments.push({
                 id: 'c_' + Date.now(),
                 senderId: targetChar.id,
@@ -5043,7 +4944,17 @@ const App = {
                 return false;
             }).map(c => {
                 const name = c.senderId === 'user' ? '用户' : '你';
-                return `${name}: ${c.text}`;
+
+                let cleanText = c.text;
+                
+                // ★★★ 新增：当朋友圈评论注入到主聊天记录时，也要把当时的思考过程剔除 ★★★
+                if (c.senderId !== 'user') {
+                    cleanText = cleanText.replace(/<(?:think|thinking|thought)>[\s\S]*?<\/(?:think|thinking|thought)>/gi, '').trim();
+                }
+
+                // 将 c.text 改为 cleanText
+                return `${name}: ${cleanText}`;
+
             }).join('\n');
 
             const hasImage = m.image ? "[附带了一张图片]" : "";
