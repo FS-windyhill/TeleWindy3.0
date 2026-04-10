@@ -13,6 +13,9 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
+    <!-- LateX -->
+    <link rel="stylesheet" href="./katex.min.css">
+
     <link rel="stylesheet" href="./style.css">
 </head>
 <body>
@@ -1068,6 +1071,11 @@
     <!-- 在这里，你的主脚本之前，引入这两个库 -->
     <script src="./marked.min.js"></script>
     <script src="./purify.min.js"></script>
+
+    <!-- 3. 引入 KaTeX 核心库 -->
+    <script src="./katex.min.js"></script>
+    <!-- 4. 引入 marked 的 KaTeX 插件 -->
+    <script src="./index.umd.js"></script>
 
     <script src="./script.js"></script>
 </body>

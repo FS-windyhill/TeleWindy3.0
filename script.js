@@ -6714,15 +6714,17 @@ window.importData = (input) => {
     reader.readAsText(input.files[0]);
 };
 
+// ============== Markdown 全局配置 =================
 
-// ==============mrakdown=================
+// 1. 启用 KaTeX 插件，让 marked.js 认识 $...$ 和 $$...$$ 公式
+marked.use(window.markedKatex({
+    throwOnError: false, // 公式写错时不报错，而是原样显示
+    output: 'htmlAndMathml' 
+}));
 
-// 在你的 JS 文件顶部，或使用前
+// 2. 自定义渲染器：专门处理表格，给表格外面套一层 div，方便加滚动条
 const renderer = new marked.Renderer();
-
-// 重写 table 的渲染逻辑
 renderer.table = function (header, body) {
-    // 为生成的 table 包裹一个 div 容器，方便添加滚动样式
     return `
         <div class="table-container">
             <table>
@@ -6733,57 +6735,56 @@ renderer.table = function (header, body) {
     `;
 };
 
-// 在 parseCustomMarkdown 中使用这个自定义的 renderer
-function parseCustomMarkdown(text) {
-    // ... (之前的代码) ...
-    
-    // 使用自定义渲染器
-    let rawHtml = marked.parse(processedText, { renderer: renderer }); 
-    
-    let sanitizedHtml = DOMPurify.sanitize(rawHtml, {
-        // 允许 div 标签和 class 属性，以便我们的滚动容器生效
-        ADD_TAGS: ['div'],
-        ADD_ATTR: ['class'] 
-    });
 
-    return sanitizedHtml;
-}
+// ============== 核心处理函数 =================
 
 /**
  * 1. 升级版 Markdown 解析器 (用于气泡渲染)
- *    - 使用 marked.js 解析 Markdown 为 HTML
- *    - 使用 DOMPurify 净化 HTML 防止 XSS
  */
 function parseCustomMarkdown(text) {
     if (!text) return '';
 
-    // 预处理：保留你对引用 `>` 的特殊处理逻辑（如果需要的话）
-    // 如果你希望 `>` 仍然是换行，可以在这里处理
+    // 预处理：处理引用的换行
     let processedText = text.replace(/^>\s*/gm, '\n\n'); 
 
     // 配置 marked.js
-    // gfm: true 启用 GitHub Flavored Markdown，支持表格等
-    // breaks: true 将单个换行符也渲染为 <br>，符合聊天习惯
     marked.setOptions({
-        gfm: true,
-        breaks: true, 
+        gfm: true,       // 启用表格等高级语法
+        breaks: true,    // 允许单次回车换行
         mangle: false,
         headerIds: false,
+        renderer: renderer // 【关键】应用上面我们自定义的表格渲染器！
     });
 
-    // 1. 使用 marked 将 Markdown 文本解析为 HTML 字符串
+    // 1. 将文本解析为 HTML (此时已经包含了表格div和KaTeX公式)
     let rawHtml = marked.parse(processedText);
 
-    // 2. 使用 DOMPurify 清理生成的 HTML，防止任何潜在的 XSS 攻击
-    //    这是替代你手动替换 < > & 的更安全、更全面的方法
-    let sanitizedHtml = DOMPurify.sanitize(rawHtml);
+    // 2. 配置 DOMPurify 清洗规则
+    // 【非常关键】：我们需要告诉 DOMPurify "放行" 哪些特殊的标签
+    const purifyConfig = {
+        ADD_TAGS: [
+            'div', // 允许我们为表格加的 div 标签
+            // 下面全是 KaTeX 生成数学公式必须用到的标签，不加公式会渲染不出来
+            'math', 'semantics', 'annotation', 'annotation-xml', 'mi', 'mn', 'mo', 
+            'mrow', 'mspace', 'msqrt', 'mstyle', 'msub', 'msup', 'msubsup', 
+            'mfrac', 'munder', 'mover', 'munderover', 'mpadded', 'mphantom', 
+            'mtable', 'mtr', 'mtd', 'mlabeledtr'
+        ],
+        ADD_ATTR: [
+            'class', // 允许我们为 div 加的 class 属性 (class="table-container")
+            // 下面是 KaTeX 公式需要的属性
+            'mathvariant', 'encoding', 'display', 'xmlns'
+        ]
+    };
+
+    // 3. 执行净化，防止恶意代码，同时保留表格容器和公式
+    let sanitizedHtml = DOMPurify.sanitize(rawHtml, purifyConfig);
 
     return sanitizedHtml;
 }
 
 /**
- * 2. 纯文本清洗器 (用于复制)
- *    这个函数基本可以保持不变，因为它就是为了去除格式
+ * 2. 纯文本清洗器 (用于用户点击“复制”按钮时)
  */
 function cleanMarkdownForCopy(text) {
     if (!text) return '';
@@ -6793,13 +6794,17 @@ function cleanMarkdownForCopy(text) {
     clean = clean.replace(/^\*\s+/gm, '');     // 去列表头的 *
     clean = clean.replace(/[*_~`#|]/g, '');    // 去除所有常见的 Markdown 符号
     
-    // 对于表格，可能需要更复杂的逻辑来格式化为纯文本，但简单去除符号通常也够用
-    // 例如，将 | 替换为空格或 tab
+    // 【新增】去除数学公式的 $ 符号，只保留文字
+    clean = clean.replace(/\$/g, '');
+
+    // 表格的竖线替换为空格
     clean = clean.replace(/\|/g, '  ');
 
     return clean;
 }
 
+
+// ============== Markdown 结束 =================
 
 // 启动应用
 window.onload = () => App.init();
