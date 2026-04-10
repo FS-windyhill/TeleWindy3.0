@@ -6763,16 +6763,18 @@ function parseCustomMarkdown(text) {
     // 【非常关键】：我们需要告诉 DOMPurify "放行" 哪些特殊的标签
     const purifyConfig = {
         ADD_TAGS: [
-            'div', // 允许我们为表格加的 div 标签
-            // 下面全是 KaTeX 生成数学公式必须用到的标签，不加公式会渲染不出来
+            'div', 
+            'span', // 【新增】KaTeX 的漂亮排版全靠 span，必须放行
+            // 下面是 MathML 标签，【新增了 mtext】用来支持 \text{}
             'math', 'semantics', 'annotation', 'annotation-xml', 'mi', 'mn', 'mo', 
             'mrow', 'mspace', 'msqrt', 'mstyle', 'msub', 'msup', 'msubsup', 
             'mfrac', 'munder', 'mover', 'munderover', 'mpadded', 'mphantom', 
-            'mtable', 'mtr', 'mtd', 'mlabeledtr'
+            'mtable', 'mtr', 'mtd', 'mlabeledtr', 'mtext'
         ],
         ADD_ATTR: [
-            'class', // 允许我们为 div 加的 class 属性 (class="table-container")
-            // 下面是 KaTeX 公式需要的属性
+            'class', 
+            'style',       // 【新增】KaTeX 偶尔会用到内联样式调整间距
+            'aria-hidden', // 【新增】无障碍阅读属性
             'mathvariant', 'encoding', 'display', 'xmlns'
         ]
     };
