@@ -6714,15 +6714,12 @@ window.importData = (input) => {
     reader.readAsText(input.files[0]);
 };
 
-// ============== Markdown 全局配置 =================
 
-// 1. 启用 KaTeX 插件，让 marked.js 认识 $...$ 和 $$...$$ 公式
-marked.use(window.markedKatex({
-    throwOnError: false, // 公式写错时不报错，而是原样显示
-    output: 'htmlAndMathml' 
-}));
 
-// 2. 自定义渲染器：专门处理表格，给表格外面套一层 div，方便加滚动条
+
+// ============== 全局配置 =================
+
+// 1. 自定义渲染器：专门处理表格，给表格外面套一层 div，方便加滚动条
 const renderer = new marked.Renderer();
 renderer.table = function (header, body) {
     return `
@@ -6739,7 +6736,8 @@ renderer.table = function (header, body) {
 // ============== 核心处理函数 =================
 
 /**
- * 1. 升级版 Markdown 解析器 (用于气泡渲染)
+ * 1. 终极无敌版 Markdown 解析器 
+ * (采用先提取公式 -> 渲染 Markdown -> 塞回公式的策略，彻底解决中文符号冲突)
  */
 function parseCustomMarkdown(text) {
     if (!text) return '';
@@ -6747,64 +6745,85 @@ function parseCustomMarkdown(text) {
     // 预处理：处理引用的换行
     let processedText = text.replace(/^>\s*/gm, '\n\n'); 
 
-    // 配置 marked.js
-    marked.setOptions({
-        gfm: true,       // 启用表格等高级语法
-        breaks: true,    // 允许单次回车换行
-        mangle: false,
-        headerIds: false,
-        renderer: renderer // 【关键】应用上面我们自定义的表格渲染器！
+    // 【核心黑科技】：创建一个数组，用来暂存我们的数学公式
+    const mathBlocks = [];
+
+    // 1. 提取并保护块级公式 $$ ... $$
+    processedText = processedText.replace(/\$\$([\s\S]*?)\$\$/g, (match, mathCode) => {
+        const placeholder = `%%%MATH_BLOCK_${mathBlocks.length}%%%`;
+        try {
+            // 直接调用 KaTeX 的原生方法渲染
+            const html = katex.renderToString(mathCode, { displayMode: true, throwOnError: false });
+            mathBlocks.push({ placeholder, html });
+            return placeholder;
+        } catch (e) { return match; }
     });
 
-    // 1. 将文本解析为 HTML (此时已经包含了表格div和KaTeX公式)
+    // 2. 提取并保护行内公式 $ ... $
+    // 这个正则非常强大，能完美无视中文标点符号的干扰
+    processedText = processedText.replace(/\$([^\$\n]+?)\$/g, (match, mathCode) => {
+        const placeholder = `%%%MATH_INLINE_${mathBlocks.length}%%%`;
+        try {
+            const html = katex.renderToString(mathCode, { displayMode: false, throwOnError: false });
+            mathBlocks.push({ placeholder, html });
+            return placeholder;
+        } catch (e) { return match; }
+    });
+
+    // 3. 配置并执行 marked.js
+    marked.setOptions({
+        gfm: true,
+        breaks: true, 
+        mangle: false,
+        headerIds: false,
+        renderer: renderer
+    });
+
+    // 此时传给 marked 的文本里，公式已经被换成了 %%%MATH_X%%% 这种纯文本占位符，绝对不会报错！
     let rawHtml = marked.parse(processedText);
 
-    // 2. 配置 DOMPurify 清洗规则
-    // 【非常关键】：我们需要告诉 DOMPurify "放行" 哪些特殊的标签
+    // 4. 偷天换日：把漂亮的公式 HTML 替换回原来的位置
+    mathBlocks.forEach(block => {
+        rawHtml = rawHtml.replace(block.placeholder, block.html);
+    });
+
+    // 5. 安检员 DOMPurify：配置白名单 (保持不变)
     const purifyConfig = {
         ADD_TAGS: [
-            'div', 
-            'span', // 【新增】KaTeX 的漂亮排版全靠 span，必须放行
-            // 下面是 MathML 标签，【新增了 mtext】用来支持 \text{}
+            'div', 'span',
             'math', 'semantics', 'annotation', 'annotation-xml', 'mi', 'mn', 'mo', 
             'mrow', 'mspace', 'msqrt', 'mstyle', 'msub', 'msup', 'msubsup', 
             'mfrac', 'munder', 'mover', 'munderover', 'mpadded', 'mphantom', 
             'mtable', 'mtr', 'mtd', 'mlabeledtr', 'mtext'
         ],
         ADD_ATTR: [
-            'class', 
-            'style',       // 【新增】KaTeX 偶尔会用到内联样式调整间距
-            'aria-hidden', // 【新增】无障碍阅读属性
+            'class', 'style', 'aria-hidden',
             'mathvariant', 'encoding', 'display', 'xmlns'
         ]
     };
 
-    // 3. 执行净化，防止恶意代码，同时保留表格容器和公式
     let sanitizedHtml = DOMPurify.sanitize(rawHtml, purifyConfig);
 
     return sanitizedHtml;
 }
 
 /**
- * 2. 纯文本清洗器 (用于用户点击“复制”按钮时)
+ * 2. 纯文本清洗器 (用于复制)
  */
 function cleanMarkdownForCopy(text) {
     if (!text) return '';
     let clean = text;
-    clean = clean.replace(/^>\s*/gm, '');      // 去引用
-    clean = clean.replace(/^#+\s+/gm, '');     // 去标题
-    clean = clean.replace(/^\*\s+/gm, '');     // 去列表头的 *
-    clean = clean.replace(/[*_~`#|]/g, '');    // 去除所有常见的 Markdown 符号
+    clean = clean.replace(/^>\s*/gm, '');      
+    clean = clean.replace(/^#+\s+/gm, '');     
+    clean = clean.replace(/^\*\s+/gm, '');     
+    clean = clean.replace(/[*_~`#|]/g, '');    
     
-    // 【新增】去除数学公式的 $ 符号，只保留文字
+    // 去除数学公式的 $ 符号
     clean = clean.replace(/\$/g, '');
-
-    // 表格的竖线替换为空格
     clean = clean.replace(/\|/g, '  ');
 
     return clean;
 }
-
 
 // ============== Markdown 结束 =================
 
