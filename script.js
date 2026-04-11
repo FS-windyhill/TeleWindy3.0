@@ -4672,9 +4672,9 @@ const App = {
 
             console.log(`[心迹] 重新生成 ${ctx.charName} 的评论`);
 
-            // 提取对话流 (这里以 executeCommentReply 中的那段为例，regen 里的同理替换)
-            let threadContext = targetMoment.comments
-                .filter(c => {
+            // 提取对话流：只截取这条评论【之前】的评论作为上下文，不包括要重生成的这条本身
+                    let threadContext = momentData.comments.slice(0, commentIndex)
+                        .filter(c => {
                     if (c.senderId === ctx.charId) return true;
                     if (c.senderId === 'user') {
                         // ★★★ 核心优雅逻辑：如果有 replyToId，直接精确比对ID，绝对不会错！
@@ -4721,9 +4721,7 @@ const App = {
                     
                     // ★★★ 直接清洗整段文本 ★★★
                     historyContext = historyContext.replace(/<(?:think|thinking|thought)[^>]*>[\s\S]*?(?:<\/(?:think|thinking|thought)>|$)/gi, '');
-                
                 }
-
 
                 promptText = `【系统设定】\n${targetChar.prompt}\n${wiSection}\n【历史参考】\n${historyContext}\n【当前情境】\n用户发布了一条动态：“${momentData.text}”\n【任务要求】\n请根据系统设定，以社交平台上的互动方式，对用户的这条动态进行评论。不需要括号描述任何环境、动作，直接输出你要说的内容即可。`;
             } else {
