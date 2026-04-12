@@ -6715,27 +6715,10 @@ window.importData = (input) => {
 
 
 
-// ============== 全局配置 =================
-
-// 1. 自定义渲染器：专门处理表格，给表格外面套一层 div，方便加滚动条
-const renderer = new marked.Renderer();
-renderer.table = function (header, body) {
-    return `
-        <div class="table-container">
-            <table>
-                <thead>${header}</thead>
-                <tbody>${body}</tbody>
-            </table>
-        </div>
-    `;
-};
-
-
-// ============== 核心处理函数 =================
+// ============== markdown  全局配置 =================
 
 /**
- * 1. 终极无敌版 Markdown 解析器 
- * (采用先提取公式 -> 渲染 Markdown -> 塞回公式的策略，彻底解决中文符号冲突)
+ * 终极无敌版 Markdown 解析器 (修复表格 object 报错版)
  */
 function parseCustomMarkdown(text) {
     if (!text) return '';
@@ -6743,22 +6726,20 @@ function parseCustomMarkdown(text) {
     // 预处理：处理引用的换行
     let processedText = text.replace(/^>\s*/gm, '\n\n'); 
 
-    // 【核心黑科技】：创建一个数组，用来暂存我们的数学公式
+    // 暂存数学公式的数组
     const mathBlocks = [];
 
-    // 1. 提取并保护块级公式 $$ ... $$
+    // 1. 提取块级公式 $$ ... $$
     processedText = processedText.replace(/\$\$([\s\S]*?)\$\$/g, (match, mathCode) => {
         const placeholder = `%%%MATH_BLOCK_${mathBlocks.length}%%%`;
         try {
-            // 直接调用 KaTeX 的原生方法渲染
             const html = katex.renderToString(mathCode, { displayMode: true, throwOnError: false });
             mathBlocks.push({ placeholder, html });
             return placeholder;
         } catch (e) { return match; }
     });
 
-    // 2. 提取并保护行内公式 $ ... $
-    // 这个正则非常强大，能完美无视中文标点符号的干扰
+    // 2. 提取行内公式 $ ... $
     processedText = processedText.replace(/\$([^\$\n]+?)\$/g, (match, mathCode) => {
         const placeholder = `%%%MATH_INLINE_${mathBlocks.length}%%%`;
         try {
@@ -6768,24 +6749,28 @@ function parseCustomMarkdown(text) {
         } catch (e) { return match; }
     });
 
-    // 3. 配置并执行 marked.js
+    // 3. 配置 marked.js（注意：这里删除了原来惹祸的 renderer）
     marked.setOptions({
         gfm: true,
         breaks: true, 
         mangle: false,
-        headerIds: false,
-        renderer: renderer
+        headerIds: false
     });
 
-    // 此时传给 marked 的文本里，公式已经被换成了 %%%MATH_X%%% 这种纯文本占位符，绝对不会报错！
     let rawHtml = marked.parse(processedText);
 
-    // 4. 偷天换日：把漂亮的公式 HTML 替换回原来的位置
+    // 【新增黑科技】：完美给表格套上滚动条 div，无视 marked.js 版本
+    // 把 <table> 替换为 <div class="table-container"><table>
+    rawHtml = rawHtml.replace(/<table/g, '<div class="table-container"><table');
+    // 把 </table> 替换为 </table></div>
+    rawHtml = rawHtml.replace(/<\/table>/g, '</table></div>');
+
+    // 4. 塞回咱们漂亮的数学公式
     mathBlocks.forEach(block => {
         rawHtml = rawHtml.replace(block.placeholder, block.html);
     });
 
-    // 5. 安检员 DOMPurify：配置白名单 (保持不变)
+    // 5. 安检员 DOMPurify 配置
     const purifyConfig = {
         ADD_TAGS: [
             'div', 'span',
@@ -6806,7 +6791,7 @@ function parseCustomMarkdown(text) {
 }
 
 /**
- * 2. 纯文本清洗器 (用于复制)
+ * 纯文本清洗器 (用于复制)
  */
 function cleanMarkdownForCopy(text) {
     if (!text) return '';
@@ -6822,7 +6807,6 @@ function cleanMarkdownForCopy(text) {
 
     return clean;
 }
-
 // ============== Markdown 结束 =================
 
 // 启动应用
