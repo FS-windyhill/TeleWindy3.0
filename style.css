@@ -850,11 +850,17 @@ body.dark-mode button#btn-close-m-write.cancel-btn{
     border: 1px solid rgba(255, 80, 80, 0.9);}
 
 /* ============= 新增样式：头像上传预览 ============= */
+/* ============= 新增样式：头像上传预览 ============= */
 .avatar-upload-group .avatar-preview-wrapper {
     display: flex;
     align-items: center;
-    gap: 25px;
+    gap: 16px;
     margin-bottom: 8px;
+    /* ❌ 删除 width: 100%; 
+       如果父容器（.input-group）有 padding，加上 width: 100% 就会导致整体溢出。
+       Block 级元素和 Flex 容器默认就会自动填满父级内容区。 */
+    box-sizing: border-box;
+    justify-content: center;
 }
 
 .avatar-preview {
@@ -865,8 +871,42 @@ body.dark-mode button#btn-close-m-write.cancel-btn{
     border: 3px solid #fff;
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
     background: #f0f0f0;
-    flex-shrink: 0;
+    flex-shrink: 0; /* 保持左侧头像尺寸固定，绝对不缩小 */
 }
+
+/* ================== 按钮防溢出核心修复 ================== */
+/* 专门针对头像右侧的按钮进行限制，覆盖掉 full-width-btn 可能带来的 width: 100% */
+.avatar-preview-wrapper .small-btn {
+
+    width: auto !important;  /* ✅ 关键：覆盖掉 HTML 中 full-width-btn 的宽度设定，防止溢出 */
+    overflow: hidden;        /* 超出部分隐藏 */
+    text-overflow: ellipsis; /* 显示省略号 ... */
+        
+}
+
+
+/* emoji 头像特殊处理 */
+.avatar-preview[alt]:not([src*="http"]):not([src^="data:"]) {
+    font-size: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #eee;
+}
+
+/* 原有的 .small-btn 基础样式保留你的设定即可 */
+.small-btn {
+    padding: 10px 15px;
+    font-size: 13px;
+    font-weight: 500;
+    background: var(--btn-color);
+    color: rgb(82, 82, 82);
+    border: 1px solid var(--btn-border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
 
 .avatar-preview[src^="data:"],
 .avatar-preview:not([src=""]),
@@ -877,24 +917,7 @@ body.dark-mode button#btn-close-m-write.cancel-btn{
     background: transparent;
 }
 
-/* emoji 头像特殊处理（保持居中） */
-.avatar-preview[alt]:not([src*="http"]):not([src^="data:"]) {
-    font-size: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #eee;
-}
 
-.small-btn {
-    padding: 10px 62px;
-    font-size: 12px;
-    background: #ffffff;
-    color: rgb(82, 82, 82);
-    border: 1px solid var(--btn-border-color);
-    border-radius: 8px;
-    cursor: pointer;
-}
 
 
 /* =======人设=========== */
@@ -2217,8 +2240,6 @@ body.dark-mode button#modal-save {
 }
 
 body.dark-mode button.small-btn {
-    padding: 10px 62px;
-    font-size: 12px;
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
@@ -3752,8 +3773,6 @@ body.custom-mode .modal-scroll-container {
 }
 
 body.custom-mode button.small-btn {
-    padding: 10px 62px;
-    font-size: 12px;
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
@@ -5475,16 +5494,26 @@ body.dark-mode details.thought-process {
     overflow: hidden;
 }
 
-/* 消息气泡高亮动画（用于跳转后的闪烁提示） */
+/* 把之前的这部分替换掉 */
 @keyframes highlight-fade {
-    0% { background-color: rgba(255, 215, 0, 0.6); box-shadow: 0 0 10px gold; }
-    100% { background-color: transparent; box-shadow: none; }
-}
-.highlight-message {
-    animation: highlight-fade 2.5s ease-out forwards;
-    border: 2px solid gold;
+    /* 开始时，背景是黄色，外发光也是黄色，边框是黄色 */
+    0% { 
+        background-color: rgba(255, 215, 0, 0.4); 
+        box-shadow: 0 0 15px rgba(255, 215, 0, 0.8); 
+        border-color: gold; 
+    }
+    /* 结束时，所有颜色完全变成透明 */
+    100% { 
+        background-color: transparent; 
+        box-shadow: 0 0 0 transparent; 
+        border-color: transparent; 
+    }
 }
 
+.highlight-message {
+    animation: highlight-fade 1s ease-out forwards;
+    border: 2px solid transparent; /* 默认设为透明，靠动画去改变颜色 */
+}
 
 
 /* 加载更多消息 */
@@ -5608,19 +5637,31 @@ body.dark-mode .load-next-btn, .back-to-normal-btn {
 
 /* ==================== 搜索入口样式 ==================== */
 .search-entry-section {
-    margin-bottom: 12px;
-    padding: 10px 12px;
+    padding: 5px 0px;
     background: rgba(255, 255, 255, 0.03);
     border-radius: 8px;
-    border: 1px solid rgba(150, 150, 150, 0.15);
+    border-top: 1px dashed var(--btn-border-color);
+    
+    /* 确保内部是垂直排列 */
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* 新增：让搜索按钮独占整行并填满宽度 */
+.full-width-btn {
+    flex: none !important;     /* 取消 flex:1 的均分效果 */
+    width: 100% !important;    /* 关键：填满整行 */
+
 }
 
 .search-entry-section label {
     display: block;
-    margin-bottom: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-secondary, #aaa);
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 5px;
+    font-weight: bold;
+    margin-right: 7px;
 }
 
 

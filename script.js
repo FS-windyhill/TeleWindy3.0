@@ -1749,7 +1749,7 @@ const UI = {
                 let content = lastMsgObj.content || '';
                 
                 // 正则去时间戳
-                content = content.replace(/^\[[A-Z][a-z]{2}\.\d{1,2}\s\d{2}:\d{2}\]\s/, '');
+                content = content.replace(/^\[(?:[A-Z][a-z]{2}\.\d{1,2}|\d{4}-\d{2}-\d{2})\s\d{2}:\d{2}\]\s/, '');
 
                 // ==========================================================
                 // ★ 新增代码：在这里添加一行，用正则去除Markdown符号 ★
@@ -1878,50 +1878,6 @@ const UI = {
     },
 
     
-
-    // renderChatHistory(contact) {
-    //     this.els.chatMsgs.innerHTML = '';
-    //     this.els.chatTitle.innerText = contact.name;
-        
-    //     contact.history.forEach((msg, historyIndex) => {  // ← 新增 historyIndex
-    //         if (msg.role === 'system') return;
-    //         const sender = msg.role === 'assistant' ? 'ai' : 'user';
-
-    //         let cleanText = typeof msg === 'string' ? msg : msg.content || '';
-            
-    //         if (sender === 'user') {
-    //             cleanText = cleanText.replace(/^\[[A-Z][a-z]{2}\.\d{1,2}\s\d{2}:\d{2}\]\s/, '');
-    //         }
-
-    //         const msgTime = typeof msg === 'string' ? null : msg.timestamp;
-            
-    //         const paragraphs = cleanText.split(/\n\s*\n/).filter(p => p.trim());
-            
-    //         if (paragraphs.length === 0 && !cleanText.trim()) return;
-
-    //         // ★★★ 新增：创建消息组容器 ★★★
-    //         const group = document.createElement('div');
-    //         group.className = 'message-group';
-    //         group.dataset.msgIndex = historyIndex;  // 关键：标记属于 history 的第几条
-    //         group.dataset.sender = sender;
-
-    //         if (paragraphs.length > 0) {
-    //             paragraphs.forEach(p => {
-    //                 const bubbleClone = this.createSingleBubble(p.trim(), sender, contact.avatar, msgTime, historyIndex);
-    //                 group.appendChild(bubbleClone);
-    //             });
-    //         } else {
-    //             const bubbleClone = this.createSingleBubble(cleanText.trim(), sender, contact.avatar, msgTime, historyIndex);
-    //             group.appendChild(bubbleClone);
-    //         }
-
-    //         this.els.chatMsgs.appendChild(group);
-    //     });
-
-    //     this.scrollToBottom();
-    //     this.updateRerollState(contact);
-    // },
-
     createSingleBubble(text, sender, aiAvatarUrl, timestampRaw, historyIndex, shouldAnimate = true, partIndex = 0, imageUrl = null, isThought = false) {
         const template = document.getElementById('msg-template');
         const clone = template.content.cloneNode(true);
@@ -2191,7 +2147,7 @@ const UI = {
             
             // 处理 User 时间戳
             if (sender === 'user') {
-                cleanText = cleanText.replace(/^\[[A-Z][a-z]{2}\.\d{1,2}\s\d{2}:\d{2}\]\s/, '');
+                cleanText = cleanText.replace(/^\[(?:[A-Z][a-z]{2}\.\d{1,2}|\d{4}-\d{2}-\d{2})\s\d{2}:\d{2}\]\s/, '');
             }
 
             // 处理 AI 引用格式
@@ -2616,6 +2572,10 @@ const App = {
 
         UI.switchView('chat');
 
+        // ★★★ 新增：每次进入聊天窗口，强制重置为最新状态 ★★★
+        STATE.chatMode = 'normal';
+        STATE.visibleMsgCount = CONFIG.CHAT_PAGE_SIZE || 15;
+
         // ★★★ 新增：进入聊天时，根据全局状态，正确设置顶部的“正在输入”或“在线”状态
         // 检查当前是不是应该显示“正在输入”
         const isLoading = STATE.typingContactId === id;
@@ -2895,7 +2855,7 @@ const App = {
                 
                 // --- A. 分段隐藏处理 (保持你原有的逻辑) ---
                 if (msg.hiddenIndices && msg.hiddenIndices.length > 0) {
-                    const timestampRegex = /^\[[A-Z][a-z]{2}\.\d{1,2}\s\d{2}:\d{2}\]\s/;
+                    const timestampRegex = /^\[(?:[A-Z][a-z]{2}\.\d{1,2}|\d{4}-\d{2}-\d{2})\s\d{2}:\d{2}\]\s/;
                     let timestampPart = '';
                     if (msg.role === 'user') {
                         const match = content.match(timestampRegex);
@@ -2919,7 +2879,7 @@ const App = {
                     // 注意：这里的 content 必须是尚未被 slice/filter 过的原始文本切分出的数量
                     // 为了保险，我们重新根据原始 full content 切分一次来算总数
                     let rawContent = msg.content || '';
-                    if (msg.role === 'user') rawContent = rawContent.replace(/^\[[A-Z][a-z]{2}\.\d{1,2}\s\d{2}:\d{2}\]\s/, '');
+                    if (msg.role === 'user') rawContent = rawContent.replace(/^\[(?:[A-Z][a-z]{2}\.\d{1,2}|\d{4}-\d{2}-\d{2})\s\d{2}:\d{2}\]\s/, '');
                     if (msg.role === 'assistant') rawContent = rawContent.replace(/(^|\n)>\s*/g, '\n\n');
                     
                     const rawParagraphs = rawContent.split(/\n\s*\n/).filter(p => p.trim());
@@ -3576,7 +3536,7 @@ const App = {
         }
 
         // 定义时间戳正则（Edit和Copy公用）
-        const timestampRegex = /^\[[A-Z][a-z]{2}\.\d{1,2}\s\d{2}:\d{2}\]\s/;
+        const timestampRegex = /^\[(?:[A-Z][a-z]{2}\.\d{1,2}|\d{4}-\d{2}-\d{2})\s\d{2}:\d{2}\]\s/;
 
         // 3. 执行动作
         if (action === 'edit') {
@@ -3835,7 +3795,7 @@ const App = {
                 
                 // 1) 去除时间戳
                 if (msg.role === 'user') {
-                    contentToParse = contentToParse.replace(/^\[[A-Z][a-z]{2}\.\d{1,2}\s\d{2}:\d{2}\]\s/, '');
+                    contentToParse = contentToParse.replace(/^\[(?:[A-Z][a-z]{2}\.\d{1,2}|\d{4}-\d{2}-\d{2})\s\d{2}:\d{2}\]\s/, '');
                 }
                 
                 // 2) AI 引用切分兼容
@@ -3989,7 +3949,7 @@ const App = {
             const partsToDelete = deletionMap[msgIndex]; // 例如: [0, 2, 'thought']
 
             let content = msg.content || '';
-            const timestampRegex = /^\[[A-Z][a-z]{2}\.\d{1,2}\s\d{2}:\d{2}\]\s/;
+            const timestampRegex = /^\[(?:[A-Z][a-z]{2}\.\d{1,2}|\d{4}-\d{2}-\d{2})\s\d{2}:\d{2}\]\s/;
             let timestampPart = '';
             
             if (match = content.match(timestampRegex)) {
@@ -6112,12 +6072,38 @@ const App = {
                 // 过滤系统提示词，匹配用户或助手的消息
                 if (msg.role !== 'system' && msg.content.toLowerCase().includes(keyword)) {
                     found = true;
+                    
+                    // ★ 1. 剔除用户搜索结果里的时间戳标记
+                    let cleanMsgText = msg.content;
+                    if (msg.role === 'user') {
+                        cleanMsgText = cleanMsgText.replace(/^\[(?:[A-Z][a-z]{2}\.\d{1,2}|\d{4}-\d{2}-\d{2})\s\d{2}:\d{2}\]\s/, '');
+                    }
+
+                    // ★ 2. 把列表显示的 timestamp 转换为优雅格式
+                    let displayTime = msg.timestamp || '未知时间';
+                    
+                    // 判断是不是旧格式 (例如 Dec.14 01:06)
+                    const oldTimeMatch = displayTime.match(/^([A-Z][a-z]{2})\.(\d{1,2})\s(\d{2}:\d{2})$/);
+                    if (oldTimeMatch) {
+                        const monthMap = { 
+                            "Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04", 
+                            "May": "05", "Jun": "06", "Jul": "07", "Aug": "08", 
+                            "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12" 
+                        };
+                        const mm = monthMap[oldTimeMatch[1]];
+                        const dd = String(oldTimeMatch[2]).padStart(2, '0');
+                        const time = oldTimeMatch[3];
+                        const year = new Date().getFullYear(); // 旧数据没有存年，默认补上今年的年份
+                        displayTime = `${year}-${mm}-${dd} ${time}`;
+                    }
+
                     const div = document.createElement('div');
                     div.className = 'search-result-item';
                     div.innerHTML = `
-                        <div class="search-result-date">${msg.timestamp || '未知时间'} - ${msg.role === 'user' ? '我' : 'TA'}</div>
-                        <div class="search-result-text">${msg.content}</div>
+                        <div class="search-result-date">${displayTime} - ${msg.role === 'user' ? '我' : 'TA'}</div>
+                        <div class="search-result-text">${cleanMsgText}</div>
                     `;
+                    
                     // 点击结果，触发跳转
                     div.onclick = () => executeJump(index, contact);
                     resultsContainer.appendChild(div);
@@ -6127,30 +6113,31 @@ const App = {
             if (!found) resultsContainer.innerHTML = '<div style="text-align:center; color:gray; padding:20px;">未找到匹配的消息</div>';
         };
 
-        // 4. 按日期跳转
+        // 替换原来的按日期查找逻辑
         document.getElementById('btn-search-date').onclick = () => {
-            const dateVal = document.getElementById('search-date-input').value; // 格式 YYYY-MM-DD
+            const dateVal = document.getElementById('search-date-input').value; // 格式本身就是 YYYY-MM-DD
             if (!dateVal) return;
             
-            // 把 YYYY-MM-DD 转换为你的 Dec.14 格式
+            // 为了兼容你以前的旧记录，我们把 dateVal 转换成 Dec.14 格式作为备选项
             const dateObj = new Date(dateVal);
             const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-            const monthStr = months[dateObj.getMonth()];
-            const dayStr = String(dateObj.getDate()).padStart(2, '0');
-            const targetStr = `${monthStr}.${dayStr}`; // 结果例如 "Dec.14"
+            const oldFormatStr = `${months[dateObj.getMonth()]}.${String(dateObj.getDate()).padStart(2, '0')}`;
 
             const contact = STATE.contacts.find(c => c.id === STATE.currentContactId);
             if (!contact) return;
 
-            // 找到该日期的第一条消息
-            const targetIndex = contact.history.findIndex(msg => msg.timestamp && msg.timestamp.includes(targetStr));
+            // ★ 核心：同时匹配新格式 (2025-10-16) 或者 老格式 (Dec.14)
+            const targetIndex = contact.history.findIndex(msg => 
+                msg.timestamp && (msg.timestamp.includes(dateVal) || msg.timestamp.includes(oldFormatStr))
+            );
 
             if (targetIndex !== -1) {
                 executeJump(targetIndex, contact);
             } else {
-                alert(`未找到 ${targetStr} 的聊天记录`);
+                alert(`未找到 ${dateVal} 的聊天记录`);
             }
         };
+
 
         // 5. 执行跳转的核心方法 (加在代码某处)
         function executeJump(targetIndex, contact) {
@@ -6175,7 +6162,7 @@ const App = {
                     targetBubble.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     targetBubble.classList.add('highlight-message');
                     // 高亮结束后移除类名
-                    setTimeout(() => targetBubble.classList.remove('highlight-message'), 2500);
+                    setTimeout(() => targetBubble.classList.remove('highlight-message'), 1000);
                 }
             }, 100); // 稍微延迟等待DOM渲染完成
         }
@@ -6763,11 +6750,15 @@ const App = {
 // 专门给【聊天】用的时间格式化函数
 // ========================================
 function formatTimestamp() {
-    const now = new Date();
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${months[now.getMonth()]}.${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const MM = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const HH = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    // 输出: 2025-10-16 13:00
+    return `${yyyy}-${MM}-${dd} ${HH}:${mm}`;
 }
-
 
 // =========================================
 // 专门给心迹（朋友圈）用的时间格式化函数
