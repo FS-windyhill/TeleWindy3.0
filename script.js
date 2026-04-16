@@ -6172,7 +6172,7 @@ const App = {
                     targetBubble.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     targetBubble.classList.add('highlight-message');
                     // 高亮结束后移除类名
-                    setTimeout(() => targetBubble.classList.remove('highlight-message'), 1000);
+                    setTimeout(() => targetBubble.classList.remove('highlight-message'), 1500);
                 }
             }, 100); // 稍微延迟等待DOM渲染完成
         }

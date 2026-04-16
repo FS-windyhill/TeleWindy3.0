@@ -5528,7 +5528,7 @@ body.dark-mode details.thought-process {
 }
 
 .highlight-message {
-    animation: highlight-fade 1s ease-out forwards;
+    animation: highlight-fade 1.5s ease-out forwards;
     border: 2px solid transparent; /* 默认设为透明，靠动画去改变颜色 */
 }
 
