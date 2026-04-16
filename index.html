@@ -431,6 +431,17 @@
                     </p>
                 </div>
 
+                <!-- 【改动1】：搜索入口按钮 -->
+                <div id="search-history-section" class="input-group search-entry-section">
+                    <label>查找消息</label>
+                    <button id="btn-open-search" class="history-btn primary-btn">
+                        🔍 搜索当前聊天记录
+                    </button>
+                </div>
+
+                <!-- 原有的聊天记录管理区域（保持不变） -->
+                <!-- <div id="history-manager-section" class="input-group"> ... </div> -->
+
                 <!-- 聊天记录导入导出区域 -->
                 <div id="history-manager-section" class="input-group">
                     <label>聊天记录管理</label>
@@ -1067,6 +1078,34 @@
         </div>
     </div>
 
+
+    <!-- 【改动2】：搜索聊天记录弹窗 -->
+    <div id="search-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel search-modal">
+            <h2>搜索聊天记录</h2>
+            
+            <!-- 关键字搜索 -->
+            <div class="search-input-group">
+                <input type="text" id="search-keyword-input" placeholder="输入关键字...">
+                <button id="btn-search-keyword" class="search-btn">搜索</button>
+            </div>
+
+            <!-- 按日期查找 -->
+            <div class="search-input-group">
+                <input type="date" id="search-date-input">
+                <button id="btn-search-date" class="search-btn">按日期跳转</button>
+            </div>
+
+            <!-- 搜索结果列表 -->
+            <div id="search-results-list" class="search-results">
+                <!-- 搜索结果会动态注入到这里 -->
+            </div>
+
+            <div class="modal-buttons">
+                <button id="btn-close-search">关闭</button>
+            </div>
+        </div>
+    </div>
 
     <!-- 在这里，你的主脚本之前，引入这两个库 -->
     <script src="./marked.min.js"></script>

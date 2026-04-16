@@ -288,6 +288,14 @@ const STATE = {
     momentsSettings: JSON.parse(JSON.stringify(CONFIG.DEFAULT.MOMENTS_SETTINGS)), 
     
     visibleMomentsCount: 15,
+
+    // 聊天记录搜索：
+    chatMode: 'normal',    // 'normal' 为正常从底往上，'jump' 为跳转模式
+    jumpStartIndex: 0,     // 跳转模式下的起始索引
+    jumpEndIndex: 0,       // 跳转模式下的结束索引
+    targetHighlightIndex: -1, // 需要高亮闪烁的消息索引
+
+
 };
 
 // =========================================
@@ -2123,41 +2131,56 @@ const UI = {
         const chatMsgs = this.els.chatMsgs;
         const scrollContainer = chatMsgs.parentElement; 
 
-        // ★★★ 1. 只有在“首次完全加载”时，才隐藏界面，防止闪烁 ★★★
-        // 如果是加载更多或删除消息，不要隐藏，否则体验不好
-        if (!isLoadMore && !keepScrollPosition) {
+        // ★★★ 1. 只有在“首次完全加载”且“不是跳转模式”时，才隐藏界面，防止闪烁 ★★★
+        if (!isLoadMore && !keepScrollPosition && STATE.chatMode !== 'jump') {
             chatMsgs.style.opacity = '0'; 
         }
 
         let previousScrollHeight = 0;
+        let previousScrollTop = 0;
         if (isLoadMore) {
             previousScrollHeight = scrollContainer.scrollHeight;
+            previousScrollTop = scrollContainer.scrollTop;
         }
 
         chatMsgs.innerHTML = '';
         this.els.chatTitle.innerText = contact.name;
 
         const totalMsgs = contact.history.length;
-        let startIndex = totalMsgs - STATE.visibleMsgCount;
-        if (startIndex < 0) startIndex = 0;
-
-        // 渲染“加载更多”按钮
-        if (startIndex > 0) {
-            const loadMoreBtn = document.createElement('div');
-            loadMoreBtn.className = 'load-more-btn';
-            loadMoreBtn.innerText = '点击加载更多消息';
-            loadMoreBtn.onclick = () => {
-                STATE.visibleMsgCount += CONFIG.CHAT_PAGE_SIZE;
-                this.renderChatHistory(contact, true);
-            };
-            chatMsgs.appendChild(loadMoreBtn);
+        
+        // ============================================
+        // ★★★ 新增：根据当前模式计算渲染范围 ★★★
+        // ============================================
+        let startIndex, endIndex;
+        if (STATE.chatMode === 'jump') {
+            startIndex = STATE.jumpStartIndex;
+            endIndex = STATE.jumpEndIndex;
+        } else {
+            endIndex = totalMsgs;
+            startIndex = totalMsgs - STATE.visibleMsgCount;
+            if (startIndex < 0) startIndex = 0;
         }
 
+        // ============================================
+        // ★★★ 修改：渲染顶部的“加载更早/更多消息”按钮 ★★★
+        // ============================================
+        if (startIndex > 0) {
+            const loadPrevBtn = document.createElement('div');
+            loadPrevBtn.className = 'load-more-btn';
+            loadPrevBtn.innerText = STATE.chatMode === 'jump' ? '点击加载更早消息' : '点击加载更多消息';
+            loadPrevBtn.onclick = () => {
+                if (STATE.chatMode === 'jump') {
+                    STATE.jumpStartIndex = Math.max(0, STATE.jumpStartIndex - CONFIG.CHAT_PAGE_SIZE);
+                } else {
+                    STATE.visibleMsgCount += CONFIG.CHAT_PAGE_SIZE;
+                }
+                this.renderChatHistory(contact, true);
+            };
+            chatMsgs.appendChild(loadPrevBtn);
+        }
 
-
-
-        // 遍历并渲染消息
-        for (let i = startIndex; i < totalMsgs; i++) {
+        // 遍历并渲染消息 (基于计算好的范围)
+        for (let i = startIndex; i < endIndex; i++) {
             const msg = contact.history[i];
             const historyIndex = i; 
 
@@ -2178,14 +2201,7 @@ const UI = {
 
             const msgTime = typeof msg === 'string' ? null : msg.timestamp;
 
-
-
-
-
-
-            // ============================================
-            // ★★★ 新增：提取历史消息中的思考过程 ★★★
-            // ============================================
+            // 提取历史消息中的思考过程
             let thoughtContent = null;
             if (sender === 'ai') {
                 cleanText = cleanText.replace(/<(?:think|thinking|thought)>([\s\S]*?)<\/(?:think|thinking|thought)>/gi, (match, inner) => {
@@ -2211,26 +2227,25 @@ const UI = {
             const hiddenIndices = msg.hiddenIndices || [];
 
             // ===============================================
-            // ★★★ 优先渲染思考气泡 ★★★
+            // ★★★ 新增：如果是跳转查找到的目标，给最外层容器加 ID ★★★
             // ===============================================
+            if (STATE.chatMode === 'jump' && historyIndex === STATE.targetHighlightIndex) {
+                group.id = `msg-bubble-${historyIndex}`;
+            }
+
+            // 优先渲染思考气泡
             if (thoughtContent) {
                  const formattedThought = parseCustomMarkdown(thoughtContent);
                  const thoughtBubble = this.createSingleBubble(
                      formattedThought, sender, contact.avatar, msgTime, historyIndex, false, 'thought', null, true
                  );
-                 
-                 // ★★★ 核心修复：同时判断整条隐藏(msg.isHidden) 和 局部隐藏(hiddenIndices) ★★★
                  if (msg.isHidden || hiddenIndices.includes('thought')) {
                      thoughtBubble.querySelector('.message-bubble').classList.add('is-hidden-bubble');
                  }
-                 
                  group.appendChild(thoughtBubble);
             }
             
-
-            // ===============================================
-            // ★★★ 第一步：先渲染所有的【文字气泡】 ★★★
-            // ===============================================
+            // 第一步：先渲染所有的【文字气泡】
             if (paragraphs.length > 0) {
                 paragraphs.forEach((p, j) => {
                     const trimmedP = p.trim();
@@ -2240,8 +2255,6 @@ const UI = {
                         group.appendChild(separator);
                     } else {
                         const formattedContent = parseCustomMarkdown(trimmedP);
-                        
-                        // ★ 注意：这里 imageUrl 永远传 null，因为我们要把图放到最后单独发
                         const bubbleClone = this.createSingleBubble(
                             formattedContent, sender, contact.avatar, msgTime, historyIndex, false, j, null 
                         );
@@ -2253,56 +2266,75 @@ const UI = {
                     }
                 });
             } else if (!displayImage) {
-                // 只有在没字也没图的极端情况下（比如空消息），才渲染一个空泡泡，防止报错
-                // 如果有图没字，这个分支不走，直接走下面
                 const formattedContent = parseCustomMarkdown(cleanText.trim());
                 const bubbleClone = this.createSingleBubble(formattedContent, sender, contact.avatar, msgTime, historyIndex, false, 0, null);
                 group.appendChild(bubbleClone);
             }
 
-            // ===============================================
-            // ★★★ 第二步：如果有图，在最后单独追加一个【图片气泡】 ★★★
-            // ===============================================
+            // 第二步：如果有图，在最后单独追加一个【图片气泡】
             if (displayImage) {
-                // partIndex 设为 paragraphs.length，保证索引不冲突
                 const imgPartIndex = paragraphs.length;
-                
-                // 这是一个只有图、没有字的气泡 (text传空字符串)
                 const imgBubble = this.createSingleBubble(
                     "", sender, contact.avatar, msgTime, historyIndex, false, imgPartIndex, displayImage
                 );
-                
-                // 如果整条消息隐藏，或者你可以定义图片的隐藏逻辑，这里跟随主消息隐藏即可
-                // ★★★ 核心修改：检查图片索引是否在隐藏名单里 ★★★
-                // 如果 hiddenIndices 包含 imgPartIndex，或者整条消息本身就是隐藏的
                 if (hiddenIndices.includes(imgPartIndex) || msg.isHidden) {
                     imgBubble.querySelector('.message-bubble').classList.add('is-hidden-bubble');
                 }
-                
                 group.appendChild(imgBubble);
             }
 
             chatMsgs.appendChild(group);
         }
 
+        // ============================================
+        // ★★★ 新增：渲染底部的“加载更新消息”按钮 (仅跳转模式) ★★★
+        // ============================================
+        if (STATE.chatMode === 'jump') {
+            if (endIndex < totalMsgs) {
+                const loadNextBtn = document.createElement('div');
+                loadNextBtn.className = 'load-next-btn';
+                loadNextBtn.innerText = '点击加载更新消息';
+                loadNextBtn.onclick = () => {
+                    STATE.jumpEndIndex = Math.min(totalMsgs, STATE.jumpEndIndex + CONFIG.CHAT_PAGE_SIZE);
+                    // 向下加载不保持视口，直接加在末尾让用户可以往下滚
+                    this.renderChatHistory(contact, false, true); 
+                };
+                chatMsgs.appendChild(loadNextBtn);
+            } else {
+                const backToNormalBtn = document.createElement('div');
+                backToNormalBtn.className = 'back-to-normal-btn';
+                backToNormalBtn.innerText = '✅ 已到达最新消息 (点击恢复自动滚动)';
+                backToNormalBtn.onclick = () => {
+                    STATE.chatMode = 'normal';
+                    STATE.visibleMsgCount = totalMsgs - startIndex;
+                    this.renderChatHistory(contact);
+                    this.scrollToBottom();
+                };
+                chatMsgs.appendChild(backToNormalBtn);
+            }
+        }
+
 
         // ★★★ 2. 滚动与显形处理 ★★★
         if (isLoadMore) {
+            // 加载上方更早历史：保持视口当前看到的元素位置不变
             const newScrollHeight = scrollContainer.scrollHeight;
-            scrollContainer.scrollTop = newScrollHeight - previousScrollHeight;
+            scrollContainer.scrollTop = newScrollHeight - previousScrollHeight + previousScrollTop;
         } else if (keepScrollPosition) {
-            // 保持不动
+            // 保持不动，给加载下方消息用
         } else {
             // 首次加载
-            // 先立即滚一次（虽然可能不准，但先滚了再说）
-            this.scrollToBottom();
-
-            // 使用 requestAnimationFrame 在下一帧恢复显示
-            // 这样用户看到界面的时候，已经是在底部了
-            requestAnimationFrame(() => {
-                this.scrollToBottom(); // 双重保险，再滚一次
-                chatMsgs.style.opacity = '1'; // 瞬间显示，用户感觉不到闪烁
-            });
+            if (STATE.chatMode === 'jump') {
+                // 【跳转模式核心】：跳过滚动到底部，交给外部 scrollIntoView 处理
+                chatMsgs.style.opacity = '1';
+            } else {
+                // 【正常模式】：执行滚到底部
+                this.scrollToBottom();
+                requestAnimationFrame(() => {
+                    this.scrollToBottom(); 
+                    chatMsgs.style.opacity = '1'; 
+                });
+            }
         }
 
         this.updateRerollState(contact);
@@ -2664,6 +2696,8 @@ const App = {
             historyLimit: requestSettings.CONTEXT_LIMIT, // ★ 打印看看对不对
         });
 
+
+
         // ============================================================
         // 2. 准备发送内容 (Reroll vs New Message)
         // ============================================================
@@ -2678,12 +2712,28 @@ const App = {
         // 如果既没文本也没图，且不是reroll，就退出
         if (!isReroll && !userText && !hasPendingImage) return;
 
-        // Reroll 逻辑：回退历史
+        // =================================================================
+        // ★★★ 第一步：如果是 Reroll，先弹窗问用户确不确定 ★★★
+        // =================================================================
         if (isReroll) {
+            const isConfirmed = confirm("重新生成消息？"); 
+            if (!isConfirmed) return; // 如果点取消，直接退出，页面一动不动，还在看历史
+        }
+        
+        // =================================================================
+        // ★★★ 第二步：现在确认要发消息（或确认Reroll）了，强制切回最新底部 ★★★
+        // =================================================================
+        if (STATE.chatMode === 'jump') {
+            STATE.chatMode = 'normal';
+            STATE.visibleMsgCount = Math.max(CONFIG.CHAT_PAGE_SIZE, STATE.visibleMsgCount || 15);
+            UI.renderChatHistory(contact);
+        }
+        // =================================================================
 
-            const isConfirmed = confirm("重新生成消息？"); // <<<<< 新增代码
-            if (!isConfirmed) return; // 如果用户点取消，直接退出函数，不执行后面逻辑 // <<<<< 新增代码
-            
+        // =================================================================
+        // ★★★ 第三步：执行真正的 Reroll 或 发新消息逻辑 ★★★
+        // =================================================================
+        if (isReroll) {
             const lastUserMsg = [...contact.history].reverse().find(m => m.role === 'user');
             if (!lastUserMsg) return;
             // Reroll 复用历史记录里的文本
@@ -2699,7 +2749,7 @@ const App = {
             }
             UI.removeLatestAiBubbles();
         } 
-        
+
         // New Message 逻辑：上屏 & 识图
         else {
             // 1. 决定图片数据
@@ -6032,6 +6082,114 @@ const App = {
         /* ==================结束心迹============= */
 
 
+
+        /* ==========搜索聊天记录 ===============*/
+        // 1. 打开搜索弹窗
+        document.getElementById('btn-open-search').onclick = () => {
+            document.getElementById('search-modal-overlay').classList.remove('hidden');
+            document.getElementById('search-results-list').innerHTML = '<div style="text-align:center; color:gray; padding:20px;">请输入关键字或选择日期进行查找</div>';
+            // 顺便关掉底层的设置弹窗，让视野更清晰
+            document.getElementById('modal-overlay').classList.add('hidden'); 
+        };
+
+        // 2. 关闭搜索弹窗
+        document.getElementById('btn-close-search').onclick = () => {
+            document.getElementById('search-modal-overlay').classList.add('hidden');
+        };
+
+        // 3. 关键字搜索
+        document.getElementById('btn-search-keyword').onclick = () => {
+            const keyword = document.getElementById('search-keyword-input').value.trim().toLowerCase();
+            const contact = STATE.contacts.find(c => c.id === STATE.currentContactId);
+            const resultsContainer = document.getElementById('search-results-list');
+            
+            if (!contact || !keyword) return;
+            
+            resultsContainer.innerHTML = '';
+            let found = false;
+
+            contact.history.forEach((msg, index) => {
+                // 过滤系统提示词，匹配用户或助手的消息
+                if (msg.role !== 'system' && msg.content.toLowerCase().includes(keyword)) {
+                    found = true;
+                    const div = document.createElement('div');
+                    div.className = 'search-result-item';
+                    div.innerHTML = `
+                        <div class="search-result-date">${msg.timestamp || '未知时间'} - ${msg.role === 'user' ? '我' : 'TA'}</div>
+                        <div class="search-result-text">${msg.content}</div>
+                    `;
+                    // 点击结果，触发跳转
+                    div.onclick = () => executeJump(index, contact);
+                    resultsContainer.appendChild(div);
+                }
+            });
+
+            if (!found) resultsContainer.innerHTML = '<div style="text-align:center; color:gray; padding:20px;">未找到匹配的消息</div>';
+        };
+
+        // 4. 按日期跳转
+        document.getElementById('btn-search-date').onclick = () => {
+            const dateVal = document.getElementById('search-date-input').value; // 格式 YYYY-MM-DD
+            if (!dateVal) return;
+            
+            // 把 YYYY-MM-DD 转换为你的 Dec.14 格式
+            const dateObj = new Date(dateVal);
+            const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            const monthStr = months[dateObj.getMonth()];
+            const dayStr = String(dateObj.getDate()).padStart(2, '0');
+            const targetStr = `${monthStr}.${dayStr}`; // 结果例如 "Dec.14"
+
+            const contact = STATE.contacts.find(c => c.id === STATE.currentContactId);
+            if (!contact) return;
+
+            // 找到该日期的第一条消息
+            const targetIndex = contact.history.findIndex(msg => msg.timestamp && msg.timestamp.includes(targetStr));
+
+            if (targetIndex !== -1) {
+                executeJump(targetIndex, contact);
+            } else {
+                alert(`未找到 ${targetStr} 的聊天记录`);
+            }
+        };
+
+        // 5. 执行跳转的核心方法 (加在代码某处)
+        function executeJump(targetIndex, contact) {
+            // 隐藏搜索弹窗
+            document.getElementById('search-modal-overlay').classList.add('hidden');
+            
+            // 进入跳转模式
+            STATE.chatMode = 'jump';
+            STATE.targetHighlightIndex = targetIndex;
+            
+            // 关键逻辑：往前后各加载 15 条，防止 DOM 卡顿
+            STATE.jumpStartIndex = Math.max(0, targetIndex - CONFIG.CHAT_PAGE_SIZE);
+            STATE.jumpEndIndex = Math.min(contact.history.length, targetIndex + CONFIG.CHAT_PAGE_SIZE);
+            
+            // 重新渲染聊天记录
+            UI.renderChatHistory(contact);
+            
+            // 滚动到特定消息并高亮
+            setTimeout(() => {
+                const targetBubble = document.getElementById(`msg-bubble-${targetIndex}`);
+                if (targetBubble) {
+                    targetBubble.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    targetBubble.classList.add('highlight-message');
+                    // 高亮结束后移除类名
+                    setTimeout(() => targetBubble.classList.remove('highlight-message'), 2500);
+                }
+            }, 100); // 稍微延迟等待DOM渲染完成
+        }
+
+
+        /* ============ 搜索聊天记录结束 ============*/
+
+
+
+
+
+
+
+
     },
 
 
@@ -6374,14 +6532,11 @@ const App = {
             // ===========================
             const c = STATE.contacts.find(x => x.id === id);
             
-            title.innerText = '聊天菜单'; // 你的自定义标题
+            title.innerText = '聊天菜单'; 
             iName.value = c.name;
             iPrompt.value = c.prompt || "";
             
-            // 【修改】：头像直接给 img src (不再给 input value，因为 input 删了)
             preview.src = c.avatar || './char.jpg';
-
-            // 回显预设
             presetSelect.value = c.linkedPresetName || "";
             
             // 显示危险按钮
@@ -6390,11 +6545,17 @@ const App = {
             if(btnDelete) btnDelete.style.display = 'block';
             if(btnClear) btnClear.style.display = 'block';
 
-            // 【保留】：显示日志按钮
+            // 显示日志按钮
             if (logSection) logSection.style.display = 'block';
 
-            // 【新增】：显示导入/导出按钮
+            // 显示导入/导出按钮
             if (historySection) historySection.style.display = 'block';
+
+            // 【新增】：只有在聊天界面点进来的编辑，才显示搜索按钮
+            const searchSection = document.getElementById('search-history-section');
+            if (searchSection) {
+                searchSection.style.display = STATE.currentContactId ? 'block' : 'none';
+            }
 
         } else {
             // ===========================
@@ -6404,9 +6565,7 @@ const App = {
             iName.value = '';
             iPrompt.value = '你是一个...';
             
-            // 【修改】：默认头像
             preview.src = './char.jpg'; 
-
             presetSelect.value = "";
             
             // 隐藏危险按钮
@@ -6415,11 +6574,15 @@ const App = {
             if(btnDelete) btnDelete.style.display = 'none';
             if(btnClear) btnClear.style.display = 'none';
 
-            // 【保留】：隐藏日志按钮 (新建时没日志看)
+            // 隐藏日志按钮 
             if (logSection) logSection.style.display = 'none';
 
-            // 【新增】：隐藏导入/导出按钮 (新建时没记录导)
+            // 隐藏导入/导出按钮
             if (historySection) historySection.style.display = 'none';
+
+            // 【新增】：新建模式不显示搜索
+            const searchSection = document.getElementById('search-history-section');
+            if (searchSection) searchSection.style.display = 'none';
         }
     },
 
