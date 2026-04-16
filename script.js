@@ -6093,8 +6093,9 @@ const App = {
                         const mm = monthMap[oldTimeMatch[1]];
                         const dd = String(oldTimeMatch[2]).padStart(2, '0');
                         const time = oldTimeMatch[3];
-                        const year = new Date().getFullYear(); // 旧数据没有存年，默认补上今年的年份
-                        displayTime = `${year}-${mm}-${dd} ${time}`;
+
+                        // ★★★ 修改这里：不补年份，直接显示 12-14 01:06 (当做旧记录的标志)
+                        displayTime = `${mm}-${dd} ${time}`;
                     }
 
                     const div = document.createElement('div');
@@ -6117,19 +6118,29 @@ const App = {
         document.getElementById('btn-search-date').onclick = () => {
             const dateVal = document.getElementById('search-date-input').value; // 格式本身就是 YYYY-MM-DD
             if (!dateVal) return;
+
+            const contact = STATE.contacts.find(c => c.id === STATE.currentContactId);
+            if (!contact) return;
             
             // 为了兼容你以前的旧记录，我们把 dateVal 转换成 Dec.14 格式作为备选项
             const dateObj = new Date(dateVal);
             const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
             const oldFormatStr = `${months[dateObj.getMonth()]}.${String(dateObj.getDate()).padStart(2, '0')}`;
 
-            const contact = STATE.contacts.find(c => c.id === STATE.currentContactId);
-            if (!contact) return;
 
-            // ★ 核心：同时匹配新格式 (2025-10-16) 或者 老格式 (Dec.14)
-            const targetIndex = contact.history.findIndex(msg => 
-                msg.timestamp && (msg.timestamp.includes(dateVal) || msg.timestamp.includes(oldFormatStr))
+
+            // ★★★ 核心修复：按优先级查找 ★★★
+            // 第1步：优先精确匹配新格式 (如 2027-04-01)
+            let targetIndex = contact.history.findIndex(msg => 
+                msg.timestamp && msg.timestamp.startsWith(dateVal)
             );
+
+            // 第2步：如果新格式没找到，才去历史记录里找对应的老格式 (如 Apr.01)
+            if (targetIndex === -1) {
+                targetIndex = contact.history.findIndex(msg => 
+                    msg.timestamp && msg.timestamp.startsWith(oldFormatStr)
+                );
+            }
 
             if (targetIndex !== -1) {
                 executeJump(targetIndex, contact);
@@ -6137,7 +6148,6 @@ const App = {
                 alert(`未找到 ${dateVal} 的聊天记录`);
             }
         };
-
 
         // 5. 执行跳转的核心方法 (加在代码某处)
         function executeJump(targetIndex, contact) {

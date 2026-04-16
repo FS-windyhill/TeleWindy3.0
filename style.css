@@ -4211,6 +4211,23 @@ body.custom-mode .comment-reply-prefix {
 
 
 
+body.custom-mode .search-btn {
+    background: var(--btn-color);
+    color: #ffffff;
+    border: 0.7px solid #a9a9a9;
+}
+
+body.custom-mode button#btn-close-search {
+    background: var(--btn-color);
+    color: #ffffff;
+    border: 0.7px solid #a9a9a9;
+}
+
+
+
+
+
+
 
 
 
@@ -5564,22 +5581,7 @@ body.dark-mode .load-next-btn, .back-to-normal-btn {
 
 
 /* ==================== 搜索聊天记录的弹窗 ==================== */
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.7);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-}
 
-.modal-overlay.hidden {
-    display: none;
-}
 
 .search-modal {
     max-width: 500px;
@@ -5637,9 +5639,7 @@ body.dark-mode .load-next-btn, .back-to-normal-btn {
 
 /* ==================== 搜索入口样式 ==================== */
 .search-entry-section {
-    padding: 5px 0px;
-    background: rgba(255, 255, 255, 0.03);
-    border-radius: 8px;
+    padding: 10px 0px 0px 0px;
     border-top: 1px dashed var(--btn-border-color);
     
     /* 确保内部是垂直排列 */
@@ -5682,12 +5682,24 @@ body.dark-mode .load-next-btn, .back-to-normal-btn {
     flex: 1;
 }
 
+
 button#btn-close-search {
     border: 0.7px solid var(--btn-border-color);
     background: var(--btn-color);
     color: #333;
 }
 
+body.dark-mode .search-btn {
+    background: var(--btn-color);
+    color: #ffffff;
+    border: 0.7px solid #a9a9a9;
+}
+
+body.dark-mode button#btn-close-search {
+    background: var(--btn-color);
+    color: #ffffff;
+    border: 0.7px solid #a9a9a9;
+}
 
 
 /*================== 搜索聊天记录结束 ================*/
