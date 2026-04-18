@@ -2311,7 +2311,7 @@ body.dark-mode button#modal-cancel {
 body.dark-mode .settings-content {
     flex: 1;
     overflow-y: auto;
-    background: rgba(30, 30, 30, 0.8);
+    background: rgba(30, 30, 30, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 }
@@ -2519,7 +2519,7 @@ body.dark-mode #del-preset-btn.icon-btn.danger{
     }
 
     body.dark-mode .settings-content {
-        background: rgba(30, 30, 30, 0.8);
+        background: rgba(30, 30, 30, 0.75);
         backdrop-filter: blur(8px);
         -webkit-backdrop-filter: blur(8px);
     }
@@ -3753,7 +3753,7 @@ body.custom-mode button#btn-save-m-settings.save-btn{
 
 
 body.custom-mode .m-modal-scroll-container{
-    background: rgba(30, 30, 30, 0.8);
+    background: rgba(30, 30, 30, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 }
@@ -3854,7 +3854,7 @@ body.custom-mode .contact-info p {
 }
 
 body.custom-mode .modal-scroll-container {
-    background: rgba(30, 30, 30, 0.8);
+    background: rgba(30, 30, 30, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 }
@@ -3887,14 +3887,14 @@ body.custom-mode button#modal-save {
 body.custom-mode .settings-content {
     flex: 1;
     overflow-y: auto;
-    background: rgba(30, 30, 30, 0.8);
+    background: rgba(30, 30, 30, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 }
 
 @media (max-width: 640px) {
     body.custom-mode .settings-content {
-        background: rgba(30, 30, 30, 0.8);
+        background: rgba(30, 30, 30, 0.75);
         backdrop-filter: blur(8px);
         -webkit-backdrop-filter: blur(8px);
     }
@@ -4661,7 +4661,7 @@ body.dark-mode #vision-model-name{
 
 
 body.dark-mode .modal-scroll-container{
-    background: rgba(30, 30, 30, 0.8);
+    background: rgba(30, 30, 30, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 
@@ -5429,7 +5429,7 @@ body.dark-mode .checkbox-item .char-name {
 }
 
 body.dark-mode .m-modal-scroll-container{
-    background: rgba(30, 30, 30, 0.8);
+    background: rgba(30, 30, 30, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 }
