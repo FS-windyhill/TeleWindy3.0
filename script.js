@@ -1823,6 +1823,7 @@ const UI = {
 
     // ★★★ 渲染世界书：条目列表（纯逻辑版）★★★
     renderWorldInfoList() {
+        console.trace('🔥 renderWorldInfoList 被调用');  // ← 加这行
         const container = this.els.wiList;
         if (!container) return;
         container.innerHTML = '';
