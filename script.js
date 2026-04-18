@@ -6186,6 +6186,51 @@ const App = {
 
 
 
+        /* key密码睁眼闭眼隐藏显示 ============*/
+        // ==========================================
+        // 插入到 App.bindEvents() 函数内部
+        // ==========================================
+
+        const apiKeyInput = document.getElementById('custom-api-key');
+        const toggleIcon = document.getElementById('toggle-api-key');
+
+        // 确保这两个元素在 DOM 中存在才绑定事件（防止报错）
+        if (apiKeyInput && toggleIcon) {
+            const iconClosed = toggleIcon.querySelector('.svg-eye-closed');
+            const iconOpen = toggleIcon.querySelector('.svg-eye-open');
+
+            toggleIcon.addEventListener('click', function() {
+                if (apiKeyInput.type === 'password') {
+                    // 切换为明文
+                    apiKeyInput.type = 'text';
+                    // 隐藏闭眼，显示睁眼
+                    iconClosed.style.display = 'none';
+                    iconOpen.style.display = 'inline-block';
+                } else {
+                    // 切换回密码
+                    apiKeyInput.type = 'password';
+                    // 显示闭眼，隐藏睁眼
+                    iconClosed.style.display = 'inline-block';
+                    iconOpen.style.display = 'none';
+                }
+            });
+        }
+
+
+
+        /* ===================key密码睁眼闭眼隐藏显示结束 ============*/
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     },

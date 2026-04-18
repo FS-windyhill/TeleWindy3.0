@@ -5823,8 +5823,43 @@ body.dark-mode button#btn-close-search {
 
 
 
+/* =========== key密码可见隐藏、睁眼闭眼 ===============*/ 
+/* 容器定位 */
+.input-wrapper {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+}
+
+/* 独立类名：只给带眼睛图标的输入框加右侧内边距，绝对不影响其他 setting-input */
+.setting-input.has-eye-icon {
+    padding-right: 38px !important; /* 留出空间，加 !important 确保覆盖默认值 */
+}
+
+/* 小眼睛容器样式 */
+.eye-icon {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: #888; /* 控制 SVG 默认颜色，前提是你的 SVG 里有 fill="currentColor" 或 stroke="currentColor" */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s; /* 悬浮颜色渐变动画 */
+}
 
 
+/* 控制 SVG 的统一大小，防止你下载的 SVG 太大撑破输入框 */
+.eye-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+
+
+/* =========== key密码可见隐藏、睁眼闭眼结束 ===============*/ 
 
 
 
