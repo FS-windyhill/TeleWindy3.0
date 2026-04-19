@@ -2613,7 +2613,7 @@ body.dark-mode #del-preset-btn.icon-btn.danger{
 body.dark-mode .menu-title {
     border-bottom: 1px solid rgba(255, 255, 255, 0.15); /* 标题下的分割线 */
     color: #ffffff;
-    background-color: #575757;
+    background-color: #3f3f3f63;
 }
 
 /* ======================= 按钮通用样式 ====================================*/
@@ -2668,7 +2668,7 @@ body.dark-mode .menu-title {
 
 /* 间隔条 (代替 HR) */
 body.dark-mode .menu-gap {
-    background-color: #565656; /* 浅灰色间隔带 */
+    background-color: #3f3f3f63;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -4079,7 +4079,7 @@ body.custom-mode .wi-btn.icon-only {
 body.custom-mode .menu-title {
     border-bottom: 1px solid rgba(255, 255, 255, 0.15);
     color: #ffffff;
-    background-color: #575757;
+    background-color: #3f3f3f63;
 }
 
 body.custom-mode .menu-panel button {
@@ -4102,7 +4102,7 @@ body.custom-mode .menu-panel button[data-action="delete"] {
 }
 
 body.custom-mode .menu-gap {
-    background-color: #565656;
+    background-color: #3f3f3f63;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
