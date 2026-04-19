@@ -4090,7 +4090,7 @@ body.custom-mode .menu-panel button {
     border: none;
     color: #ffffff;
     background: none;
-    font-size: 16px;
+    font-size: 0.9rem;
     cursor: pointer;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -5495,7 +5495,7 @@ body.dark-mode button#btn-save-m-settings.save-btn{
     width: 93%;
     height: 150px;
     padding: 10px;
-    font-size: 16px;
+    font-size: 0.9rem;
     border: 1px solid #ccc;
     border-radius: 8px;
     resize: none;
@@ -5506,7 +5506,7 @@ body.dark-mode button#btn-save-m-settings.save-btn{
     width: 93%;
     height: 150px;
     padding: 10px;
-    font-size: 16px;
+    font-size: 0.9rem;
     border: 1px solid #ccc;
     border-radius: 8px;
     resize: none;
