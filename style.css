@@ -8,10 +8,10 @@
     --message-border-ai: #fff;    
     --border-radius: 15px;
     --box-shadow: 0 3px 3px rgba(0,0,0,0.08);
-    --primary-btn-color: rgba(241, 241, 255, 0.8);
+    --primary-btn-color: rgba(241, 241, 255, 0.75);
     /* --primary-btn-text: rgb(255, 116, 192); */
     --primary-btn-text: rgb(135, 110, 255);
-    --btn-color: rgba(245, 245, 245, 0.8);
+    --btn-color: rgba(245, 245, 245, 0.75);
     --btn-border-color: #a9a9a9;
     --app-font-size: 16px;
 
@@ -746,7 +746,7 @@ body {
 
 body.dark-mode #modal-overlay {
 
-    background: rgba(115, 115, 115, 0.15); /* 背景黑一点 */
+    background: rgba(75, 75, 75, 0.15); /* 背景黑一点 */
 
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -769,7 +769,7 @@ body.dark-mode #modal-overlay {
     to { opacity: 1; transform: scale(1); }
 }
 
-.modal h2 { margin: 0 0 20px 0; color: var(--primary-color); font-size: 1.5em; text-align: center; }
+.modal h2 { margin: 0 0 20px 0; color: var(--primary-color); font-size: 1.3rem; text-align: center; }
 
 .input-group { margin-bottom: 15px; }
 .input-group label { display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: bold; margin-right:7px; }
@@ -978,7 +978,7 @@ body.dark-mode button#btn-close-m-write.cancel-btn{
 
 
 body.dark-mode .modal-overlay {
-    background: rgba(115, 115, 115, 0.15);
+    background: rgba(75, 75, 75, 0.15);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 
@@ -1425,7 +1425,7 @@ div#group-custom-url.input-group{
 
 .settings-title {
     text-align: center;
-    font-size: 1.5em;
+    font-size: 1.3rem;
     margin: 0 0 12px 0;
     color: #ffffff;
     font-weight: 600;
@@ -1443,7 +1443,7 @@ div#group-custom-url.input-group{
 /* ==================== 左侧竖排目录（像书签一样）================= */
 .settings-sidebar {
     width: 50px;                /* 手机上固定宽度 */
-    background: rgba(245,245,245,0.95);
+    background: rgba(245,245,245,0.5);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     display: flex;
@@ -1463,7 +1463,7 @@ div#group-custom-url.input-group{
     font-size: 15px;
     font-weight: 600;
     color: #666;
-    background-color: #ffffff33;
+    /* background-color: #ffffff33; */
     position: relative;
     transition: all 0.3s ease;
     user-select: none;
@@ -1471,7 +1471,7 @@ div#group-custom-url.input-group{
 
 /* 选中状态：彩色便签效果 */
 .tab-item.active {
-    background: #E3E3E3;
+    background: rgba(255, 255, 255, 0.5);
 }
 
 /* 悬停也有一点反馈 */
@@ -2033,7 +2033,7 @@ body.dark-mode {
     --message-border-user: rgba(255, 255, 255, 0.35);
     --message-border-ai: rgba(160, 160, 160, 0.5);
     
-    --btn-color: #3a3a3aab;          /* 按钮深色背景 */
+    --btn-color: #3a3a3a80;          /* 按钮深色背景 */
     --btn-border-color: #555555;   /* 按钮深色边框 */
     
     /* 修正字体颜色 */
@@ -2318,7 +2318,7 @@ body.dark-mode .settings-content {
 
 body.dark-mode .settings-sidebar {
     width: 50px;
-    background: rgba(31, 31, 31, 0.95);
+    background: rgba(31, 31, 31, 0.5);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     display: flex;
@@ -2330,14 +2330,14 @@ body.dark-mode .settings-sidebar {
 body.dark-mode .tab-item {
     writing-mode: vertical-rl;      /* 关键：文字竖排 */
     color: #cccccc;
-    background-color: #222222;
+    /* background-color: #222222; */
     transition: all 0.25s ease;
 }
 
 
 
 body.dark-mode .tab-item.active {
-    background: #3b3b3b;
+    background: rgba(30, 30, 30, 0.6);
     color: #fefefe;
 }
 
@@ -2486,7 +2486,7 @@ body.dark-mode #del-preset-btn.icon-btn.danger{
         height: 45px;
         padding: 0;
         flex-direction: row;
-        background: rgba(40, 40, 40, 0.95);
+        background: rgba(31, 31, 31, 0.5);
         backdrop-filter: blur(8px);
         -webkit-backdrop-filter: blur(8px);
     }
@@ -2497,14 +2497,14 @@ body.dark-mode #del-preset-btn.icon-btn.danger{
         width: 33.333%;
         padding: 16px 0;
         color: #cccccc;
-        background-color: #222222;
+        /* background-color: #222222; */
         font-weight: 500;
         font-size: 15px;
         transition: all 0.25s ease;
     }
 
     body.dark-mode .tab-item.active {
-        background: #333333 !important;
+        background: rgba(30, 30, 30, 0.6);
         color: #ffffff !important;
         font-weight: 600;
     }
@@ -2620,7 +2620,7 @@ body.dark-mode .menu-title {
 .menu-panel button {
     display: block;
     width: 100%;
-    padding: 10px 0;      /* 增加高度，方便点击 */
+    padding: 12px 7px;      /* 增加高度，方便点击 */
     font-size: 0.9rem;
     color: #333;
     background: transparent;
@@ -2630,6 +2630,7 @@ body.dark-mode .menu-title {
     transition: background 0.1s;
     outline: none;
     -webkit-tap-highlight-color: transparent;
+    text-align: center;
 }
 
 /* 按钮点击/悬停态 */
@@ -2770,7 +2771,7 @@ body.dark-mode .menu-panel button {
     border: none;
     color: #ffffff;
     background: none;
-    font-size: 16px;
+    font-size: 0.9rem;
     cursor: pointer;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1); /* 标题下的分割线 */
 }
@@ -3602,7 +3603,7 @@ body.custom-mode .msg-time {
 
 /* 3. 弹窗背景 (按需保留) */
 body.custom-mode .modal-overlay {
-    background: rgba(115, 115, 115, 0.15);
+    background: rgba(75, 75, 75, 0.15);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 
@@ -3610,7 +3611,7 @@ body.custom-mode .modal-overlay {
 
 body.custom-mode #modal-overlay {
 
-    background: rgba(115, 115, 115, 0.15); /* 背景黑一点 */
+    background: rgba(75, 75, 75, 0.15); /* 背景黑一点 */
 
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -3912,32 +3913,32 @@ body.custom-mode .settings-title, body.custom-mode .section-title, body.custom-m
 @media (max-width: 640px) {
     body.custom-mode .tab-item {
         color: #cccccc;
-        background-color: #222222;
+        /* background-color: #222222; */
 
     }
 }
 
 @media (max-width: 640px) {
     body.custom-mode .tab-item.active {
-        background: #333333 !important;
+        background: rgba(30, 30, 30, 0.6);
         color: #ffffff !important;
 
     }
 }
 
 body.custom-mode .tab-item.active {
-    background: #3b3b3b;
+    background: rgba(30, 30, 30, 0.6);
     color: #fefefe;
 }
 
 body.custom-mode .tab-item {
     color: #cccccc;
-    background-color: #222222;
+    /* background-color: #222222; */
     transition: all 0.25s ease;
 }
 
 body.custom-mode .settings-sidebar {
-    background: rgba(31, 31, 31, 0.95);
+    background: rgba(31, 31, 31, 0.5);
 }
 
 body.custom-mode .api-label, body.custom-mode .input-label, body.custom-mode .input-group label {
@@ -4252,7 +4253,7 @@ body.custom-mode .wi-checkbox-wrapper {
 
 
 body.custom-mode .tab-item.active {
-    background: #3b3b3b;
+    background: rgba(30, 30, 30, 0.6);
     color: #fefefe;
 }
 
@@ -4824,7 +4825,7 @@ body.dark-mode .tab-btn.active { color: #dedede;  }
 }
 
 .explore-list li {
-    background: rgba(255, 255, 255, 0.85); /* 半透明卡片 */
+    background: rgba(255, 255, 255, 0.7); /* 半透明卡片 */
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     border-radius: 10px;
