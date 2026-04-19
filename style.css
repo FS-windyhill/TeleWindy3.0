@@ -2045,7 +2045,7 @@ body.dark-mode {
 /* 设置弹窗在夜间模式下的背景色 */
 body.dark-mode .modal.glass-panel,
 body.dark-mode #contact-list-wrapper {
-    background: rgb(39 39 39 / 70%); /* 深灰色毛玻璃 */
+    background: rgb(39 39 39 / 60%); /* 深灰色毛玻璃 */
     /* border: 1px solid rgba(255, 255, 255, 0.5); */
 }
 
@@ -2081,7 +2081,7 @@ body.dark-mode .main-option {
 
 /* Header */
 body.dark-mode .app-header {
-    background: rgba(57, 57, 57, 0.8);
+    background: rgba(50, 50, 50, 0.8);
     border-bottom: 1px solid rgba(126, 126, 126, 0.7);
 }
 body.dark-mode .app-header h1 {
@@ -2093,7 +2093,7 @@ body.dark-mode .app-header p {
 
 /* Footer */
 body.dark-mode .app-footer {
-    background: rgba(79, 79, 79, 0.8);
+    background: rgba(60, 60, 60, 0.8);
     border-top: 1px solid rgba(126, 126, 126, 0.7);
 }
 
@@ -2311,7 +2311,7 @@ body.dark-mode button#modal-cancel {
 body.dark-mode .settings-content {
     flex: 1;
     overflow-y: auto;
-    background: rgba(30, 30, 30, 0.75);
+    background: rgba(20, 20, 20, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 }
@@ -2519,7 +2519,7 @@ body.dark-mode #del-preset-btn.icon-btn.danger{
     }
 
     body.dark-mode .settings-content {
-        background: rgba(30, 30, 30, 0.75);
+        background: rgba(20, 20, 20, 0.75);
         backdrop-filter: blur(8px);
         -webkit-backdrop-filter: blur(8px);
     }
@@ -3671,7 +3671,7 @@ body.custom-mode #main-cancel {
 
 body.custom-mode .tab-bar {
     border-top: 1px solid rgba(126, 126, 126, 0.7);
-    background: rgba(57, 57, 57, 0.8);
+    background: rgba(57, 57, 57, 0.5);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(10px) saturate(180%);
 }
@@ -3754,7 +3754,7 @@ body.custom-mode button#btn-save-m-settings.save-btn{
 
 
 body.custom-mode .m-modal-scroll-container{
-    background: rgba(30, 30, 30, 0.75);
+    background: rgba(20, 20, 20, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 }
@@ -3827,7 +3827,7 @@ body.custom-mode .action-divider {
 
 /* ===================== 联系人和聊天、 初版页面 ================*/
 body.custom-mode .app-header {
-    background: rgba(57, 57, 57, 0.8);
+    background: rgba(50, 50, 50, 0.8);
     border-bottom: 1px solid rgba(126, 126, 126, 0.7);
 }
 
@@ -3842,7 +3842,7 @@ body.custom-mode #contact-list-container {
 }
 
 body.custom-mode .modal.glass-panel, body.custom-mode #contact-list-wrapper {
-    background: rgb(39 39 39 / 70%);
+    background: rgb(39 39 39 / 60%);
     /* border: 1px solid rgba(255, 255, 255, 0.5); */
 }
 
@@ -3855,7 +3855,7 @@ body.custom-mode .contact-info p {
 }
 
 body.custom-mode .modal-scroll-container {
-    background: rgba(30, 30, 30, 0.75);
+    background: rgba(20, 20, 20, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 }
@@ -3888,14 +3888,14 @@ body.custom-mode button#modal-save {
 body.custom-mode .settings-content {
     flex: 1;
     overflow-y: auto;
-    background: rgba(30, 30, 30, 0.75);
+    background: rgba(20, 20, 20, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 }
 
 @media (max-width: 640px) {
     body.custom-mode .settings-content {
-        background: rgba(30, 30, 30, 0.75);
+        background: rgba(20, 20, 20, 0.75);
         backdrop-filter: blur(8px);
         -webkit-backdrop-filter: blur(8px);
     }
@@ -4127,7 +4127,7 @@ body.custom-mode .header-icon-btn.right, body.custom-mode .header-icon-btn.left 
 
 /* Footer */
 body.custom-mode .app-footer {
-    background: rgba(79, 79, 79, 0.8);
+    background: rgba(60, 60, 60, 0.8);
     border-top: 1px solid rgba(126, 126, 126, 0.7);
 }
 
@@ -4773,7 +4773,7 @@ select#vision-preset-select.setting-input{
     border-top: 1px solid rgba(255, 255, 255, 0.9);
     text-align: center;
     flex-shrink: 0;
-    background: rgba(255, 255, 255, 0.8);
+    /* background: rgba(255, 255, 255, 0.8); */
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(10px) saturate(180%);
 }
@@ -4799,7 +4799,7 @@ select#vision-preset-select.setting-input{
 body.dark-mode .tab-bar {
 
     border-top: 1px solid rgba(126, 126, 126, 0.7);
-    background: rgba(57, 57, 57, 0.8);
+    background: rgba(57, 57, 57, 0.5);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(10px) saturate(180%);
 }
@@ -5430,7 +5430,7 @@ body.dark-mode .checkbox-item .char-name {
 }
 
 body.dark-mode .m-modal-scroll-container{
-    background: rgba(30, 30, 30, 0.75);
+    background: rgba(20, 20, 20, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 }
