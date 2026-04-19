@@ -2753,7 +2753,7 @@ body.dark-mode .menu-gap {
  /* =======================弹窗黑夜模式====================================*/
 body.dark-mode .menu-panel {
     position: relative;               /* 改成 relative 或者 fixed 都行 */
-    background: rgba(103, 103, 103, 0.9);  /* 或者 #fff */
+    background: rgba(115, 115, 115, 0.6);  /* 或者 #fff */
     border-radius: 12px;
     min-width: 200px;
     z-index: 2;                       /* 关键：面板在遮罩上面！ */
@@ -4155,7 +4155,7 @@ body.custom-mode #reroll-footer-btn {
 
 body.custom-mode .menu-panel {
     position: relative;               /* 改成 relative 或者 fixed 都行 */
-    background: rgba(103, 103, 103, 0.9);  /* 或者 #fff */
+    background: rgba(115, 115, 115, 0.6);  /* 或者 #fff */
     border-radius: 12px;
     min-width: 200px;
     z-index: 2;                       /* 关键：面板在遮罩上面！ */
