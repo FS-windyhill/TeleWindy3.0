@@ -984,6 +984,14 @@ body.dark-mode .modal-overlay {
 
 }
 
+
+body.dark-mode .modal-overlay.moments-bg {
+    background: rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+
 .modal-overlay:not(.hidden) {
     opacity: 1;
     visibility: visible;
@@ -2068,7 +2076,7 @@ body.dark-mode .input-group label {
 body.dark-mode .setting-input,
 body.dark-mode #gist-id-input,
 body.dark-mode textarea {
-    background: #444;
+    background: #ffffff17;
     border-color: #9f9f9f;
     color: #fff;
 }
@@ -2176,8 +2184,8 @@ body.dark-mode #fetch-models-btn.fetch-models-btn:hover {
 /* 4. 弹窗里的普通输入框和文本域 (补全) */
 body.dark-mode .input-group input, 
 body.dark-mode .input-group textarea {
-    background: rgba(0, 0, 0, 0.25); /* 深色半透明底 */
-    border-color: #555;
+    background: #ffffff17; /* 深色半透明底 */
+    border-color: #9f9f9f;
     color: #fff;
 }
 body.dark-mode .input-group input:focus, 
@@ -2715,6 +2723,10 @@ body.dark-mode .menu-gap {
     unicode-bidi: isolate;
 }
 
+h3#modal-title.bianjixiaoxi{
+    color: #333;
+}
+
 #edit-msg-textarea {
     width: 93%; 
     height: 150px; 
@@ -2799,7 +2811,9 @@ body.dark-mode .menu-panel hr {
 /* ==========文字编辑=============== */
 
 body.dark-mode .edit-box {
-    background: #575757; width: 75%; max-width: 500px;
+    background: rgba(30, 30, 30, 0.65); width: 75%; max-width: 500px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     padding: 12px; border-radius: 12px;
     display: flex; flex-direction: column; gap: 10px;
     align-items: center;
@@ -3610,10 +3624,9 @@ body.custom-mode .modal-overlay {
 
 }
 
-body.custom-mode #modal-overlay {
 
-    background: rgba(75, 75, 75, 0.15); /* 背景黑一点 */
-
+body.custom-mode .modal-overlay.moments-bg {
+    background: rgba(0, 0, 0, 0.25);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 }
@@ -3869,13 +3882,19 @@ body.custom-mode button.small-btn {
 }
 
 body.custom-mode .input-group input, body.custom-mode .input-group textarea {
-    background: rgba(0, 0, 0, 0.25);
-    border-color: #555;
+    background: #ffffff17;
+    border-color: #9f9f9f;
     color: #fff;
 }
 
-body.custom-mode .setting-input, body.custom-mode #gist-id-input, body.custom-mode textarea {
-    background: #444;
+body.custom-mode .setting-input, body.custom-mode #gist-id-input {
+    background: #ffffff17;
+    border-color: #9f9f9f;
+    color: #fff;
+}
+
+body.custom-mode textarea {
+    background: #ffffff17;
     border-color: #9f9f9f;
     color: #fff;
 }
@@ -4109,7 +4128,9 @@ body.custom-mode .menu-gap {
 }
 
 body.custom-mode .edit-box {
-    background: #575757;
+    background: rgba(30, 30, 30, 0.65); width: 75%; max-width: 500px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
 
 }
 
@@ -5825,7 +5846,7 @@ body.dark-mode button#btn-close-search {
 
 
 
-/* =========== key密码可见隐藏、睁眼闭眼 ===============*/ 
+/* =========== key密码可见隐藏、小眼睛、睁眼闭眼 ===============*/ 
 /* 容器定位 */
 .input-wrapper {
     position: relative;

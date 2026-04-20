@@ -212,7 +212,7 @@
         </div>
 
         <!-- ================= 4. 心迹设置 Modal ================= -->
-        <div id="modal-moments-settings" class="modal-overlay hidden">
+        <div id="modal-moments-settings" class="modal-overlay moments-bg hidden">
             <div class="modal.extra-layout glass-panel">
                 <h3 id="modal-title">心迹设置</h3>
                 <div class="m-modal-scroll-container">
@@ -237,7 +237,7 @@
         </div>
 
         <!-- ================= 5. 撰写心迹 Modal ================= -->
-        <div id="modal-write-moment" class="modal-overlay hidden">
+        <div id="modal-write-moment" class="modal-overlay moments-bg hidden">
             <div class="edit-box glass-panel"> 
                 <!-- 保留原本的 ID，同时加上新的 class 保证样式 -->
                 <h3 id="modal-title" class="bianjixiaoxi">发布心迹</h3>
@@ -734,8 +734,24 @@
                         <!-- 视觉 API Key -->
                         <div class="main-option api-input-card">
                             <label class="api-label">视觉 API Key (留空则共用上方)</label>
-                            <input type="password" id="vision-api-key" class="setting-input" 
-                                placeholder="sk-..." autocomplete="off">
+                            <div class="input-wrapper"> <!-- 新增的包裹层 -->
+                                <!-- 注意：加上了 has-eye-icon 类 -->
+                                <input type="password" id="vision-api-key" class="setting-input has-eye-icon" 
+                                    placeholder="sk-..." autocomplete="off">
+                                
+                                <!-- 注意：ID 改成了 toggle-vision-api-key -->
+                                <span class="eye-icon" id="toggle-vision-api-key" title="显示/隐藏密钥">
+                                    <!-- 默认显示【闭眼】图标 (密码状态) -->
+                                    <span class="svg-eye-closed">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-off-icon lucide-eye-off"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>
+                                    </span>
+                                    
+                                    <!-- 默认隐藏【睁眼】图标 (明文状态) -->
+                                    <span class="svg-eye-open" style="display: none;">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-eye-icon lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>
+                                    </span>
+                                </span>
+                            </div>
                         </div>
 
                         <!-- 视觉 模型选择 (带拉取和测试) -->
@@ -1032,7 +1048,7 @@
         </div>
 
 <!-- ================= 7. 心迹评论操作菜单 Modal (新增删除按钮) ================= -->
-    <div id="modal-comment-actions" class="modal-overlay hidden">
+    <div id="modal-comment-actions" class="modal-overlay moments-bg hidden">
         <div class="action-sheet glass-panel">
             <button id="btn-c-action-reply" class="momment-btn">回复</button>
             <button id="btn-c-action-edit" class="momment-btn">编辑</button>

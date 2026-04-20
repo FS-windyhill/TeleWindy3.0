@@ -6256,42 +6256,44 @@ const App = {
 
 
 
-
-
-        /* key密码睁眼闭眼隐藏显示 ============*/
+/* ============== 小眼睛key密码睁眼闭眼隐藏显示（通用版） ============*/
         // ==========================================
         // 插入到 App.bindEvents() 函数内部
         // ==========================================
 
-        const apiKeyInput = document.getElementById('custom-api-key');
-        const toggleIcon = document.getElementById('toggle-api-key');
+        // 选中页面里所有的眼睛图标
+        const eyeIcons = document.querySelectorAll('.eye-icon');
 
-        // 确保这两个元素在 DOM 中存在才绑定事件（防止报错）
-        if (apiKeyInput && toggleIcon) {
-            const iconClosed = toggleIcon.querySelector('.svg-eye-closed');
-            const iconOpen = toggleIcon.querySelector('.svg-eye-open');
+        eyeIcons.forEach(icon => {
+            icon.addEventListener('click', function() {
+                // 找到当前被点击的图标所在的父容器
+                const wrapper = this.closest('.input-wrapper');
+                if (!wrapper) return;
 
-            toggleIcon.addEventListener('click', function() {
-                if (apiKeyInput.type === 'password') {
-                    // 切换为明文
-                    apiKeyInput.type = 'text';
-                    // 隐藏闭眼，显示睁眼
-                    iconClosed.style.display = 'none';
-                    iconOpen.style.display = 'inline-block';
-                } else {
-                    // 切换回密码
-                    apiKeyInput.type = 'password';
-                    // 显示闭眼，隐藏睁眼
-                    iconClosed.style.display = 'inline-block';
-                    iconOpen.style.display = 'none';
+                // 在父容器里找到对应的输入框和睁闭眼图标
+                const input = wrapper.querySelector('input');
+                const iconClosed = this.querySelector('.svg-eye-closed');
+                const iconOpen = this.querySelector('.svg-eye-open');
+
+                if (input && iconClosed && iconOpen) {
+                    if (input.type === 'password') {
+                        // 切换为明文
+                        input.type = 'text';
+                        // 隐藏闭眼，显示睁眼
+                        iconClosed.style.display = 'none';
+                        iconOpen.style.display = 'inline-block';
+                    } else {
+                        // 切换回密码
+                        input.type = 'password';
+                        // 显示闭眼，隐藏睁眼
+                        iconClosed.style.display = 'inline-block';
+                        iconOpen.style.display = 'none';
+                    }
                 }
             });
-        }
+        });
 
-
-
-        /* ===================key密码睁眼闭眼隐藏显示结束 ============*/
-
+        /* ===================小眼睛 key密码睁眼闭眼隐藏显示结束 ============*/
 
 
 
