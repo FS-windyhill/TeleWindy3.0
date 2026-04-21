@@ -1910,7 +1910,7 @@ div#group-custom-url.input-group{
         align-items: stretch; /* 让子元素占满宽度 */
         gap: 12px;
         padding: 14px;
-        /* background: rgba(255, 255, 255, 0.6); */
+        background: rgba(255, 255, 255, 0.6);
         color: #ffffff;
     }
 
@@ -2346,7 +2346,7 @@ body.dark-mode .tab-item {
 
 
 body.dark-mode .tab-item.active {
-    background: rgba(30, 30, 30, 0.65);
+    background: rgba(20, 20, 20, 0.7);
     color: #fefefe;
 }
 
@@ -2513,7 +2513,7 @@ body.dark-mode #del-preset-btn.icon-btn.danger{
     }
 
     body.dark-mode .tab-item.active {
-        background: rgba(30, 30, 30, 0.65);
+        background: rgba(20, 20, 20, 0.7);
         color: #ffffff !important;
         font-weight: 600;
     }
@@ -3940,16 +3940,23 @@ body.custom-mode .settings-title, body.custom-mode .section-title, body.custom-m
 
 @media (max-width: 640px) {
     body.custom-mode .tab-item.active {
-        background: rgba(30, 30, 30, 0.65);
+        background: rgba(20, 20, 20, 0.7);
         color: #ffffff !important;
 
     }
 }
 
 body.custom-mode .tab-item.active {
-    background: rgba(30, 30, 30, 0.65);
+    background: rgba(20, 20, 20, 0.7);
     color: #fefefe;
 }
+
+/* 悬停也有一点反馈 */
+body.custom-mode .tab-item:hover:not(.active) {
+    background: rgba(255,255,255,0.03);
+    color: #fefefe;
+}
+
 
 body.custom-mode .tab-item {
     color: #a0a0a0;
@@ -4271,19 +4278,6 @@ body.custom-mode .wi-checkbox-wrapper {
     user-select: none;
 }
 
-
-
-
-body.custom-mode .tab-item.active {
-    background: rgba(30, 30, 30, 0.65);
-    color: #fefefe;
-}
-
-/* 悬停也有一点反馈 */
-body.custom-mode .tab-item:hover:not(.active) {
-    background: rgba(255,255,255,0.03);
-    color: #fefefe;
-}
 
 
 body.custom-mode .history-btn {
