@@ -2110,7 +2110,7 @@ body.dark-mode .app-footer {
 body.dark-mode #task-input {
     border: 1px solid #9d9d9dcc; /* 稍微加深一点 */
     color: #ffffff;
-    background: rgba(0, 0, 0, 0.25) !important; /* 深色半透明背景 */
+    background: rgba(60, 60, 60, 0.25) !important /* 深色半透明背景 */
 }
 body.dark-mode #task-input:focus {
     border: 2px solid #9d9d9d;
@@ -4157,7 +4157,7 @@ body.custom-mode .app-footer {
 body.custom-mode #task-input {
     border: 1px solid #9d9d9dcc; /* 稍微加深一点 */
     color: #ffffff;
-    background: rgba(0, 0, 0, 0.25) !important; /* 深色半透明背景 */
+    background: rgba(60, 60, 60, 0.25) !important; /* 深色半透明背景 */
 }
 body.custom-mode #task-input:focus {
     border: 2px solid #9d9d9d;
