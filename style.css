@@ -2076,7 +2076,7 @@ body.dark-mode .input-group label {
 body.dark-mode .setting-input,
 body.dark-mode #gist-id-input,
 body.dark-mode textarea {
-    background: #ffffff17;
+    background: #303030cf;
     border-color: #9f9f9f;
     color: #fff;
 }
@@ -2184,7 +2184,7 @@ body.dark-mode #fetch-models-btn.fetch-models-btn:hover {
 /* 4. 弹窗里的普通输入框和文本域 (补全) */
 body.dark-mode .input-group input, 
 body.dark-mode .input-group textarea {
-    background: #ffffff17; /* 深色半透明底 */
+    background: #303030cf; /* 深色半透明底 */
     border-color: #9f9f9f;
     color: #fff;
 }
@@ -3882,19 +3882,19 @@ body.custom-mode button.small-btn {
 }
 
 body.custom-mode .input-group input, body.custom-mode .input-group textarea {
-    background: #ffffff17;
+    background: #303030cf;
     border-color: #9f9f9f;
     color: #fff;
 }
 
 body.custom-mode .setting-input, body.custom-mode #gist-id-input {
-    background: #ffffff17;
+    background: #303030cf;
     border-color: #9f9f9f;
     color: #fff;
 }
 
 body.custom-mode textarea {
-    background: #ffffff17;
+    background: #303030cf;
     border-color: #9f9f9f;
     color: #fff;
 }
