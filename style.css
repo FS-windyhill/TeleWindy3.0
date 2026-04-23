@@ -2076,13 +2076,13 @@ body.dark-mode .input-group label {
 body.dark-mode .setting-input,
 body.dark-mode #gist-id-input,
 body.dark-mode textarea {
-    background: #303030cf;
+    background: rgba(30, 30, 30, 0.5);
     border-color: #9f9f9f;
     color: #fff;
 }
 
 body.dark-mode .main-option {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.08);
     color: #ddd;
 }
 
@@ -2161,8 +2161,8 @@ body.dark-mode .api-label2 {
 
 /* 2. GitHub Gist 卡片背景变深 */
 body.dark-mode .gist-sync-card {
-    background: rgba(255, 255, 255, 0.05); /* 极淡的透明白，显出高级灰 */
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.08); /* 极淡的透明白，显出高级灰 */
+    /* border: 1px solid rgba(255, 255, 255, 0.1); */
     box-shadow: none; /* 去掉阴影，扁平化 */
 }
 
@@ -2184,7 +2184,7 @@ body.dark-mode #fetch-models-btn.fetch-models-btn:hover {
 /* 4. 弹窗里的普通输入框和文本域 (补全) */
 body.dark-mode .input-group input, 
 body.dark-mode .input-group textarea {
-    background: #303030cf; /* 深色半透明底 */
+    background: rgba(30, 30, 30, 0.5); /* 深色半透明底 */
     border-color: #9f9f9f;
     color: #fff;
 }
@@ -3882,19 +3882,19 @@ body.custom-mode button.small-btn {
 }
 
 body.custom-mode .input-group input, body.custom-mode .input-group textarea {
-    background: #303030cf;
+    background: rgba(30, 30, 30, 0.5);
     border-color: #9f9f9f;
     color: #fff;
 }
 
 body.custom-mode .setting-input, body.custom-mode #gist-id-input {
-    background: #303030cf;
+    background: rgba(30, 30, 30, 0.5);
     border-color: #9f9f9f;
     color: #fff;
 }
 
 body.custom-mode textarea {
-    background: #303030cf;
+    background: rgba(30, 30, 30, 0.5);
     border-color: #9f9f9f;
     color: #fff;
 }
@@ -3922,7 +3922,7 @@ body.custom-mode .settings-content {
 }
 
 body.custom-mode .main-option {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.08);
     color: #ddd;
 }
 
@@ -4037,8 +4037,8 @@ body.custom-mode button#main-confirm {
 }
 
 body.custom-mode .gist-sync-card {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.08);
+    /* border: 1px solid rgba(255, 255, 255, 0.1); */
     box-shadow: none;
 }
 
