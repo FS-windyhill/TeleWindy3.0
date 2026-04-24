@@ -227,7 +227,7 @@ body {
     align-items: flex-start;
     gap: 3px; /* 稍微加大一点间距更好看 */
     margin-bottom: 11px;
-    max-width: 95%;
+    max-width: 96%;
     
     /* ★★★ 关键修改：默认必须是可见的！去掉 opacity: 0 ★★★ */
     opacity: 1; 
@@ -3132,7 +3132,8 @@ body.dark-mode .sb-battery-icon::after {
 }
 
 
-/* ==========markdown============== */
+/* ==========markdown开始============== */
+
 /* 针对消息气泡内的 HTML 标签样式重置 */
 .message-bubble b, 
 .message-bubble strong {
@@ -3202,21 +3203,23 @@ body.dark-mode .sb-battery-icon::after {
 }
 
 /* 解决 <ul> 标签在气泡内引入的多余间距问题 */
+/* 解决 <ul> 标签在气泡内引入的多余间距问题 */
 .message-bubble ul {
     display: block;
-    list-style-type: disc;
+    list-style-type: disc; /* 无序列表保持圆点 */
     margin-block-start: 0px;
     margin-block-end: 0px;
     padding-inline-start: 1em;
     unicode-bidi: isolate;
 }
 
+/* 修复有序列表变成圆点的问题 */
 .message-bubble ol {
     display: block;
-    list-style-type: disc;
+    list-style-type: decimal; /* <---- 改成 decimal，恢复 1. 2. 3. */
     margin-block-start: 0px;
     margin-block-end: 0px;
-    padding-inline-start: 1em;
+    padding-inline-start: 1.2em; /* 稍微大一点，因为数字比圆点占位宽，1em可能有点挤 */
     unicode-bidi: isolate;
 }
 
@@ -3286,6 +3289,10 @@ body.dark-mode .sb-battery-icon::after {
     animation: lineExpand 0.5s ease-out forwards; 
     transform-origin: center; /* 从中间向两边展开 */
 }
+
+
+/* ============ markdown结束 ===============*/
+
 
 /*===============API测试===================*/
 /* 状态颜色 */
