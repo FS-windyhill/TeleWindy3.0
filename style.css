@@ -772,13 +772,13 @@ body.dark-mode #modal-overlay {
 .modal h2 { margin: 0 0 20px 0; color: var(--primary-color); font-size: 1.3rem; text-align: center; }
 
 .input-group { margin-bottom: 15px; }
-.input-group label { display: block; font-size: 12px; color: #666; margin-bottom: 5px; font-weight: bold; margin-right:7px; }
+.input-group label { display: block; font-size: 0.7rem; color: #666; margin-bottom: 5px; font-weight: bold; margin-right:7px; }
 .input-group input, .input-group textarea {
     width: 100%;
     padding: 10px;
     border: 1px solid #ddd;
     border-radius: 10px;
-    font-size: 14px;
+    font-size: 0.9rem;
     background: #f9f9f9;
     box-sizing: border-box; /* 关键 */
 }
@@ -788,8 +788,10 @@ body.dark-mode #modal-overlay {
     display: flex;
     justify-content: center;    /* 水平居中 */
     align-items: center;        /* 如果还需要垂直居中也加上这一行 */
-    gap: 10px;                  /* 如果有多个按钮，控制间距 */
+    gap: 12px;                  /* 如果有多个按钮，控制间距 */
     flex: 1;
+    margin-top: 15px;
+
 }
 
 /* 让 modal-buttons 里的所有 button 元素都去占据可用空间 */
@@ -802,7 +804,7 @@ body.dark-mode #modal-overlay {
     padding: 9px 50px;
     gap: 20px;
     border-radius: 8px;
-    font-size: 15px;
+    font-size: 0.9rem;
     cursor: pointer;
 }
 
@@ -831,6 +833,9 @@ body.dark-mode button#btn-close-m-write.cancel-btn{
     background: var(--btn-color);
     color: #333;
 
+    padding: 12px 28px;
+    font-size: 0.9rem;
+
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 }
@@ -839,6 +844,9 @@ body.dark-mode button#btn-close-m-write.cancel-btn{
     background: var(--primary-btn-color); 
     color: var(--primary-btn-text); 
     border:0.7px solid var(--primary-btn-text);
+
+    padding: 12px 28px;
+    font-size: 0.9rem;
 
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -871,7 +879,7 @@ body.dark-mode button#btn-close-m-write.cancel-btn{
 }
 .danger-btn {
     background: #ff3a3a; color: #ffffff; border: 1px solid rgb(255, 0, 0);
-    padding: 5px; border-radius: 8px; font-size: 13px; cursor: pointer; width: 100%;
+    padding: 5px; border-radius: 8px; font-size: 0.9rem; cursor: pointer; width: 100%;
 }
 .danger-btn.outline {
     background: rgba(255, 80, 80, 0.1);
@@ -926,7 +934,7 @@ body.dark-mode button#btn-close-m-write.cancel-btn{
 /* 原有的 .small-btn 基础样式保留你的设定即可 */
 .small-btn {
     padding: 10px 15px;
-    font-size: 13px;
+    font-size: 0.9rem;
     font-weight: 500;
     background: var(--btn-color);
     color: rgb(82, 82, 82);
@@ -1050,7 +1058,7 @@ body.dark-mode .modal-overlay.moments-bg {
     border-radius: 14px;
     cursor: pointer;
     transition: all 0.2s ease;
-    font-size: 15px;
+    font-size: 0.8rem;
     color: #444;
 }
 
@@ -1468,7 +1476,7 @@ div#group-custom-url.input-group{
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    font-size: 15px;
+    font-size: 0.85rem;
     font-weight: 600;
     color: #666666ad;
     /* background-color: #ffffff33; */
@@ -1986,7 +1994,7 @@ div#group-custom-url.input-group{
     .setting-input, 
     .wi-textarea,
     input[type="text"] {
-        font-size: 16px !important; /* iOS小于16px会强制放大页面 */
+        font-size: 0.9rem; /* iOS小于16px会强制放大页面 */
     }
 
     /* 编辑区底部按钮：固定在底部或加大 */
@@ -2426,7 +2434,7 @@ body.dark-mode .wi-btn.primary {
 /* 删除按钮 */
 body.dark-mode .danger-btn {
     background: #ff3a3a; color: #ffffff; border: 1px solid rgb(255, 0, 0);
-    padding: 5px; border-radius: 8px; font-size: 13px; cursor: pointer; width: 100%;
+    padding: 5px; border-radius: 8px; cursor: pointer; width: 100%;
 }
 body.dark-mode .danger-btn.outline {
     background: rgba(255, 33, 33, 0.3);
@@ -2508,7 +2516,7 @@ body.dark-mode #del-preset-btn.icon-btn.danger{
         color: #a0a0a0;
         /* background-color: #222222; */
         font-weight: 500;
-        font-size: 15px;
+        font-size: 0.85rem;
         transition: all 0.25s ease;
     }
 
@@ -3420,7 +3428,7 @@ body.dark-mode .api-btn.primary {
 .history-btn {
     /* --- 从 .small-btn 复制过来的基础样式 --- */
     padding: 10px 15px;  /* 我把左右内边距调小了点，因为按钮多了图标，62px可能太宽了 */
-    font-size: 13px;     /* 字体稍微调大一点点，更清晰 */
+    font-size: 0.9rem;     /* 字体稍微调大一点点，更清晰 */
     font-weight: 500;    /* 字体加粗一点点 */
     background: var(--btn-color);
     color: #666;        /* 深灰色字体 */
@@ -3562,7 +3570,7 @@ body.dark-mode .history-btn {
 textarea.setting-input.code-editor {
     height: 200px;
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace; /* 等宽字体适合写代码 */
-    font-size: 13px;
+    font-size: 0.8rem;
     line-height: 1.5;
     resize: vertical; /* 允许垂直拖动调整大小 */
 }
@@ -4589,7 +4597,7 @@ body.dark-mode #upload-image-btn{
     border: 1px solid #ddd;
     border-radius: 10px;
     background: #f9f9f9;
-    font-size: 14px;
+    font-size: 0.9rem;
     box-sizing: border-box;
     transition: all 0.2s ease;
 }
