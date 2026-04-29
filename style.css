@@ -778,7 +778,7 @@ body.dark-mode #modal-overlay {
     padding: 10px;
     border: 1px solid #ddd;
     border-radius: 10px;
-    font-size: 1rem;
+    font-size: 0.95rem;
     background: #f9f9f9;
     box-sizing: border-box; /* 关键 */
 }
@@ -1058,7 +1058,7 @@ body.dark-mode .modal-overlay.moments-bg {
     border-radius: 14px;
     cursor: pointer;
     transition: all 0.2s ease;
-    font-size: 0.8rem;
+    font-size: 0.9rem;
     color: #444;
 }
 
@@ -1476,7 +1476,7 @@ div#group-custom-url.input-group{
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     font-weight: 600;
     color: #666666ad;
     /* background-color: #ffffff33; */
@@ -1994,7 +1994,7 @@ div#group-custom-url.input-group{
     .setting-input, 
     .wi-textarea,
     input[type="text"] {
-        font-size: 0.9rem; /* iOS小于16px会强制放大页面 */
+        font-size: 0.95rem; /* iOS小于16px会强制放大页面 */
     }
 
     /* 编辑区底部按钮：固定在底部或加大 */
@@ -2516,7 +2516,7 @@ body.dark-mode #del-preset-btn.icon-btn.danger{
         color: #a0a0a0;
         /* background-color: #222222; */
         font-weight: 500;
-        font-size: 0.85rem;
+        font-size: 0.9rem;
         transition: all 0.25s ease;
     }
 
