@@ -3,10 +3,10 @@
     --background-color: #ffffff;
     --text-color: #333;
     /* --message-bg-user: #def9b0b8; */
-    --message-bg-user: hsl(var(--theme-color-h) calc(var(--theme-color-s) * 0.97) var(--theme-color-l) / 0.55);
+    --message-bg-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.97), 100%) var(--theme-color-l) / 0.55);
     --message-bg-ai: #ffffffaa;
     /* --message-border-user: #e1fdb99e; */
-    --message-border-user: hsl(var(--theme-color-h) calc(var(--theme-color-s) * 0.95) calc(var(--theme-color-l) * 1.05) / 0.88);
+    --message-border-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.95), 100%) clamp(0%, calc(var(--theme-color-l) * 1.05), 100%) / 0.88);
     --message-border-ai: #fff;    
     --border-radius: 15px;
     --box-shadow: 0 3px 3px rgba(0,0,0,0.08);
@@ -2700,9 +2700,9 @@ body.dark-mode {
     
     /* 将你的 night- 变量映射回标准变量名，这样原来的气泡样式就能自动变色 */
     --text-color: #ffffff; 
-    --message-bg-user: hsl(var(--theme-color-h) calc(var(--theme-color-s) * 0.92) var(--theme-color-l) / 0.7);
+    --message-bg-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.92), 100%) var(--theme-color-l) / 0.7);
     --message-bg-ai: #3030309e;
-    --message-border-user: hsl(var(--theme-color-h) calc(var(--theme-color-s) * 0.9) calc(var(--theme-color-l) * 1.1) / 0.9);
+    --message-border-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.9), 100%) clamp(0%, calc(var(--theme-color-l) * 1.1), 100%) / 0.9);
     --message-border-ai: rgba(160, 160, 160, 0.35);
     
     --btn-color: #3a3a3a80;          /* 按钮深色背景 */
