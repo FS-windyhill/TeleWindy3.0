@@ -8915,8 +8915,8 @@ body.dark-mode .countdown-tabs::before {
     padding: 4px;
     margin: 15px 15px 0px 15px;
     border-radius: 999px;
-    background: rgba(126, 143, 166, 0.14);
-    border: 1px solid rgba(245, 245, 245, 0.5);
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgb(172 172 172 / 50%);
 
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -8941,7 +8941,7 @@ body.dark-mode .countdown-tabs::before {
 .countdown-modal-tab.active {
     background: rgb(230 230 230 / 70%);
     color: #252525;
-    border: 1px solid rgb(255 255 255);
+    border: 1px solid rgba(127, 142, 164, 0.22);
 }
 
 .countdown-tab.active {
@@ -9347,9 +9347,11 @@ body.dark-mode .todo-month-option {
 }
 
 .todo-date-chip.active {
-    background: #7fa6d8;
-    color: #fff;
-    border-color: #7fa6d8;
+
+    background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.7);
+    color: #ffffff;
+    border-color: #888;
+
 }
 
 .todo-date-chip.active .week {
@@ -9363,7 +9365,7 @@ body.dark-mode .todo-date-chip {
 }
 
 body.dark-mode .todo-date-chip.active {
-    background: #836affcc;
+    background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.7);
     color: #ffffff;
     border-color: #acacac;
 }
