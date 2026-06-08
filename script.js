@@ -11842,15 +11842,19 @@ window.importData = (input) => {
                     : null
             );
 
-            const estimatedSize = jsonStr.length * 2;
-            const limit = 5 * 1024 * 1024;
+            // 这里按备份文件体积判断是否提醒；IndexedDB 没有 localStorage 的 5MB 硬限制。
+            // jsonStr.length * 2 只是 JS 字符串内存粗估，留给调试大文件导入时参考。
+            const backupSize = file.size || new Blob([jsonStr]).size;
+            const estimatedMemorySize = jsonStr.length * 2;
+            const largeBackupLimit = 30 * 1024 * 1024;
 
-            console.log(`预计内存占用: ${(estimatedSize / 1024 / 1024).toFixed(2)} MB`);
+            console.log(`备份文件体积: ${(backupSize / 1024 / 1024).toFixed(2)} MB`);
+            console.log(`预计 JS 字符串内存占用: ${(estimatedMemorySize / 1024 / 1024).toFixed(2)} MB`);
 
-            if (estimatedSize > limit) {
+            if (backupSize > largeBackupLimit) {
                 alert(
-                    `【风险提示】\n备份数据约 ${(estimatedSize / 1024 / 1024).toFixed(2)} MB。\n` +
-                    `如果是手机浏览器，可能恢复失败。\n\n将继续尝试导入。`
+                    `【提示】\n备份文件约 ${(backupSize / 1024 / 1024).toFixed(2)} MB。\n` +
+                    `数据会写入 IndexedDB，但手机浏览器仍可能因为内存或存储配额恢复失败。\n\n将继续尝试导入。`
                 );
             }
 
