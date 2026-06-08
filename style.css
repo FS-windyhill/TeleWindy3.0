@@ -2700,7 +2700,7 @@ body.dark-mode {
     
     /* 将你的 night- 变量映射回标准变量名，这样原来的气泡样式就能自动变色 */
     --text-color: #ffffff; 
-    --message-bg-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.92), 100%) var(--theme-color-l) / 0.7);
+    --message-bg-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.92), 100%) var(--theme-color-l) / 0.6);
     --message-bg-ai: #3030309e;
     --message-border-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.9), 100%) clamp(0%, calc(var(--theme-color-l) * 1.1), 100%) / 0.9);
     --message-border-ai: rgba(160, 160, 160, 0.35);
@@ -4459,10 +4459,10 @@ body.custom-mode {
     
     /* 将你的 night- 变量映射回标准变量名，这样原来的气泡样式就能自动变色 */
     --text-color: #ffffff; 
-    --message-bg-user: #ffffff5e;
+    --message-bg-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.92), 100%) var(--theme-color-l) / 0.6);
     --message-bg-ai: #3030309e;
-    --message-border-user: rgba(255, 255, 255, 0.35);
-    --message-border-ai: rgba(160, 160, 160, 0.5);
+    --message-border-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.9), 100%) clamp(0%, calc(var(--theme-color-l) * 1.1), 100%) / 0.9);
+    --message-border-ai: rgba(160, 160, 160, 0.35);
     
     --btn-color: #3a3a3a80;          /* 按钮深色背景 */
     --btn-border-color: #555555;   /* 按钮深色边框 */
