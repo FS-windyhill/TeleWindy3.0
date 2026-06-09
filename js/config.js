@@ -15,6 +15,7 @@
 //     - TODO_PLAN_INJECT_ENABLED: TO DO 计划是否注入 AI system prompt
 //     - COUNTDOWN_INJECT_ENABLED: 倒数日 / 正数日是否注入 AI system prompt
 //     - CHARACTER_SCHEDULE_API_PRESET_INDEX: 角色日程生成使用的 API 预设索引
+//     - AGENT_SKILL_ROUTER_ENABLED / AGENT_SKILL_ROUTER_API_PRESET_INDEX: Agent 工具路由器开关和模型预设
 //     - MOMENTS_SETTINGS: 心迹页面默认设置
 //   - SYSTEM_PROMPT: 默认系统提示词
 // =========================================
@@ -56,6 +57,8 @@ const CONFIG = {
         TODO_PLAN_INJECT_ENABLED: false,
         COUNTDOWN_INJECT_ENABLED: false,
         CHARACTER_SCHEDULE_API_PRESET_INDEX: -1,
+        AGENT_SKILL_ROUTER_ENABLED: false,
+        AGENT_SKILL_ROUTER_API_PRESET_INDEX: -1,
         WALLPAPER: 'assets/images/wallpaper.jpg',
         USER_AVATAR: 'assets/images/user.jpg',
         GIST_TOKEN: '',

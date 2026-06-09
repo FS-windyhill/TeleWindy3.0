@@ -5768,6 +5768,53 @@ body.custom-mode .cache-optimization-row {
 }
 
 
+body.custom-mode .agent-card {
+    background: rgb(31 31 31 / 30%);
+    border: 1px solid rgba(245, 245, 245, 0.3);
+}
+
+body.custom-mode .agent-card-icon {
+    background: rgba(255, 255, 255, 0.14);
+    color: #f5f5f5;
+}
+
+body.custom-mode .agent-card-name {
+    color: #f4f4f4;
+}
+
+body.custom-mode .agent-card-status {
+    color: #bcbcbc;
+}
+
+body.custom-mode .agent-api-select {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(245, 245, 245, 0.35);
+    color: #f4f4f4;
+}
+
+body.custom-mode .app-top-notice {
+    background: rgba(36, 36, 36, 0.3);
+    border-color: rgba(245, 245, 245, 0.28);
+    color: #f4f4f4;
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.34);
+}
+
+body.custom-mode .app-top-notice-action {
+    color: #f4f4f4;
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(245, 245, 245, 0.34);
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -8859,6 +8906,274 @@ body.dark-mode .character-schedule-api-select {
     }
 }
 /* ★★★★★ 角色日程 END：探索页总控 + 单角色详情 ★★★★★ */
+
+/* ★★★★★ Agent START：探索页工具路由设置 ★★★★★ */
+.agent-page {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding: 12px 15px 92px;
+    box-sizing: border-box;
+}
+
+.agent-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.agent-card {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    min-height: 58px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    box-shadow: 0 8px 24px rgba(70, 83, 105, 0.08);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+body.dark-mode .agent-card {
+    background: rgb(31 31 31 / 30%);
+    border: 1px solid rgba(245, 245, 245, 0.3);
+}
+
+.agent-card-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.75);
+    color: #3b4150;
+}
+
+.agent-card-icon svg {
+    width: 24px;
+    height: 24px;
+}
+
+body.dark-mode .agent-card-icon {
+    background: rgba(255, 255, 255, 0.14);
+    color: #f5f5f5;
+}
+
+.agent-card-info {
+    min-width: 0;
+}
+
+.agent-card-name {
+    color: #2f3440;
+    font-size: 0.98rem;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.agent-card-status {
+    margin-top: 3px;
+    color: #8a93a3;
+    font-size: 0.82rem;
+}
+
+body.dark-mode .agent-card-name {
+    color: #f4f4f4;
+}
+
+body.dark-mode .agent-card-status {
+    color: #bcbcbc;
+}
+
+.agent-menu-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 48px;
+    height: 28px;
+    flex: 0 0 auto;
+}
+
+.agent-menu-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.agent-switch-slider {
+    position: absolute;
+    inset: 0;
+    cursor: pointer;
+    border-radius: 999px;
+    background: rgba(150, 150, 150, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.agent-switch-slider::before {
+    content: "";
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    left: 2px;
+    top: 2px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.18);
+    transition: transform 0.2s ease;
+}
+
+.agent-menu-switch input:checked + .agent-switch-slider {
+    background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.72);
+    border-color: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.85);
+}
+
+.agent-menu-switch input:checked + .agent-switch-slider::before {
+    transform: translateX(20px);
+}
+
+.agent-modal-bg {
+    background: rgba(0, 0, 0, 0.28);
+}
+
+.agent-settings-box {
+    width: min(92vw, 430px);
+    max-height: 86vh;
+    display: flex;
+    flex-direction: column;
+    padding: 18px 18px 20px;
+    border-radius: 12px;
+}
+
+.agent-settings-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 6px 2px 12px;
+}
+
+.agent-api-select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid rgba(150, 150, 150, 0.45);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.72);
+    color: #333;
+    font-size: 0.95rem;
+}
+
+body.dark-mode .agent-api-select {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(245, 245, 245, 0.35);
+    color: #f4f4f4;
+}
+/* ★★★★★ Agent END：探索页工具路由设置 ★★★★★ */
+
+/* ★★★★★ 顶部通知 START：Agent 状态 / 通用消息条 ★★★★★ */
+.app-top-notice-stack {
+    position: fixed;
+    top: calc(env(safe-area-inset-top, 0px) + 12px);
+    left: 50%;
+    z-index: 5000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: min(92vw, 560px);
+    pointer-events: none;
+    transform: translateX(-50%);
+}
+
+.app-top-notice {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 42px;
+    padding: 9px 10px 9px 14px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.78);
+    box-shadow: 0 12px 34px rgba(42, 52, 72, 0.18);
+    color: #2f3440;
+    opacity: 0;
+    pointer-events: auto;
+    touch-action: pan-y;
+    user-select: none;
+    transform: translateY(-12px);
+    transition: opacity 0.22s ease, transform 0.22s ease;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.app-top-notice.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.app-top-notice.dragging {
+    transition: none;
+}
+
+.app-top-notice.hide-up {
+    opacity: 0;
+    transform: translateY(-26px);
+}
+
+.app-top-notice.pending {
+    border-color: rgba(218, 175, 88, 0.55);
+}
+
+.app-top-notice.failure {
+    border-color: rgba(190, 92, 92, 0.48);
+}
+
+.app-top-notice-text {
+    min-width: 0;
+    font-size: 0.9rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.app-top-notice-action {
+    min-width: 58px;
+    height: 30px;
+    padding: 0 12px;
+    border: 1px solid hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.65);
+    border-radius: 999px;
+    background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.16);
+    color: #2f3440;
+    font-size: 0.86rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.app-top-notice-action:active {
+    transform: scale(0.98);
+}
+
+body.dark-mode .app-top-notice {
+    background: rgba(36, 36, 36, 0.3);
+    border-color: rgba(245, 245, 245, 0.28);
+    color: #f4f4f4;
+    box-shadow: 0 12px 34px rgba(0, 0, 0, 0.34);
+}
+
+body.dark-mode .app-top-notice-action {
+    color: #f4f4f4;
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(245, 245, 245, 0.34);
+}
+/* ★★★★★ 顶部通知 END：Agent 状态 / 通用消息条 ★★★★★ */
 
 .countdown-tabs {
     position: relative;

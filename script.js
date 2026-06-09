@@ -1,4 +1,4 @@
-// =========================================
+﻿// =========================================
 // 项目分区总览（部分独立服务已拆到 js/ 目录）
 //
 // 3.5. WORLD SENSE (世界感知)
@@ -2140,11 +2140,15 @@ const UI = {
         const viewCountdown = document.getElementById('view-countdown');
         const viewCharacterSchedule = document.getElementById('view-character-schedule');
         const viewCharacterScheduleDetail = document.getElementById('view-character-schedule-detail');
+        const viewAgent = document.getElementById('view-agent');
         const viewAsyncBackend = document.getElementById('view-async-backend');
         const viewWorldbook = document.getElementById('view-worldbook');
         const viewWorldSense = document.getElementById('view-world-sense');
         const viewMoments = document.getElementById('view-moments');
         const bottomTabBar = document.getElementById('bottom-tab-bar');
+
+        // ★ Agent 是后加的探索子页：旧分支里没有逐个隐藏它，这里先统一收口。
+        if (viewAgent && viewName !== 'agent') viewAgent.style.display = 'none';
 
         // 先清除底栏的全部高亮状态
         document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -2252,6 +2256,33 @@ const UI = {
             if (bottomTabBar) bottomTabBar.style.display = 'flex';
             const tabExplore = document.getElementById('tab-explore');
             if (tabExplore) tabExplore.classList.add('active');
+
+        } else if (viewName === 'agent') {
+            // ===========================
+            // Agent：工具路由器配置页
+            // ===========================
+            if (typeof App !== 'undefined' && typeof App.rememberReturnView === 'function') {
+                App.rememberReturnView('agent', STATE.currentMainView || 'explore');
+            }
+            appContainer.classList.remove('in-chat-mode');
+
+            if (viewDesktop) viewDesktop.style.display = 'none';
+            if (viewContact) viewContact.style.display = 'none';
+            if (viewExplore) viewExplore.style.display = 'none';
+            if (viewTodoPlan) viewTodoPlan.style.display = 'none';
+            if (viewCountdown) viewCountdown.style.display = 'none';
+            if (viewCharacterSchedule) viewCharacterSchedule.style.display = 'none';
+            if (viewCharacterScheduleDetail) viewCharacterScheduleDetail.style.display = 'none';
+            if (viewAgent) viewAgent.style.display = 'flex';
+            if (viewAsyncBackend) viewAsyncBackend.style.display = 'none';
+            if (viewWorldbook) viewWorldbook.style.display = 'none';
+            if (viewWorldSense) viewWorldSense.style.display = 'none';
+            if (viewMoments) viewMoments.style.display = 'none';
+
+            if (bottomTabBar) bottomTabBar.style.display = 'none';
+            if (typeof App !== 'undefined' && typeof App.renderAgentList === 'function') {
+                App.renderAgentList();
+            }
 
         } else if (viewName === 'async-backend') {
             if (typeof App !== 'undefined' && typeof App.rememberReturnView === 'function') {
@@ -4499,6 +4530,93 @@ const App = {
         this.syncTodoContextToggles();
     },
 
+    // ★★★★★ 顶部通知 START：可复用的轻量状态汇报条 ★★★★★
+    showTopNotice(message, options = {}) {
+        let stack = document.getElementById('app-top-notice-stack');
+        if (!stack) {
+            stack = document.createElement('div');
+            stack.id = 'app-top-notice-stack';
+            stack.className = 'app-top-notice-stack';
+            document.body.appendChild(stack);
+        }
+
+        const notice = document.createElement('div');
+        notice.className = `app-top-notice ${options.type || ''}`.trim();
+        let startY = 0;
+        let currentY = 0;
+        let dragging = false;
+        let closed = false;
+
+        const closeNotice = () => {
+            if (closed) return;
+            closed = true;
+            notice.classList.remove('show');
+            notice.classList.add('hide-up');
+            setTimeout(() => notice.remove(), 240);
+        };
+
+        const text = document.createElement('div');
+        text.className = 'app-top-notice-text';
+        text.textContent = message || '';
+        notice.appendChild(text);
+
+        if (options.actionLabel && typeof options.onAction === 'function') {
+            const actionBtn = document.createElement('button');
+            actionBtn.type = 'button';
+            actionBtn.className = 'app-top-notice-action';
+            actionBtn.textContent = options.actionLabel;
+            actionBtn.addEventListener('click', async () => {
+                try {
+                    await options.onAction();
+                } catch (error) {
+                    console.warn('[Notice] action failed:', error);
+                }
+                closeNotice();
+            });
+            notice.appendChild(actionBtn);
+        }
+
+        notice.addEventListener('pointerdown', (event) => {
+            if (event.target.closest('.app-top-notice-action')) return;
+            dragging = true;
+            startY = event.clientY;
+            currentY = 0;
+            notice.classList.add('dragging');
+            notice.setPointerCapture?.(event.pointerId);
+        });
+
+        notice.addEventListener('pointermove', (event) => {
+            if (!dragging) return;
+            currentY = Math.min(0, event.clientY - startY);
+            notice.style.transform = `translateY(${currentY}px)`;
+            notice.style.opacity = String(Math.max(0.35, 1 + currentY / 90));
+        });
+
+        const finishDrag = (event) => {
+            if (!dragging) return;
+            dragging = false;
+            notice.classList.remove('dragging');
+            notice.releasePointerCapture?.(event.pointerId);
+            notice.style.transform = '';
+            notice.style.opacity = '';
+            if (currentY < -32) closeNotice();
+        };
+
+        notice.addEventListener('pointerup', finishDrag);
+        notice.addEventListener('pointercancel', finishDrag);
+
+        stack.appendChild(notice);
+        requestAnimationFrame(() => notice.classList.add('show'));
+
+        const timeout = Number.isFinite(options.timeout) ? options.timeout : 20000;
+        if (timeout > 0) {
+            setTimeout(closeNotice, timeout);
+        }
+
+        return notice;
+    },
+    // ★★★★★ 顶部通知 END：可复用的轻量状态汇报条 ★★★★★
+
     escapeHtml(text) {
         return String(text ?? '')
             .replace(/&/g, '&amp;')
@@ -5120,6 +5238,295 @@ const App = {
         }
     },
     // ★★★★★ 探索 TO DO / 倒数日 END：页面逻辑层 ★★★★★
+
+    // ★★★★★ Agent START：TODO 管理设置 + skill 执行 ★★★★★
+    renderAgentList() {
+        const list = document.getElementById('agent-list');
+        if (!list) return;
+
+        const enabled = STATE.settings.AGENT_SKILL_ROUTER_ENABLED === true;
+        const presetIndex = Number.isInteger(STATE.settings.AGENT_SKILL_ROUTER_API_PRESET_INDEX)
+            ? STATE.settings.AGENT_SKILL_ROUTER_API_PRESET_INDEX
+            : -1;
+        const preset = presetIndex >= 0 ? (STATE.settings.API_PRESETS || [])[presetIndex] : null;
+        const modelText = preset ? `模型：${preset.name || '未命名预设'}` : '模型：跟随全局默认设置';
+
+        list.innerHTML = `
+            <div class="agent-card ${enabled ? 'enabled' : ''}" data-agent="todo-manager">
+                <div class="agent-card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 3v4"></path><path d="M12 17v4"></path><path d="M4.22 6.22l2.83 2.83"></path><path d="M16.95 16.95l2.83 2.83"></path><path d="M3 12h4"></path><path d="M17 12h4"></path><circle cx="12" cy="12" r="4"></circle>
+                    </svg>
+                </div>
+                <div class="agent-card-info">
+                    <div class="agent-card-name">TODO 管理</div>
+                    <div class="agent-card-status">${this.escapeHtml(enabled ? `已启用 · ${modelText}` : `未启用 · ${modelText}`)}</div>
+                </div>
+                <label class="agent-menu-switch" title="启用/关闭 TODO 管理">
+                    <input type="checkbox" id="agent-todo-manager-toggle" ${enabled ? 'checked' : ''}>
+                    <span class="agent-switch-slider"></span>
+                </label>
+            </div>
+        `;
+    },
+
+    async toggleAgentTodoManagerEnabled(enabled) {
+        STATE.settings.AGENT_SKILL_ROUTER_ENABLED = !!enabled;
+        await Storage.saveSettings();
+        this.renderAgentList();
+    },
+
+    openAgentSettings() {
+        const modal = document.getElementById('modal-agent-settings');
+        const apiSelect = document.getElementById('agent-todo-api-preset');
+        if (!modal || !apiSelect) return;
+
+        const currentIndex = Number.isInteger(STATE.settings.AGENT_SKILL_ROUTER_API_PRESET_INDEX)
+            ? STATE.settings.AGENT_SKILL_ROUTER_API_PRESET_INDEX
+            : -1;
+
+        apiSelect.innerHTML = '<option value="-1">-- 跟随全局默认 --</option>';
+        (STATE.settings.API_PRESETS || []).forEach((preset, index) => {
+            const opt = document.createElement('option');
+            opt.value = index;
+            const modelName = preset.model || '未知模型';
+            opt.textContent = `${preset.name} (${modelName})`;
+            if (index === currentIndex) opt.selected = true;
+            apiSelect.appendChild(opt);
+        });
+
+        modal.classList.remove('hidden');
+    },
+
+    async saveAgentSettings() {
+        const modal = document.getElementById('modal-agent-settings');
+        const apiSelect = document.getElementById('agent-todo-api-preset');
+        const presetIndex = parseInt(apiSelect?.value ?? '-1', 10);
+
+        STATE.settings.AGENT_SKILL_ROUTER_API_PRESET_INDEX = Number.isFinite(presetIndex) ? presetIndex : -1;
+        await Storage.saveSettings();
+        modal?.classList.add('hidden');
+        this.renderAgentList();
+    },
+
+    buildAgentTodoManagerRequestSettings() {
+        const settings = {
+            API_URL: STATE.settings.API_URL,
+            API_KEY: STATE.settings.API_KEY,
+            MODEL: STATE.settings.MODEL,
+            ASYNC_BACKEND_ENABLED: false,
+            MAX_TOKENS: 1200,
+            TEMPERATURE: 0.1,
+            CONTEXT_LIMIT: 4,
+            CUSTOM_REQUEST_BODY_JSON: STATE.settings.CUSTOM_REQUEST_BODY_JSON || ''
+        };
+
+        const presetIndex = STATE.settings.AGENT_SKILL_ROUTER_API_PRESET_INDEX;
+        if (typeof presetIndex === 'number' && presetIndex >= 0) {
+            const preset = (STATE.settings.API_PRESETS || [])[presetIndex];
+            if (preset) {
+                console.log(`[Agent] TODO 管理使用预设: ${preset.name}`);
+                settings.API_URL = preset.url;
+                settings.API_KEY = preset.key;
+                settings.MODEL = preset.model;
+                settings.CUSTOM_REQUEST_BODY_JSON = preset.extra_body_json || '';
+                if (preset.max_tokens !== undefined && preset.max_tokens !== '') settings.MAX_TOKENS = Number(preset.max_tokens);
+                if (preset.temperature !== undefined && preset.temperature !== '') settings.TEMPERATURE = Number(preset.temperature);
+            }
+        }
+
+        return settings;
+    },
+
+    async runAgentTodoManager(contact, userText) {
+        if (STATE.settings.AGENT_SKILL_ROUTER_ENABLED !== true) return null;
+        if (typeof AgentTodoManager === 'undefined') return null;
+        if (!userText) return null;
+
+        const settings = this.buildAgentTodoManagerRequestSettings();
+        if (!settings.API_URL || !settings.API_KEY || !settings.MODEL) {
+            this.showTopNotice('TODO 管理 API 配置缺失，请在 Agent 设置里选择可用模型。', { type: 'failure' });
+            return null;
+        }
+
+        console.groupCollapsed(`[Agent][TODO管理] ${contact?.name || '未命名角色'} · ${new Date().toLocaleTimeString()}`);
+        console.log('[Agent][TODO管理] 用户文字:', userText);
+        console.log('[Agent][TODO管理] 请求模型:', {
+            url: settings.API_URL,
+            model: settings.MODEL,
+            presetIndex: STATE.settings.AGENT_SKILL_ROUTER_API_PRESET_INDEX
+        });
+
+        try {
+            const messages = AgentTodoManager.buildRouterMessages(contact, userText, new Date());
+            console.log('[Agent][TODO管理] Router messages:', messages);
+            const rawText = await API.chat(messages, settings);
+            console.log('[Agent][TODO管理] 原始返回:', rawText);
+            const routerResult = AgentTodoManager.parseRouterResult(rawText);
+            console.log('[Agent][TODO管理] 解析结果:', routerResult);
+            const result = await this.executeAgentTodoSkill(routerResult, contact);
+            console.log('[Agent][TODO管理] 执行结果:', result || '无操作');
+            return result;
+        } catch (error) {
+            console.warn('[Agent] TODO 管理 failed:', error);
+            this.showTopNotice('TODO 管理没有执行：模型返回格式不正确。', { type: 'failure' });
+            return {
+                prompt: [
+                    'TODO 管理本轮没有执行任何 TODO 操作。',
+                    '原因：路由结果解析失败或模型返回格式不正确。',
+                    '请不要提到系统、工具或 JSON，只需要自然继续回应用户。'
+                ].join('\n')
+            };
+        } finally {
+            console.groupEnd();
+        }
+    },
+
+    async executeAgentTodoSkill(routerResult, contact) {
+        if (!routerResult || routerResult.intent === 'NONE') return null;
+        if (routerResult.intent === 'CREATE_TODO') return this.createTodoFromAgent(routerResult.todo || {}, contact);
+        if (routerResult.intent === 'UPDATE_TODO') return this.updateTodoFromAgent(routerResult, contact);
+
+        if (routerResult.intent === 'ASK_CONFIRMATION') {
+            const message = AgentTodoManager.cleanText(
+                routerResult.confirmation?.message || '这个操作需要你再确认一下，我先不自动执行。',
+                140
+            );
+            this.showTopNotice(`${contact?.name || 'TODO 管理'} 没有执行：${message}`, { type: 'pending' });
+            return null;
+        }
+
+        return null;
+    },
+
+    async createTodoFromAgent(todo, contact) {
+        const text = AgentTodoManager.cleanText(todo.text || todo.title || '', 120);
+        const dateKey = AgentTodoManager.isDateKey(todo.dateKey) ? todo.dateKey : AgentTodoManager.getTodayKey();
+        const startTime = AgentTodoManager.isTimeValue(todo.startTime) ? todo.startTime : '';
+        const endTime = AgentTodoManager.isTimeValue(todo.endTime) ? todo.endTime : '';
+
+        if (!text) {
+            return {
+                prompt: [
+                    '本轮没有创建 TODO。',
+                    '原因：用户没有给出明确的待办内容。',
+                    '请自然询问用户要记录什么。'
+                ].join('\n')
+            };
+        }
+
+        const item = {
+            id: 'todo_' + Date.now(),
+            text,
+            dateKey,
+            done: false,
+            cancelled: false,
+            createdAt: Date.now()
+        };
+        if (startTime && endTime && startTime < endTime) {
+            item.startTime = startTime;
+            item.endTime = endTime;
+        }
+
+        STATE.todoPlans.push(item);
+        await Storage.saveTodoPlans();
+        this.renderTodoPlans();
+        this.renderDesktop();
+        this.showTopNotice(`${contact?.name || 'TODO 管理'} 添加了 TODO：${item.text}`, {
+            actionLabel: '撤销',
+            onAction: async () => {
+                STATE.todoPlans = STATE.todoPlans.filter(todoItem => todoItem.id !== item.id);
+                await Storage.saveTodoPlans();
+                this.renderTodoPlans();
+                this.renderDesktop();
+                console.log('[Agent][TODO管理] 已撤销创建:', item);
+            }
+        });
+
+        const timeText = item.startTime && item.endTime ? `，时间 ${item.startTime}-${item.endTime}` : '';
+        return {
+            prompt: [
+                `你已经为用户添加了一项 TODO：${item.text}。`,
+                `日期：${item.dateKey}${timeText}。`,
+                '请自然回应，不要提到系统、工具或 JSON。'
+            ].join('\n')
+        };
+    },
+
+    async updateTodoFromAgent(routerResult, contact) {
+        const candidates = AgentTodoManager.findTodoCandidates(routerResult);
+        if (candidates.length !== 1) {
+            const hint = candidates.length > 1
+                ? `找到了 ${candidates.length} 条可能的 TODO，需要用户确认是哪一条。`
+                : '没有找到唯一匹配的 TODO，需要用户说得更具体。';
+            this.showTopNotice(`${contact?.name || 'TODO 管理'} 没有修改 TODO：${hint}`, { type: 'pending' });
+            return null;
+        }
+
+        const item = candidates[0];
+        const update = routerResult.update || {};
+        const status = String(update.status || update.action || '').trim().toLowerCase();
+        const newText = AgentTodoManager.cleanText(update.newText || '', 120);
+        const newDateKey = AgentTodoManager.isDateKey(update.newDateKey) ? update.newDateKey : '';
+        const startTime = AgentTodoManager.isTimeValue(update.startTime) ? update.startTime : '';
+        const endTime = AgentTodoManager.isTimeValue(update.endTime) ? update.endTime : '';
+        const oldLabel = AgentTodoManager.formatTodoLabel(item);
+        const oldSnapshot = { ...item };
+        let actionText = '更新了 TODO';
+
+        if (['cancelled', 'canceled', 'cancel', 'deleted', 'delete', 'removed', 'remove'].includes(status)) {
+            item.cancelled = true;
+            item.done = false;
+            actionText = '取消了 TODO';
+        } else if (status === 'done' || status === 'completed') {
+            item.done = true;
+            item.cancelled = false;
+            actionText = '完成了 TODO';
+        } else if (status === 'active' || status === 'undone') {
+            item.done = false;
+            item.cancelled = false;
+            actionText = '恢复了 TODO';
+        }
+
+        if (newText) item.text = newText;
+        if (newDateKey) {
+            item.dateKey = newDateKey;
+            actionText = actionText === '更新了 TODO' ? '调整了 TODO 日期' : actionText;
+        }
+        if (startTime && endTime && startTime < endTime) {
+            item.startTime = startTime;
+            item.endTime = endTime;
+            actionText = actionText === '更新了 TODO' ? '调整了 TODO 时间' : actionText;
+        }
+        item.updatedAt = Date.now();
+
+        await Storage.saveTodoPlans();
+        this.renderTodoPlans();
+        this.renderDesktop();
+        this.showTopNotice(`${contact?.name || 'TODO 管理'} ${actionText}：${item.text}`, {
+            actionLabel: '撤销',
+            onAction: async () => {
+                const current = STATE.todoPlans.find(todoItem => todoItem.id === oldSnapshot.id);
+                if (!current) return;
+                Object.keys(current).forEach(key => delete current[key]);
+                Object.assign(current, oldSnapshot);
+                await Storage.saveTodoPlans();
+                this.renderTodoPlans();
+                this.renderDesktop();
+                console.log('[Agent][TODO管理] 已撤销更新:', oldSnapshot);
+            }
+        });
+
+        return {
+            prompt: [
+                `你已经为用户${actionText}。`,
+                `原内容：${oldLabel}`,
+                `现在：${AgentTodoManager.formatTodoLabel(item)}${item.done ? '，状态为已完成' : ''}${item.cancelled ? '，状态为已取消' : ''}。`,
+                '请自然回应，不要提到系统、工具或 JSON。'
+            ].join('\n')
+        };
+    },
+    // ★★★★★ Agent END：TODO 管理设置 + skill 执行 ★★★★★
 
     // ★★★★★ 角色日程 START：页面逻辑层 ★★★★★
     // 角色日程是“探索页玩法”，但生成结果会作为角色自己的动态状态注入聊天。
@@ -6303,6 +6710,14 @@ const App = {
         await Storage.saveContacts();
         UI.setLoading(true, contact.id);
 
+        // ★★★★★ Agent：TODO 管理前置执行 START ★★★★★
+        // 只要本轮有用户文字，就让 worker model 判断 TODO skill；图片内容本身先不参与路由。
+        // Reroll 不触发，避免重新生成时重复创建/修改 TODO。
+        const agentRuntimeResult = (!isReroll && userText && typeof AgentRuntime !== 'undefined')
+            ? await AgentRuntime.runBeforeMainModel({ app: this, contact, userText })
+            : null;
+        // ★★★★★ Agent：TODO 管理前置执行 END ★★★★★
+
         // ============================================================
         // 3. 构建发送给 AI 的上下文 (缝合怪逻辑)
         // ============================================================
@@ -6393,6 +6808,7 @@ const App = {
         // 空白 System Prompt 不塞空壳 system 消息，避免请求体里出现无意义的 content: ""。
         const messagesToSend = [];
         const routineDynamicContextPrompts = [];
+        const volatileDynamicContextPrompts = [];
         let triggeredWorldInfoPrompt = '';
         if ((systemPrompt || '').trim()) {
             messagesToSend.push({ role: 'system', content: systemPrompt });
@@ -6430,6 +6846,14 @@ const App = {
             routineDynamicContextPrompts.push(todoContextPrompt);
         }
         // ★★★★★ 探索 TO DO / 倒数日：收集本轮动态背景 END ★★★★★
+
+        // ★★★★★ Agent：skill 执行结果回注 START ★★★★★
+        // 主模型只看到自然语言摘要，不能看到 worker model 的原始 JSON。
+        // Agent 刚刚改变了前端状态，属于“本轮即时信息”，和触发世界书一样按缓存优化策略分流。
+        if (agentRuntimeResult && Array.isArray(agentRuntimeResult.prompts)) {
+            volatileDynamicContextPrompts.push(...agentRuntimeResult.prompts);
+        }
+        // ★★★★★ Agent：skill 执行结果回注 END ★★★★★
 
         // ★★★★★ 角色日程：收集本轮动态背景 START ★★★★★
         // 日程只在该角色开启时注入；如果今天还没生成，会优先补当前角色这一份。
@@ -6474,6 +6898,7 @@ const App = {
         let dynamicContextContent = '';
         const allDynamicContextPrompts = [
             ...routineDynamicContextPrompts,
+            ...volatileDynamicContextPrompts,
             triggeredWorldInfoPrompt
         ].filter(Boolean);
         const systemDynamicContextPrompts = requestSettings.DYNAMIC_CONTEXT_INSERT_MODE === 'user'
@@ -6483,8 +6908,8 @@ const App = {
                 : allDynamicContextPrompts;
         const userDynamicContextPrompts = requestSettings.DYNAMIC_CONTEXT_INSERT_MODE === 'user'
             ? allDynamicContextPrompts
-            : requestSettings.DYNAMIC_CONTEXT_INSERT_MODE === 'auto' && triggeredWorldInfoPrompt
-                ? [triggeredWorldInfoPrompt]
+            : requestSettings.DYNAMIC_CONTEXT_INSERT_MODE === 'auto'
+                ? [triggeredWorldInfoPrompt, ...volatileDynamicContextPrompts].filter(Boolean)
                 : [];
 
         if (allDynamicContextPrompts.length) {
@@ -9996,6 +10421,40 @@ const App = {
             console.warn("未找到 #explore-moments-btn 元素");
         }
 
+        // ★★★★★ Agent：探索页入口 + 设置事件 START ★★★★★
+        document.getElementById('explore-agent-btn')?.addEventListener('click', () => {
+            safeSwitchView('agent');
+        });
+
+        document.getElementById('agent-back-btn')?.addEventListener('click', () => {
+            safeSwitchView(this.getReturnView('agent', 'explore'));
+        });
+
+        document.getElementById('agent-settings-btn')?.addEventListener('click', () => {
+            this.openAgentSettings();
+        });
+
+        document.getElementById('agent-list')?.addEventListener('change', (event) => {
+            const input = event.target.closest('#agent-todo-manager-toggle');
+            if (!input) return;
+            this.toggleAgentTodoManagerEnabled(input.checked === true);
+        });
+
+        document.getElementById('agent-settings-cancel-btn')?.addEventListener('click', () => {
+            document.getElementById('modal-agent-settings')?.classList.add('hidden');
+        });
+
+        document.getElementById('agent-settings-save-btn')?.addEventListener('click', () => {
+            this.saveAgentSettings();
+        });
+
+        document.getElementById('modal-agent-settings')?.addEventListener('click', (event) => {
+            if (event.target === document.getElementById('modal-agent-settings')) {
+                document.getElementById('modal-agent-settings')?.classList.add('hidden');
+            }
+        });
+        // ★★★★★ Agent：探索页入口 + 设置事件 END ★★★★★
+
         // ================= 3. 探索页面 -> 返回桌面 =================
         // ================= 后台回复接收：探索页 -> 后台回复接收页面 =================
         document.getElementById('explore-async-backend-btn')?.addEventListener('click', (event) => {
@@ -12002,3 +12461,4 @@ function cleanMarkdownForCopy(text) {
 
 // 启动应用
 window.onload = () => App.init();
+
