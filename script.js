@@ -4567,6 +4567,27 @@ const App = {
     },
 
     // ★★★★★ 顶部通知 START：可复用的轻量状态汇报条 ★★★★★
+    getTopNoticeTargetHandler(options = {}) {
+        if (typeof options.onClick === 'function') return options.onClick;
+        if (!options.targetView) return null;
+
+        // ★ 通知路由：
+        // 简单功能只需要 targetView；以后如果要跳到某条心迹/某个 TODO，
+        // 可以继续在 options 里带 targetId，或直接传 onClick 做精确定位。
+        return () => {
+            if (typeof UI !== 'undefined' && typeof UI.switchView === 'function') {
+                UI.switchView(options.targetView);
+            }
+        };
+    },
+
+    showTodoTopNotice(message, options = {}) {
+        return this.showTopNotice(message, {
+            ...options,
+            targetView: options.targetView || 'todo-plan'
+        });
+    },
+
     showTopNotice(message, options = {}) {
         let stack = document.getElementById('app-top-notice-stack');
         if (!stack) {
@@ -4578,9 +4599,16 @@ const App = {
 
         const notice = document.createElement('div');
         notice.className = `app-top-notice ${options.type || ''}`.trim();
+        const targetHandler = this.getTopNoticeTargetHandler(options);
+        if (targetHandler) {
+            notice.classList.add('clickable');
+            notice.setAttribute('role', 'button');
+            notice.tabIndex = 0;
+        }
         let startY = 0;
         let currentY = 0;
         let dragging = false;
+        let didDrag = false;
         let closed = false;
 
         const closeNotice = () => {
@@ -4615,6 +4643,7 @@ const App = {
         notice.addEventListener('pointerdown', (event) => {
             if (event.target.closest('.app-top-notice-action')) return;
             dragging = true;
+            didDrag = false;
             startY = event.clientY;
             currentY = 0;
             notice.classList.add('dragging');
@@ -4624,6 +4653,7 @@ const App = {
         notice.addEventListener('pointermove', (event) => {
             if (!dragging) return;
             currentY = Math.min(0, event.clientY - startY);
+            if (Math.abs(currentY) > 6) didDrag = true;
             notice.style.transform = `translateY(${currentY}px)`;
             notice.style.opacity = String(Math.max(0.35, 1 + currentY / 90));
         });
@@ -4640,6 +4670,32 @@ const App = {
 
         notice.addEventListener('pointerup', finishDrag);
         notice.addEventListener('pointercancel', finishDrag);
+        notice.addEventListener('click', async (event) => {
+            if (!targetHandler || closed) return;
+            if (event.target.closest('.app-top-notice-action')) return;
+            if (didDrag) {
+                didDrag = false;
+                return;
+            }
+
+            try {
+                await targetHandler(event);
+            } catch (error) {
+                console.warn('[Notice] navigation failed:', error);
+            }
+            closeNotice();
+        });
+        notice.addEventListener('keydown', async (event) => {
+            if (!targetHandler || closed) return;
+            if (!['Enter', ' '].includes(event.key)) return;
+            event.preventDefault();
+            try {
+                await targetHandler(event);
+            } catch (error) {
+                console.warn('[Notice] keyboard navigation failed:', error);
+            }
+            closeNotice();
+        });
 
         stack.appendChild(notice);
         requestAnimationFrame(() => notice.classList.add('show'));
@@ -5420,7 +5476,7 @@ const App = {
 
         const settings = this.buildAgentTodoManagerRequestSettings();
         if (!settings.API_URL || !settings.API_KEY || !settings.MODEL) {
-            this.showTopNotice('TODO 管理 API 配置缺失，请在 Agent 设置里选择可用模型。', { type: 'failure' });
+            this.showTodoTopNotice('TODO 管理 API 配置缺失，请在 Agent 设置里选择可用模型。', { type: 'failure' });
             return null;
         }
 
@@ -5444,7 +5500,7 @@ const App = {
             return result;
         } catch (error) {
             console.warn('[Agent] TODO 管理 failed:', error);
-            this.showTopNotice('TODO 管理没有执行：模型返回格式不正确。', { type: 'failure' });
+            this.showTodoTopNotice('TODO 管理没有执行：模型返回格式不正确。', { type: 'failure' });
             return {
                 prompt: [
                     'TODO 管理本轮没有执行任何 TODO 操作。',
@@ -5467,7 +5523,7 @@ const App = {
                 routerResult.confirmation?.message || '这个操作需要你再确认一下，我先不自动执行。',
                 140
             );
-            this.showTopNotice(`${contact?.name || 'TODO 管理'} 没有执行：${message}`, { type: 'pending' });
+            this.showTodoTopNotice(`${contact?.name || 'TODO 管理'} 没有执行：${message}`, { type: 'pending' });
             return null;
         }
 
@@ -5515,7 +5571,7 @@ const App = {
         const items = this.normalizeAgentTodoCreates(routerResult);
 
         if (!items.length) {
-            this.showTopNotice(`${contact?.name || 'TODO 管理'} 没有添加：同一天已有相同 TODO`, { type: 'pending' });
+            this.showTodoTopNotice(`${contact?.name || 'TODO 管理'} 没有添加：同一天已有相同 TODO`, { type: 'pending' });
             return {
                 prompt: ''
             };
@@ -5528,7 +5584,7 @@ const App = {
         const noticeText = items.length === 1
             ? `添加了 TODO：${items[0].text}`
             : `添加了 ${items.length} 个 TODO`;
-        this.showTopNotice(`${contact?.name || 'TODO 管理'} ${noticeText}`, {
+        this.showTodoTopNotice(`${contact?.name || 'TODO 管理'} ${noticeText}`, {
             actionLabel: '撤销',
             onAction: async () => {
                 const ids = new Set(items.map(item => item.id));
@@ -5558,7 +5614,7 @@ const App = {
             const hint = candidates.length > 1
                 ? `找到了 ${candidates.length} 条可能的 TODO，需要用户确认是哪一条。`
                 : '没有找到唯一匹配的 TODO，需要用户说得更具体。';
-            this.showTopNotice(`${contact?.name || 'TODO 管理'} 没有修改 TODO：${hint}`, { type: 'pending' });
+            this.showTodoTopNotice(`${contact?.name || 'TODO 管理'} 没有修改 TODO：${hint}`, { type: 'pending' });
             return null;
         }
 
@@ -5602,7 +5658,7 @@ const App = {
         await Storage.saveTodoPlans();
         this.renderTodoPlans();
         this.renderDesktop();
-        this.showTopNotice(`${contact?.name || 'TODO 管理'} ${actionText}：${item.text}`, {
+        this.showTodoTopNotice(`${contact?.name || 'TODO 管理'} ${actionText}：${item.text}`, {
             actionLabel: '撤销',
             onAction: async () => {
                 const current = STATE.todoPlans.find(todoItem => todoItem.id === oldSnapshot.id);
@@ -5683,7 +5739,7 @@ const App = {
         if (action.type === 'todo.create' && action.item) {
             if (STATE.todoPlans.some(item => item.id === action.item.id)) return false;
             STATE.todoPlans.push({ ...action.item });
-            this.showTopNotice(`${contact?.name || 'TODO 管理'} ${action.notice || `添加了 TODO：${action.item.text}`}`, {
+            this.showTodoTopNotice(`${contact?.name || 'TODO 管理'} ${action.notice || `添加了 TODO：${action.item.text}`}`, {
                 actionLabel: '撤销',
                 onAction: async () => {
                     STATE.todoPlans = STATE.todoPlans.filter(item => item.id !== action.item.id);
@@ -5700,7 +5756,7 @@ const App = {
             const newItems = action.items.filter(item => item && item.id && !STATE.todoPlans.some(todo => todo.id === item.id));
             if (!newItems.length) return false;
             STATE.todoPlans.push(...newItems.map(item => ({ ...item })));
-            this.showTopNotice(`${contact?.name || 'TODO 管理'} ${action.notice || `添加了 ${newItems.length} 个 TODO`}`, {
+            this.showTodoTopNotice(`${contact?.name || 'TODO 管理'} ${action.notice || `添加了 ${newItems.length} 个 TODO`}`, {
                 actionLabel: '撤销',
                 onAction: async () => {
                     const ids = new Set(newItems.map(item => item.id));
@@ -5717,13 +5773,13 @@ const App = {
         if (action.type === 'todo.update' && action.todoId && action.patch) {
             const item = STATE.todoPlans.find(todo => todo.id === action.todoId);
             if (!item) {
-                this.showTopNotice(`${contact?.name || 'TODO 管理'} 有一项后台操作未应用：本地计划已变化`, { type: 'pending' });
+                this.showTodoTopNotice(`${contact?.name || 'TODO 管理'} 有一项后台操作未应用：本地计划已变化`, { type: 'pending' });
                 return false;
             }
 
             const before = { ...item };
             Object.assign(item, action.patch, { updatedAt: Date.now() });
-            this.showTopNotice(`${contact?.name || 'TODO 管理'} ${action.notice || `更新了 TODO：${item.text}`}`, {
+            this.showTodoTopNotice(`${contact?.name || 'TODO 管理'} ${action.notice || `更新了 TODO：${item.text}`}`, {
                 actionLabel: '撤销',
                 onAction: async () => {
                     const current = STATE.todoPlans.find(todo => todo.id === before.id);
@@ -7160,6 +7216,8 @@ const App = {
                 content: [
                     userContextTitle,
                     userDynamicContextPrompts.join('\n\n'),
+                    '',
+                    '【系统信息补充END】',
                     '',
                     '【用户当前消息】',
                     currentUserMessage.content

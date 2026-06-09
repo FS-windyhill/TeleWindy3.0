@@ -9119,6 +9119,14 @@ body.dark-mode .agent-api-select {
     transform: translateY(0);
 }
 
+.app-top-notice.clickable {
+    cursor: pointer;
+}
+
+.app-top-notice.clickable:active {
+    transform: translateY(0) scale(0.99);
+}
+
 .app-top-notice.dragging {
     transition: none;
 }
