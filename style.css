@@ -2958,8 +2958,8 @@ body.dark-mode button#main-confirm {
 }
 
 body.dark-mode button#modal-save {
+    color: rgb(255, 255, 255);
     background: var(--btn-color);
-    color: #ffffff;
     border: 2px solid var(--primary-btn-text);
 
     backdrop-filter: blur(8px);
@@ -4790,9 +4790,9 @@ body.custom-mode textarea {
 }
 
 body.custom-mode button#modal-save {
+    color: rgb(255, 255, 255);
     background: var(--btn-color);
-    color: #ffffff;
-    border: 2px solid rgba(135, 110, 255);
+    border: 2px solid var(--primary-btn-text);
 }
 
 body.custom-mode .settings-content {
