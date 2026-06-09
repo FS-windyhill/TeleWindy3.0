@@ -956,7 +956,10 @@ const API = {
             vision_analyze_failed: '后台识图失败，已改用兜底图片描述',
             agent_todo_start: '后台 TODO 管理已开始判断',
             agent_todo_done: '后台 TODO 管理已完成',
-            agent_todo_failed: '后台 TODO 管理执行失败，已跳过'
+            agent_todo_failed: '后台 TODO 管理执行失败，已跳过',
+            agent_todo_stage_start: '后台 TODO 管理已开始判断',
+            agent_todo_stage_done: '后台 TODO 管理结果已提前同步',
+            agent_todo_stage_failed: '后台 TODO 管理提前同步失败，已跳过'
         };
         return map[code] || `后台事件：${code}`;
     },
@@ -1032,7 +1035,9 @@ const API = {
         this.rememberPendingJob(job.jobId, settings);
 
         try {
-            const result = await this.waitForChatJob(backendUrl, job.jobId, settings.ASYNC_BACKEND_TOKEN);
+            const result = await this.waitForChatJob(backendUrl, job.jobId, settings.ASYNC_BACKEND_TOKEN, {
+                onJobUpdate: settings.ASYNC_BACKEND_ON_JOB_UPDATE
+            });
             if (result.status !== 'done') {
                 const jobFailedError = new Error(result.error || 'Async job failed');
                 jobFailedError.isAsyncBackendJobFailed = true; // Worker 明确说失败，不能当成手机切后台轮询中断
@@ -1238,7 +1243,7 @@ const API = {
         return job;
     },
 
-    async waitForChatJob(backendUrl, jobId, token) {
+    async waitForChatJob(backendUrl, jobId, token, options = {}) {
         const startedAt = Date.now();
         const timeoutMs = 55 * 60 * 1000;
         let pollCount = 0;
@@ -1278,6 +1283,17 @@ const API = {
                 }
             });
             this.mergeAsyncBackendJobEvents(jobId, job.events);
+            job.jobId = job.jobId || jobId;
+            if (typeof options.onJobUpdate === 'function') {
+                try {
+                    // ★ 分段后台结果：
+                    // Worker 会先写入 agent_status/agent_actions，再继续等主模型。
+                    // 这里让 App 层有机会提前应用 TODO 操作，真正的聊天回复仍按原流程等待 done。
+                    await options.onJobUpdate(job);
+                } catch (error) {
+                    console.warn('[AsyncBackend] job update hook failed:', error);
+                }
+            }
             if (job.status === 'done' || job.status === 'failed') {
                 return job;
             }
@@ -1316,6 +1332,7 @@ const API = {
         }
 
         const job = await response.json();
+        job.jobId = job.jobId || jobId;
         this.mergeAsyncBackendJobEvents(jobId, job.events);
         return job;
     },
@@ -3598,6 +3615,12 @@ const App = {
                         status: job.status
                     });
                     if (job.status === 'running') {
+                        const contact = pending.context && pending.context.scope === 'moments'
+                            ? null
+                            : STATE.contacts.find(c => c.id === pending.contactId);
+                        if (contact) {
+                            await this.applyAsyncBackendAgentStage(job, contact);
+                        }
                         hasRunningJob = true;
                         continue;
                     }
@@ -5620,6 +5643,20 @@ const App = {
         localStorage.setItem(this.appliedAgentActionStorageKey(), JSON.stringify(ids.slice(-300)));
     },
 
+    async applyAsyncBackendAgentStage(job, contact = null) {
+        if (!job || job.agent_status !== 'done') return false;
+        if (!Array.isArray(job.agent_actions) || !job.agent_actions.length) return false;
+
+        // ★ 后台 Agent 先完成、主模型后完成：
+        // 轮询 running job 时就可以把 TODO 操作落到本地；最终 done 再看到同一批 action，
+        // 由 actionId 去重兜底，避免重复创建/取消。
+        console.info('[Agent][后台] 收到提前完成的 TODO 管理结果:', {
+            jobId: API.asyncJobLogId(job.jobId || ''),
+            actionCount: job.agent_actions.length
+        });
+        return await this.applyAsyncAgentActions(job.agent_actions, contact);
+    },
+
     async applyAsyncAgentActions(actions, contact = null) {
         if (!Array.isArray(actions) || !actions.length) return false;
 
@@ -6166,6 +6203,8 @@ const App = {
                 this.formatAsyncBackendDiagnosticTime(event.ts),
                 jobText,
                 event.detail?.model ? ` · ${event.detail.model}` : '',
+                event.detail?.intent ? ` · ${event.detail.intent}` : '',
+                Number.isFinite(Number(event.detail?.actionCount)) ? ` · ${event.detail.actionCount} 个操作` : '',
                 event.detail?.source === 'worker' ? ' · Worker' : ''
             ].join('');
 
@@ -7147,6 +7186,9 @@ const App = {
             : -1;
         requestSettings.ASYNC_BACKEND_AGENT = usingAsyncBackend
             ? this.buildAsyncBackendAgentPayload(contact, userText, requestSettings)
+            : null;
+        requestSettings.ASYNC_BACKEND_ON_JOB_UPDATE = usingAsyncBackend
+            ? async (job) => this.applyAsyncBackendAgentStage(job, contact)
             : null;
         requestSettings.REQUEST_CACHE_DEBUG_LOG = this.buildRequestCacheDebugLog({
             messages: messagesToSend,

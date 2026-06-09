@@ -221,6 +221,8 @@ async function createJob(request, env) {
 
   await initJobState(jobId, env, {
     status: "running",
+    agent_status: agent?.todoManager ? "pending" : "disabled",
+    agent_actions: [],
     createdAt: Date.now(),
     ttlSeconds,
     events: [createEvent]
@@ -377,6 +379,7 @@ async function runJob(jobId, body, env) {
 
     let imageDescription = null;
     let agentActions = [];
+    let agentStatus = body.agent?.todoManager ? "pending" : "disabled";
     let messagesForChat = body.messages;
     if (body.vision) {
       imageDescription = await analyzeVisionImage(body.vision, env, jobId, body.ttlSeconds);
@@ -384,6 +387,16 @@ async function runJob(jobId, body, env) {
     }
 
     if (body.agent?.todoManager) {
+      // ★ 后台 Agent 分段状态：
+      // TODO 管理跑完后先把 action 写进 job，让前端不用等主模型回复就能同步执行。
+      await buildJobWithEvent(jobId, env, {
+        agent_status: "running",
+        agent_actions: [],
+        agent_startedAt: Date.now()
+      }, "agent_todo_stage_start", {
+        model: body.agent.todoManager.model || ""
+      });
+
       const agentResult = await runTodoManagerAgent(body.agent.todoManager, env, jobId, body.ttlSeconds);
       if (agentResult.prompt) {
         messagesForChat = injectVolatilePrompt(
@@ -394,6 +407,18 @@ async function runJob(jobId, body, env) {
         );
       }
       agentActions = agentResult.actions || [];
+      agentStatus = agentResult.failed ? "failed" : "done";
+
+      await buildJobWithEvent(jobId, env, {
+        agent_status: agentStatus,
+        agent_actions: agentActions,
+        agent_finishedAt: Date.now()
+      }, agentResult.failed ? "agent_todo_stage_failed" : "agent_todo_stage_done", {
+        intent: agentResult.intent || "",
+        actionCount: agentActions.length,
+        hasPrompt: !!agentResult.prompt,
+        error: agentResult.failed ? sanitizeLogText(agentResult.error || "") : ""
+      });
     }
 
     const upstreamBody = {
@@ -452,6 +477,7 @@ async function runJob(jobId, body, env) {
       status: "done",
       result: content.trim(),
       image_description: imageDescription,
+      agent_status: agentStatus,
       agent_actions: agentActions,
       usage: data.usage || null,
       finishedAt: Date.now()
@@ -611,6 +637,7 @@ async function runTodoManagerAgent(agent, env, jobId, ttlSeconds) {
     const rawText = extractAssistantContent(data);
     const routerResult = parseTodoAgentResult(rawText);
     const execution = executeTodoAgentResult(routerResult, agent.todoSnapshot);
+    execution.intent = routerResult.intent || "";
 
     await appendJobEvent(jobId, env, "agent_todo_done", {
       intent: routerResult.intent,
@@ -619,13 +646,14 @@ async function runTodoManagerAgent(agent, env, jobId, ttlSeconds) {
 
     return execution;
   } catch (error) {
+    const errorMessage = error?.message || String(error);
     console.warn("agent_todo_failed", {
-      error: error?.message || String(error)
+      error: errorMessage
     });
     await appendJobEvent(jobId, env, "agent_todo_failed", {
-      error: sanitizeLogText(error?.message || String(error))
+      error: sanitizeLogText(errorMessage)
     }, ttlSeconds);
-    return { prompt: "", actions: [] };
+    return { prompt: "", actions: [], failed: true, error: errorMessage };
   }
 }
 
