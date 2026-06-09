@@ -632,7 +632,7 @@ async function runTodoManagerAgent(agent, env, jobId, ttlSeconds) {
 function buildTodoAgentMessages(agent) {
   const todayKey = getDateKey(new Date());
   const tomorrowKey = addDays(todayKey, 1);
-  const prompt = [
+  const systemPrompt = [
     "你是 TeleWindy 的 TODO 管理 Agent，只判断用户这句话是否需要操作 TODO。",
     "你只能从 intent 枚举中选择：NONE、CREATE_TODO、UPDATE_TODO、ASK_CONFIRMATION。",
     "不要打分，不要输出 Markdown，不要解释，只输出 JSON。",
@@ -646,14 +646,18 @@ function buildTodoAgentMessages(agent) {
     "- 不要编造用户没有说的日期、任务或目标。",
     "",
     "JSON 格式：",
-    "{\"intent\":\"CREATE_TODO\",\"todo\":{\"text\":\"继续写论文\",\"dateKey\":\"2026-06-10\",\"startTime\":\"\",\"endTime\":\"\"},\"update\":{\"matchText\":\"\",\"dateKey\":\"\",\"newText\":\"\",\"newDateKey\":\"\",\"status\":\"\",\"startTime\":\"\",\"endTime\":\"\"},\"confirmation\":{\"message\":\"\"}}",
+    "{\"intent\":\"CREATE_TODO\",\"todos\":[{\"text\":\"继续写论文\",\"dateKey\":\"2026-06-10\",\"startTime\":\"\",\"endTime\":\"\"}],\"todo\":{\"text\":\"\",\"dateKey\":\"\",\"startTime\":\"\",\"endTime\":\"\"},\"update\":{\"matchText\":\"\",\"dateKey\":\"\",\"newText\":\"\",\"newDateKey\":\"\",\"status\":\"\",\"startTime\":\"\",\"endTime\":\"\"},\"confirmation\":{\"message\":\"\"}}",
     "",
     "字段说明：",
-    "- CREATE_TODO 时填写 todo.text 和 todo.dateKey；没有明确日期时用今天。",
+    "- CREATE_TODO 时优先填写 todos 数组；只有一条时也可以填写 todo.text 和 todo.dateKey。",
+    "- 用户一次说了多件要记录的事，就拆成多个 todos，不要合并成一条。",
     "- UPDATE_TODO 时填写 update.matchText；完成用 status=done，取消/删除/不需要用 status=cancelled，延期/改日期用 newDateKey，改内容用 newText。",
     "- ASK_CONFIRMATION 时 confirmation.message 写给前端确认/提示用的一句话。",
-    "- 不需要的对象字段留空字符串。",
-    "",
+    "- 不需要的对象字段留空字符串。"
+  ].join("\n");
+
+  // ★ 缓存友好：固定规则放 system，日期/TODO 快照/用户原话放 user，尽量提高前缀缓存命中。
+  const userPrompt = [
     `今天日期：${todayKey}`,
     `明天日期：${tomorrowKey}`,
     "",
@@ -667,7 +671,10 @@ function buildTodoAgentMessages(agent) {
     agent.userText || ""
   ].join("\n");
 
-  return [{ role: "system", content: prompt }];
+  return [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt }
+  ];
 }
 
 function parseTodoAgentResult(rawText) {
@@ -679,6 +686,7 @@ function parseTodoAgentResult(rawText) {
   return {
     intent,
     todo: data.todo && typeof data.todo === "object" ? data.todo : {},
+    todos: Array.isArray(data.todos) ? data.todos.filter(item => item && typeof item === "object") : [],
     update: data.update && typeof data.update === "object" ? data.update : {},
     confirmation: data.confirmation && typeof data.confirmation === "object" ? data.confirmation : {}
   };
@@ -690,35 +698,23 @@ function executeTodoAgentResult(result, todoSnapshot) {
   }
 
   if (result.intent === "CREATE_TODO") {
-    const text = cleanAgentText(result.todo.text || result.todo.title || "", 120);
-    if (!text) return { prompt: "", actions: [] };
-    const dateKey = isDateKey(result.todo.dateKey) ? result.todo.dateKey : getDateKey(new Date());
-    const startTime = isTimeValue(result.todo.startTime) ? result.todo.startTime : "";
-    const endTime = isTimeValue(result.todo.endTime) ? result.todo.endTime : "";
-    const item = {
-      id: `todo_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
-      text,
-      dateKey,
-      done: false,
-      cancelled: false,
-      createdAt: Date.now()
-    };
-    if (startTime && endTime && startTime < endTime) {
-      item.startTime = startTime;
-      item.endTime = endTime;
-    }
-    const timeText = item.startTime && item.endTime ? `，时间 ${item.startTime}-${item.endTime}` : "";
+    const items = normalizeTodoAgentCreates(result, todoSnapshot);
+    if (!items.length) return { prompt: "", actions: [] };
+    const createdLines = items.map(item => {
+      const timeText = item.startTime && item.endTime ? `，时间 ${item.startTime}-${item.endTime}` : "";
+      return `- ${item.text}：${item.dateKey}${timeText}`;
+    });
     return {
       prompt: [
-        `你已经为用户添加了一项 TODO：${item.text}。`,
-        `日期：${item.dateKey}${timeText}。`,
+        `你已经为用户添加了 ${items.length} 项 TODO。`,
+        ...createdLines,
         "请自然回应，不要提到系统、工具或 JSON。"
       ].join("\n"),
       actions: [{
         id: crypto.randomUUID(),
-        type: "todo.create",
-        item,
-        notice: `添加了 TODO：${item.text}`
+        type: items.length === 1 ? "todo.create" : "todo.create_many",
+        ...(items.length === 1 ? { item: items[0] } : { items }),
+        notice: items.length === 1 ? `添加了 TODO：${items[0].text}` : `添加了 ${items.length} 个 TODO`
       }]
     };
   }
@@ -788,6 +784,43 @@ function findTodoAgentCandidates(result, todoSnapshot) {
   if (matchText) items = items.filter(item => String(item.text || "").toLowerCase().includes(matchText));
   if (!matchId && !matchText && !dateKey) return [];
   return items;
+}
+
+function normalizeTodoAgentCreates(result, todoSnapshot = []) {
+  const rawTodos = Array.isArray(result?.todos) && result.todos.length
+    ? result.todos
+    : [result?.todo || {}];
+  const seenKeys = new Set((Array.isArray(todoSnapshot) ? todoSnapshot : [])
+    .filter(item => item && item.text && item.dateKey)
+    .map(item => buildTodoDuplicateKey(item.text, item.dateKey)));
+
+  return rawTodos.map((todo, index) => {
+    const text = cleanAgentText(todo.text || todo.title || "", 120);
+    if (!text) return null;
+    const dateKey = isDateKey(todo.dateKey) ? todo.dateKey : getDateKey(new Date());
+    const duplicateKey = buildTodoDuplicateKey(text, dateKey);
+    if (seenKeys.has(duplicateKey)) return null;
+    seenKeys.add(duplicateKey);
+    const startTime = isTimeValue(todo.startTime) ? todo.startTime : "";
+    const endTime = isTimeValue(todo.endTime) ? todo.endTime : "";
+    const item = {
+      id: `todo_${Date.now()}_${index}_${crypto.randomUUID().slice(0, 8)}`,
+      text,
+      dateKey,
+      done: false,
+      cancelled: false,
+      createdAt: Date.now()
+    };
+    if (startTime && endTime && startTime < endTime) {
+      item.startTime = startTime;
+      item.endTime = endTime;
+    }
+    return item;
+  }).filter(Boolean).slice(0, 10);
+}
+
+function buildTodoDuplicateKey(text, dateKey) {
+  return `${dateKey}::${String(text || "").replace(/\s+/g, " ").trim().toLowerCase()}`;
 }
 
 function injectVolatilePrompt(messages, prompt, insertMode, userMessageIndex) {

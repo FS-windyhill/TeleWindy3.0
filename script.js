@@ -4621,7 +4621,7 @@ const App = {
         stack.appendChild(notice);
         requestAnimationFrame(() => notice.classList.add('show'));
 
-        const timeout = Number.isFinite(options.timeout) ? options.timeout : 2000;
+        const timeout = Number.isFinite(options.timeout) ? options.timeout : 5000;
         if (timeout > 0) {
             setTimeout(closeNotice, timeout);
         }
@@ -5436,7 +5436,7 @@ const App = {
 
     async executeAgentTodoSkill(routerResult, contact) {
         if (!routerResult || routerResult.intent === 'NONE') return null;
-        if (routerResult.intent === 'CREATE_TODO') return this.createTodoFromAgent(routerResult.todo || {}, contact);
+        if (routerResult.intent === 'CREATE_TODO') return this.createTodosFromAgent(routerResult, contact);
         if (routerResult.intent === 'UPDATE_TODO') return this.updateTodoFromAgent(routerResult, contact);
 
         if (routerResult.intent === 'ASK_CONFIRMATION') {
@@ -5451,55 +5451,80 @@ const App = {
         return null;
     },
 
-    async createTodoFromAgent(todo, contact) {
-        const text = AgentTodoManager.cleanText(todo.text || todo.title || '', 120);
-        const dateKey = AgentTodoManager.isDateKey(todo.dateKey) ? todo.dateKey : AgentTodoManager.getTodayKey();
-        const startTime = AgentTodoManager.isTimeValue(todo.startTime) ? todo.startTime : '';
-        const endTime = AgentTodoManager.isTimeValue(todo.endTime) ? todo.endTime : '';
+    normalizeAgentTodoCreates(routerResult) {
+        const rawTodos = Array.isArray(routerResult?.todos) && routerResult.todos.length
+            ? routerResult.todos
+            : [routerResult?.todo || {}];
+        const seenKeys = new Set((STATE.todoPlans || [])
+            .filter(item => item && item.text && item.dateKey)
+            .map(item => this.buildTodoDuplicateKey(item.text, item.dateKey)));
 
-        if (!text) {
+        return rawTodos.map((todo, index) => {
+            const text = AgentTodoManager.cleanText(todo.text || todo.title || '', 120);
+            const dateKey = AgentTodoManager.isDateKey(todo.dateKey) ? todo.dateKey : AgentTodoManager.getTodayKey();
+            const startTime = AgentTodoManager.isTimeValue(todo.startTime) ? todo.startTime : '';
+            const endTime = AgentTodoManager.isTimeValue(todo.endTime) ? todo.endTime : '';
+            if (!text) return null;
+            const duplicateKey = this.buildTodoDuplicateKey(text, dateKey);
+            if (seenKeys.has(duplicateKey)) return null;
+            seenKeys.add(duplicateKey);
+            const item = {
+                id: `todo_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 8)}`,
+                text,
+                dateKey,
+                done: false,
+                cancelled: false,
+                createdAt: Date.now()
+            };
+            if (startTime && endTime && startTime < endTime) {
+                item.startTime = startTime;
+                item.endTime = endTime;
+            }
+            return item;
+        }).filter(Boolean).slice(0, 10);
+    },
+
+    buildTodoDuplicateKey(text, dateKey) {
+        return `${dateKey}::${String(text || '').replace(/\s+/g, ' ').trim().toLowerCase()}`;
+    },
+
+    async createTodosFromAgent(routerResult, contact) {
+        const items = this.normalizeAgentTodoCreates(routerResult);
+
+        if (!items.length) {
+            this.showTopNotice(`${contact?.name || 'TODO 管理'} 没有添加：同一天已有相同 TODO`, { type: 'pending' });
             return {
-                prompt: [
-                    '本轮没有创建 TODO。',
-                    '原因：用户没有给出明确的待办内容。',
-                    '请自然询问用户要记录什么。'
-                ].join('\n')
+                prompt: ''
             };
         }
 
-        const item = {
-            id: 'todo_' + Date.now(),
-            text,
-            dateKey,
-            done: false,
-            cancelled: false,
-            createdAt: Date.now()
-        };
-        if (startTime && endTime && startTime < endTime) {
-            item.startTime = startTime;
-            item.endTime = endTime;
-        }
-
-        STATE.todoPlans.push(item);
+        STATE.todoPlans.push(...items);
         await Storage.saveTodoPlans();
         this.renderTodoPlans();
         this.renderDesktop();
-        this.showTopNotice(`${contact?.name || 'TODO 管理'} 添加了 TODO：${item.text}`, {
+        const noticeText = items.length === 1
+            ? `添加了 TODO：${items[0].text}`
+            : `添加了 ${items.length} 个 TODO`;
+        this.showTopNotice(`${contact?.name || 'TODO 管理'} ${noticeText}`, {
             actionLabel: '撤销',
             onAction: async () => {
-                STATE.todoPlans = STATE.todoPlans.filter(todoItem => todoItem.id !== item.id);
+                const ids = new Set(items.map(item => item.id));
+                STATE.todoPlans = STATE.todoPlans.filter(todoItem => !ids.has(todoItem.id));
                 await Storage.saveTodoPlans();
                 this.renderTodoPlans();
                 this.renderDesktop();
-                console.log('[Agent][TODO管理] 已撤销创建:', item);
+                console.log('[Agent][TODO管理] 已撤销批量创建:', items);
             }
         });
 
-        const timeText = item.startTime && item.endTime ? `，时间 ${item.startTime}-${item.endTime}` : '';
+        const createdLines = items.map(item => {
+            const timeText = item.startTime && item.endTime ? `，时间 ${item.startTime}-${item.endTime}` : '';
+            return `- ${item.text}：${item.dateKey}${timeText}`;
+        });
         return {
             prompt: [
-                `你已经为用户添加了一项 TODO：${item.text}。`,
-                `日期：${item.dateKey}${timeText}。`,
+                `你已经为用户添加了 ${items.length} 项 TODO。`,
+                ...createdLines,
                 '请自然回应，不要提到系统、工具或 JSON。'
             ].join('\n')
         };
@@ -5630,6 +5655,24 @@ const App = {
                     this.renderTodoPlans();
                     this.renderDesktop();
                     console.log('[Agent][后台] 已撤销 action:', action.id);
+                }
+            });
+            return true;
+        }
+
+        if (action.type === 'todo.create_many' && Array.isArray(action.items)) {
+            const newItems = action.items.filter(item => item && item.id && !STATE.todoPlans.some(todo => todo.id === item.id));
+            if (!newItems.length) return false;
+            STATE.todoPlans.push(...newItems.map(item => ({ ...item })));
+            this.showTopNotice(`${contact?.name || 'TODO 管理'} ${action.notice || `添加了 ${newItems.length} 个 TODO`}`, {
+                actionLabel: '撤销',
+                onAction: async () => {
+                    const ids = new Set(newItems.map(item => item.id));
+                    STATE.todoPlans = STATE.todoPlans.filter(item => !ids.has(item.id));
+                    await Storage.saveTodoPlans();
+                    this.renderTodoPlans();
+                    this.renderDesktop();
+                    console.log('[Agent][后台] 已撤销批量创建 action:', action.id);
                 }
             });
             return true;

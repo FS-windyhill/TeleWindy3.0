@@ -75,7 +75,7 @@ const AgentTodoManager = {
     buildRouterMessages(contact, userText, now = new Date()) {
         const todayKey = this.getTodayKey(now);
         const tomorrowKey = this.addDays(todayKey, 1);
-        const prompt = [
+        const systemPrompt = [
             '你是 TeleWindy 的 TODO 管理 Agent，只判断用户这句话是否需要操作 TODO。',
             '你只能从 intent 枚举中选择：NONE、CREATE_TODO、UPDATE_TODO、ASK_CONFIRMATION。',
             '不要打分，不要输出 Markdown，不要解释，只输出 JSON。',
@@ -89,14 +89,18 @@ const AgentTodoManager = {
             '- 不要编造用户没有说的日期、任务或目标。',
             '',
             'JSON 格式：',
-            '{"intent":"CREATE_TODO","todo":{"text":"继续写论文","dateKey":"2026-06-10","startTime":"","endTime":""},"update":{"matchText":"","dateKey":"","newText":"","newDateKey":"","status":"","startTime":"","endTime":""},"confirmation":{"message":""}}',
+            '{"intent":"CREATE_TODO","todos":[{"text":"继续写论文","dateKey":"2026-06-10","startTime":"","endTime":""}],"todo":{"text":"","dateKey":"","startTime":"","endTime":""},"update":{"matchText":"","dateKey":"","newText":"","newDateKey":"","status":"","startTime":"","endTime":""},"confirmation":{"message":""}}',
             '',
             '字段说明：',
-            '- CREATE_TODO 时填写 todo.text 和 todo.dateKey；没有明确日期时用今天。',
+            '- CREATE_TODO 时优先填写 todos 数组；只有一条时也可以填写 todo.text 和 todo.dateKey。',
+            '- 用户一次说了多件要记录的事，就拆成多个 todos，不要合并成一条。',
             '- UPDATE_TODO 时填写 update.matchText；完成用 status=done，取消/删除/不需要用 status=cancelled，延期/改日期用 newDateKey，改内容用 newText。',
             '- ASK_CONFIRMATION 时 confirmation.message 写给前端确认/提示用的一句话。',
-            '- 不需要的对象字段留空字符串。',
-            '',
+            '- 不需要的对象字段留空字符串。'
+        ].join('\n');
+
+        // ★ 缓存友好：固定规则放 system，日期/TODO 快照/用户原话放 user，尽量提高前缀缓存命中。
+        const userPrompt = [
             `今天日期：${todayKey}`,
             `明天日期：${tomorrowKey}`,
             '',
@@ -110,7 +114,10 @@ const AgentTodoManager = {
             userText || ''
         ].join('\n');
 
-        return [{ role: 'system', content: prompt }];
+        return [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+        ];
     },
 
     extractJson(rawText) {
@@ -141,6 +148,7 @@ const AgentTodoManager = {
         return {
             intent,
             todo: data.todo && typeof data.todo === 'object' ? data.todo : {},
+            todos: Array.isArray(data.todos) ? data.todos.filter(item => item && typeof item === 'object') : [],
             update: data.update && typeof data.update === 'object' ? data.update : {},
             confirmation: data.confirmation && typeof data.confirmation === 'object' ? data.confirmation : {}
         };
