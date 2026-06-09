@@ -41,6 +41,16 @@
 //     - findEntryIndex(entries, now): 找到当前时间所在日程条目
 //     - buildChatPrompt(contactId, now): 生成聊天注入的当前/上一段/下一段日程
 //
+// 3.8. CHARACTER MEMORY (探索角色记忆)
+//   - CharacterMemory: 角色每日记忆独立工具层
+//     - getTodayKey(now) / getYesterdayKey(now): 获取本地日期 key
+//     - ensureMemory(contactId): 确保某个角色有一份记忆壳数据
+//     - getRecord(memory, dateKey): 查找某天的记忆记录
+//     - collectMessagesForDate(contact, dateKey): 从聊天历史提取某天消息
+//     - buildGenerationMessages(contact, dateKey): 生成请求 AI 总结记忆的 messages
+//     - parseAiMemory(rawText): 提取、整理并校验 AI 记忆
+//     - buildChatPrompt(contactId, now): 生成最近 N 天角色长期记忆注入文案
+//
 // 7. APP CONTROLLER (业务逻辑)
 //   - 世界感知页面逻辑
 //     - syncWorldSenseToggle(): 同步探索页世界感知总开关
@@ -117,6 +127,7 @@
 // 世界感知工具层已拆到 js/world-sense.js。
 // TO DO / 倒数日工具层已拆到 js/todo-countdown-context.js。
 // 角色日程工具层已拆到 js/character-schedule.js。
+// 角色记忆工具层已拆到 js/character-memory.js。
 
 
 // =========================================
@@ -132,6 +143,7 @@
 //   - TODO_PLANS_KEY: 存储探索页 TO DO 计划列表的键名
 //   - COUNTDOWN_DAYS_KEY: 存储探索页倒数日 / 正数日列表的键名
 //   - CHARACTER_SCHEDULES_KEY: 存储探索页角色日程的键名
+//   - CHARACTER_MEMORIES_KEY: 存储探索页角色记忆的键名
 //   - CHAT_PAGE_SIZE: 聊天记录分页加载数量
 //   - MOMENTS_PAGE_SIZE: 心迹分页加载数量
 //   - GIST_ID_KEY: localStorage 中保存 Gist ID 的键名
@@ -147,6 +159,7 @@
 //     - TODO_PLAN_INJECT_ENABLED: 是否把 TO DO 计划注入 AI system prompt
 //     - COUNTDOWN_INJECT_ENABLED: 是否把倒数日 / 正数日注入 AI system prompt
 //     - CHARACTER_SCHEDULE_API_PRESET_INDEX: 角色日程生成使用的 API 预设索引，-1 表示跟随全局默认
+//     - CHARACTER_MEMORY_API_PRESET_INDEX: 角色记忆生成使用的 API 预设索引，-1 表示跟随全局默认
 //     - WALLPAPER: 默认壁纸
 //     - USER_AVATAR: 默认用户头像
 //     - GIST_TOKEN: 默认云同步 Token/密码
@@ -197,6 +210,7 @@
 //   - todoPlans: 探索页 TO DO 计划列表
 //   - countdownDays: 探索页倒数日 / 正数日列表
 //   - characterSchedules: 探索页角色日程列表，每个角色一份开关和当天 entries
+//   - characterMemories: 探索页角色记忆列表，每个角色一份开关、注入天数和每日 records
 //   - todoPlanDraftDateOffset: TO DO 弹窗 7 天日期条相对今天的起点偏移
 //   - countdownDraftDateOffset: 倒数日弹窗 7 天日期条相对今天的起点偏移
 //   - editingTodoPlanId: 当前正在编辑的 TO DO 计划 ID
@@ -207,6 +221,11 @@
 //   - scheduleQueueRunning: 角色日程补生成队列是否正在运行，防止重复请求
 //   - scheduleLastDateKey: 上次检查到的日期 key，用来发现前端开着跨 0 点
 //   - scheduleDateTimer: 角色日程跨天检查定时器
+//   - currentMemoryContactId: 当前正在查看记忆详情的角色 ID
+//   - editingMemoryItem: 当前正在编辑的单条记忆定位信息
+//   - memoryQueueRunning: 角色记忆补生成队列是否正在运行
+//   - memoryLastDateKey: 上次检查到的日期 key，用来发现前端开着跨 0 点
+//   - memoryDateTimer: 角色记忆跨天检查定时器
 //   - countdownMode: 倒数日页面当前查看 down 或 up
 //   - todoPlanMonthPicker / countdownMonthPicker: 年月快选面板的临时年份月份
 //   - desktopClockTimer: 桌面时间小组件的分钟级刷新定时器
@@ -249,6 +268,7 @@
 //   - saveTodoPlans(): 保存 STATE.todoPlans TO DO 计划列表
 //   - saveCountdownDays(): 保存 STATE.countdownDays 倒数日 / 正数日列表
 //   - saveCharacterSchedules(): 保存 STATE.characterSchedules 角色日程列表
+//   - saveCharacterMemories(): 保存 STATE.characterMemories 角色记忆列表
 
 
 // =========================================
@@ -293,6 +313,20 @@
 //   - buildGenerationMessages(contact, now): 组装生成日程时发给 AI 的 messages
 //   - findEntryIndex(entries, now): 查找当前时间命中的日程项
 //   - buildChatPrompt(contactId, now): 生成聊天时注入的“当前/上一段/下一段”
+
+// =========================================
+// 3.8. CHARACTER MEMORY (探索角色记忆)
+// =========================================
+
+// CharacterMemory: 负责角色记忆的日期、聊天提取、AI JSON 解析和聊天注入文案
+//   - getTodayKey(now): 获取今天的日期 key
+//   - getYesterdayKey(now): 获取昨天的日期 key
+//   - ensureMemory(contactId): 没有记忆时创建一份默认壳数据
+//   - getRecord(memory, dateKey): 查找指定日期的记忆记录
+//   - collectMessagesForDate(contact, dateKey): 按 timestamp / 内容前缀提取当天聊天
+//   - buildGenerationMessages(contact, dateKey): 组装生成每日记忆时发给 AI 的 messages
+//   - parseAiMemory(rawText): 解析 AI 返回并得到可保存的 memories/comment
+//   - buildChatPrompt(contactId, now): 生成聊天时注入的最近 N 天长期记忆
 
 
 // =========================================
@@ -640,6 +674,7 @@ const STATE = {
     todoPlans: [],
     countdownDays: [],
     characterSchedules: [],
+    characterMemories: [],
     todoPlanDraftDateOffset: 0,
     countdownDraftDateOffset: 0,
     editingTodoPlanId: null,
@@ -650,6 +685,11 @@ const STATE = {
     scheduleQueueRunning: false,
     scheduleLastDateKey: '',
     scheduleDateTimer: null,
+    currentMemoryContactId: null,
+    editingMemoryItem: null,
+    memoryQueueRunning: false,
+    memoryLastDateKey: '',
+    memoryDateTimer: null,
     countdownMode: 'down',
 
     // ★★★★★ 桌面 START：桌面小组件运行态 ★★★★★
@@ -2166,6 +2206,8 @@ const UI = {
         const viewCountdown = document.getElementById('view-countdown');
         const viewCharacterSchedule = document.getElementById('view-character-schedule');
         const viewCharacterScheduleDetail = document.getElementById('view-character-schedule-detail');
+        const viewCharacterMemory = document.getElementById('view-character-memory');
+        const viewCharacterMemoryDetail = document.getElementById('view-character-memory-detail');
         const viewAgent = document.getElementById('view-agent');
         const viewAsyncBackend = document.getElementById('view-async-backend');
         const viewWorldbook = document.getElementById('view-worldbook');
@@ -2175,6 +2217,9 @@ const UI = {
 
         // ★ Agent 是后加的探索子页：旧分支里没有逐个隐藏它，这里先统一收口。
         if (viewAgent && viewName !== 'agent') viewAgent.style.display = 'none';
+        // ★ 角色记忆也是探索子页，先统一隐藏，再在对应分支打开。
+        if (viewCharacterMemory && viewName !== 'character-memory') viewCharacterMemory.style.display = 'none';
+        if (viewCharacterMemoryDetail && viewName !== 'character-memory-detail') viewCharacterMemoryDetail.style.display = 'none';
 
         // 先清除底栏的全部高亮状态
         document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -2467,6 +2512,53 @@ const UI = {
             if (bottomTabBar) bottomTabBar.style.display = 'none';
             if (typeof App !== 'undefined' && typeof App.renderCharacterScheduleDetail === 'function') {
                 App.renderCharacterScheduleDetail();
+            }
+
+        } else if (viewName === 'character-memory') {
+            if (typeof App !== 'undefined' && typeof App.rememberReturnView === 'function') {
+                App.rememberReturnView('character-memory', STATE.currentMainView || 'explore');
+            }
+            appContainer.classList.remove('in-chat-mode');
+
+            if (viewDesktop) viewDesktop.style.display = 'none';
+            if (viewContact) viewContact.style.display = 'none';
+            if (viewExplore) viewExplore.style.display = 'none';
+            if (viewTodoPlan) viewTodoPlan.style.display = 'none';
+            if (viewCountdown) viewCountdown.style.display = 'none';
+            if (viewCharacterSchedule) viewCharacterSchedule.style.display = 'none';
+            if (viewCharacterScheduleDetail) viewCharacterScheduleDetail.style.display = 'none';
+            if (viewCharacterMemory) viewCharacterMemory.style.display = 'flex';
+            if (viewCharacterMemoryDetail) viewCharacterMemoryDetail.style.display = 'none';
+            if (viewAsyncBackend) viewAsyncBackend.style.display = 'none';
+            if (viewWorldbook) viewWorldbook.style.display = 'none';
+            if (viewWorldSense) viewWorldSense.style.display = 'none';
+            if (viewMoments) viewMoments.style.display = 'none';
+
+            if (bottomTabBar) bottomTabBar.style.display = 'none';
+            if (typeof App !== 'undefined' && typeof App.renderCharacterMemoryList === 'function') {
+                App.renderCharacterMemoryList();
+            }
+
+        } else if (viewName === 'character-memory-detail') {
+            appContainer.classList.remove('in-chat-mode');
+
+            if (viewDesktop) viewDesktop.style.display = 'none';
+            if (viewContact) viewContact.style.display = 'none';
+            if (viewExplore) viewExplore.style.display = 'none';
+            if (viewTodoPlan) viewTodoPlan.style.display = 'none';
+            if (viewCountdown) viewCountdown.style.display = 'none';
+            if (viewCharacterSchedule) viewCharacterSchedule.style.display = 'none';
+            if (viewCharacterScheduleDetail) viewCharacterScheduleDetail.style.display = 'none';
+            if (viewCharacterMemory) viewCharacterMemory.style.display = 'none';
+            if (viewCharacterMemoryDetail) viewCharacterMemoryDetail.style.display = 'flex';
+            if (viewAsyncBackend) viewAsyncBackend.style.display = 'none';
+            if (viewWorldbook) viewWorldbook.style.display = 'none';
+            if (viewWorldSense) viewWorldSense.style.display = 'none';
+            if (viewMoments) viewMoments.style.display = 'none';
+
+            if (bottomTabBar) bottomTabBar.style.display = 'none';
+            if (typeof App !== 'undefined' && typeof App.renderCharacterMemoryDetail === 'function') {
+                App.renderCharacterMemoryDetail();
             }
 
         } else if (viewName === 'moments') {
@@ -3557,6 +3649,9 @@ const App = {
         // ★ 角色日程按“当天一次”补生成：打开页面后排队处理，当前聊天角色会在发送前优先补。
         setTimeout(() => this.ensureEnabledCharacterSchedules({ silent: true }), 0);
         this.startCharacterScheduleDateWatcher();
+        // ★ 角色记忆按“昨天一次”补生成：打开页面后串行处理所有已开启角色。
+        setTimeout(() => this.ensureEnabledCharacterMemories({ silent: true }), 0);
+        this.startCharacterMemoryDateWatcher();
         
         // [关键点 4] ★★★ 新增：数据加载好了，必须手动让 UI 渲染出联系人列表
         // 假设你的 UI 对象里有一个叫 renderContacts 或 renderSidebar 的方法用来画列表
@@ -5799,6 +5894,402 @@ const App = {
     },
     // ★★★★★ Agent END：TODO 管理设置 + skill 执行 ★★★★★
 
+    // ★★★★★ 角色记忆 START：页面逻辑层 ★★★★★
+    // 角色记忆是“每日总结”：生成昨天，聊天时注入昨天及更早的最近 N 天。
+    renderMemoryAvatar(contact) {
+        if (contact.avatar && (contact.avatar.startsWith('data:') || contact.avatar.startsWith('http'))) {
+            return `<img class="character-memory-avatar" src="${this.escapeHtml(contact.avatar)}" alt="">`;
+        }
+        return `<div class="character-memory-avatar text-avatar">${this.escapeHtml(contact.avatar || '🌼')}</div>`;
+    },
+
+    getCharacterMemoryStatusText(memory) {
+        if (!memory || memory.enabled !== true) return '未开启';
+        if (memory.isGenerating) return '生成中';
+        const records = (memory.records || []).filter(record => record && Array.isArray(record.memories) && record.memories.length);
+        if (records.length) return `${records.length} 天记忆 · 注入 ${memory.injectDays || CharacterMemory.defaultInjectDays} 天`;
+        if ((memory.records || []).some(record => record?.error)) return '有生成失败记录';
+        return '待生成';
+    },
+
+    openCharacterMemorySettings() {
+        const modal = document.getElementById('modal-character-memory-settings');
+        const apiSelect = document.getElementById('character-memory-api-preset');
+        if (!modal || !apiSelect) return;
+
+        const currentIndex = Number.isInteger(STATE.settings.CHARACTER_MEMORY_API_PRESET_INDEX)
+            ? STATE.settings.CHARACTER_MEMORY_API_PRESET_INDEX
+            : -1;
+
+        apiSelect.innerHTML = '<option value="-1">-- 跟随全局默认 --</option>';
+        (STATE.settings.API_PRESETS || []).forEach((preset, index) => {
+            const opt = document.createElement('option');
+            opt.value = index;
+            const modelName = preset.model || '未知模型';
+            opt.textContent = `${preset.name} (${modelName})`;
+            if (index === currentIndex) opt.selected = true;
+            apiSelect.appendChild(opt);
+        });
+
+        modal.classList.remove('hidden');
+    },
+
+    async saveCharacterMemorySettings() {
+        const modal = document.getElementById('modal-character-memory-settings');
+        const apiSelect = document.getElementById('character-memory-api-preset');
+        const presetIndex = parseInt(apiSelect?.value ?? '-1', 10);
+
+        STATE.settings.CHARACTER_MEMORY_API_PRESET_INDEX = Number.isFinite(presetIndex) ? presetIndex : -1;
+        await Storage.saveSettings();
+        modal?.classList.add('hidden');
+        this.renderCharacterMemoryList();
+    },
+
+    renderCharacterMemoryList() {
+        const list = document.getElementById('character-memory-list');
+        const empty = document.getElementById('character-memory-empty');
+        if (!list) return;
+
+        const contacts = STATE.contacts || [];
+        list.innerHTML = '';
+        if (empty) empty.style.display = contacts.length ? 'none' : 'block';
+
+        contacts.forEach(contact => {
+            const memory = CharacterMemory.ensureMemory(contact.id);
+            const item = document.createElement('div');
+            item.className = `character-memory-contact${memory.enabled ? ' enabled' : ''}`;
+            item.dataset.id = contact.id;
+            item.innerHTML = `
+                ${this.renderMemoryAvatar(contact)}
+                <div class="character-memory-contact-info">
+                    <div class="character-memory-contact-name">${this.escapeHtml(contact.name || '未命名角色')}</div>
+                    <div class="character-memory-contact-status">${this.escapeHtml(this.getCharacterMemoryStatusText(memory))}</div>
+                </div>
+                <label class="character-memory-switch" title="启用/关闭角色记忆">
+                    <input type="checkbox" ${memory.enabled ? 'checked' : ''}>
+                    <span class="character-memory-switch-slider"></span>
+                </label>
+                <span class="arrow">
+                    <svg width="1.5em" height="1.5em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 6L16 12L9 18" />
+                    </svg>
+                </span>
+            `;
+            list.appendChild(item);
+        });
+    },
+
+    openCharacterMemoryDetail(contactId) {
+        const contact = STATE.contacts.find(item => item.id === contactId);
+        if (!contact) return;
+        STATE.currentMemoryContactId = contactId;
+        UI.switchView('character-memory-detail');
+    },
+
+    renderCharacterMemoryDetail() {
+        const contact = STATE.contacts.find(item => item.id === STATE.currentMemoryContactId);
+        const title = document.getElementById('character-memory-detail-title');
+        const status = document.getElementById('character-memory-status');
+        const input = document.getElementById('character-memory-inject-days');
+        const list = document.getElementById('character-memory-detail-list');
+        const empty = document.getElementById('character-memory-detail-empty');
+        if (!list) return;
+
+        if (!contact) {
+            if (title) title.textContent = '角色记忆';
+            list.innerHTML = '';
+            if (empty) empty.style.display = 'block';
+            return;
+        }
+
+        const memory = CharacterMemory.ensureMemory(contact.id);
+        if (title) title.textContent = contact.name || '角色记忆';
+        if (input) input.value = Math.max(1, Number.parseInt(memory.injectDays, 10) || CharacterMemory.defaultInjectDays);
+        if (status) {
+            const records = (memory.records || []).filter(record => record && (record.memories?.length || record.error));
+            status.textContent = `${this.getCharacterMemoryStatusText(memory)} · 共 ${records.length} 天`;
+            status.className = `character-memory-status${memory.isGenerating ? ' pending' : ''}${records.some(record => record.error) ? ' failure' : ''}`;
+        }
+
+        list.innerHTML = '';
+        const records = (memory.records || [])
+            .filter(record => record && (record.memories?.length || record.comment || record.error))
+            .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
+        if (empty) empty.style.display = records.length ? 'none' : 'block';
+
+        records.forEach(record => {
+            const card = document.createElement('div');
+            card.className = 'character-memory-card';
+            card.dataset.dateKey = record.dateKey;
+            const items = (record.memories || []).map(item => `
+                <div class="character-memory-item" data-id="${this.escapeHtml(item.id)}">
+                    <div class="character-memory-text">${this.escapeHtml(item.text || '')}</div>
+                    <button type="button" class="character-memory-icon-btn" data-action="edit-memory-item" title="修改记忆">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                    </button>
+                    <button type="button" class="character-memory-icon-btn danger" data-action="delete-memory-item" title="删除记忆">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    </button>
+                </div>
+            `).join('');
+            const comment = record.comment
+                ? `<div class="character-memory-comment">${this.escapeHtml(record.comment)}</div>`
+                : '';
+            const error = record.error
+                ? `<div class="character-memory-comment">生成失败：${this.escapeHtml(record.error)}</div>`
+                : '';
+            card.innerHTML = `
+                <div class="character-memory-card-head">
+                    <div class="character-memory-date">${this.escapeHtml(record.dateKey)}</div>
+                    <button type="button" class="character-memory-icon-btn" data-action="reroll-memory-day" title="重新总结这天的记忆">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"></path>
+                            <path d="M3 21v-5h5"></path>
+                            <path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"></path>
+                            <path d="M21 3v5h-5"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="character-memory-items">${items}</div>
+                ${comment}
+                ${error}
+            `;
+            list.appendChild(card);
+        });
+    },
+
+    async saveCharacterMemoryInjectDays() {
+        const input = document.getElementById('character-memory-inject-days');
+        const memory = CharacterMemory.getMemory(STATE.currentMemoryContactId);
+        if (!input || !memory) return;
+        const value = Math.max(1, Number.parseInt(input.value, 10) || CharacterMemory.defaultInjectDays);
+        input.value = value;
+        memory.injectDays = value;
+        memory.updatedAt = Date.now();
+        await Storage.saveCharacterMemories();
+        this.renderCharacterMemoryList();
+        this.renderCharacterMemoryDetail();
+    },
+
+    buildMemoryRequestSettings(contact) {
+        const settings = {
+            API_URL: STATE.settings.API_URL,
+            API_KEY: STATE.settings.API_KEY,
+            MODEL: STATE.settings.MODEL,
+            ASYNC_BACKEND_ENABLED: false,
+            MAX_TOKENS: 1200,
+            TEMPERATURE: 0.3,
+            CONTEXT_LIMIT: 10,
+            CUSTOM_REQUEST_BODY_JSON: STATE.settings.CUSTOM_REQUEST_BODY_JSON || ''
+        };
+
+        const presetIndex = STATE.settings.CHARACTER_MEMORY_API_PRESET_INDEX;
+        if (typeof presetIndex === 'number' && presetIndex >= 0) {
+            const preset = (STATE.settings.API_PRESETS || [])[presetIndex];
+            if (preset) {
+                console.log(`[角色记忆] 使用预设: ${preset.name}`);
+                settings.API_URL = preset.url;
+                settings.API_KEY = preset.key;
+                settings.MODEL = preset.model;
+                settings.CUSTOM_REQUEST_BODY_JSON = preset.extra_body_json || '';
+                if (preset.max_tokens !== undefined && preset.max_tokens !== '') settings.MAX_TOKENS = Number(preset.max_tokens);
+                if (preset.temperature !== undefined && preset.temperature !== '') settings.TEMPERATURE = Number(preset.temperature);
+            }
+        }
+
+        return settings;
+    },
+
+    async generateCharacterMemory(contactId, dateKey = CharacterMemory.getYesterdayKey(), options = {}) {
+        const contact = STATE.contacts.find(item => item.id === contactId);
+        if (!contact) return false;
+
+        const memory = CharacterMemory.ensureMemory(contactId);
+        if (memory.isGenerating) return false;
+
+        const dayMessages = CharacterMemory.collectMessagesForDate(contact, dateKey);
+        if (!dayMessages.length) {
+            // ★ 空聊天日不创建空 card，只记住这天已经检查过，避免每天打开都空跑。
+            memory.lastAutoGenerateDateKey = dateKey;
+            memory.updatedAt = Date.now();
+            await Storage.saveCharacterMemories();
+            this.renderCharacterMemoryList();
+            this.renderCharacterMemoryDetail();
+            return true;
+        }
+
+        const settings = this.buildMemoryRequestSettings(contact);
+        const record = CharacterMemory.ensureRecord(memory, dateKey);
+        if (!settings.API_URL || !settings.API_KEY || !settings.MODEL) {
+            record.error = 'API 配置缺失';
+            await Storage.saveCharacterMemories();
+            this.renderCharacterMemoryList();
+            this.renderCharacterMemoryDetail();
+            if (!options.silent) alert('API配置缺失！请检查设置。');
+            return false;
+        }
+
+        memory.isGenerating = true;
+        record.isGenerating = true;
+        record.error = '';
+        this.renderCharacterMemoryList();
+        this.renderCharacterMemoryDetail();
+
+        for (let attempt = 0; attempt <= CharacterMemory.maxRetry; attempt++) {
+            try {
+                const messages = CharacterMemory.buildGenerationMessages(contact, dateKey);
+                const rawText = await API.chat(messages, settings);
+                const parsed = CharacterMemory.parseAiMemory(rawText);
+
+                record.memories = parsed.memories;
+                record.comment = parsed.comment;
+                record.generatedAt = new Date().toISOString();
+                record.updatedAt = Date.now();
+                record.error = '';
+                record.isGenerating = false;
+                memory.enabled = true;
+                memory.lastAutoGenerateDateKey = dateKey;
+                memory.updatedAt = Date.now();
+                memory.isGenerating = false;
+                await Storage.saveCharacterMemories();
+                this.renderCharacterMemoryList();
+                this.renderCharacterMemoryDetail();
+                return true;
+            } catch (error) {
+                console.warn('[CharacterMemory] generate failed:', error);
+                record.error = error.message || String(error);
+            }
+        }
+
+        record.isGenerating = false;
+        memory.isGenerating = false;
+        memory.lastAutoGenerateDateKey = dateKey;
+        await Storage.saveCharacterMemories();
+        this.renderCharacterMemoryList();
+        this.renderCharacterMemoryDetail();
+        return false;
+    },
+
+    async toggleCharacterMemoryEnabled(contactId, enabled) {
+        const memory = CharacterMemory.ensureMemory(contactId);
+        memory.enabled = !!enabled;
+        memory.updatedAt = Date.now();
+        await Storage.saveCharacterMemories();
+        this.renderCharacterMemoryList();
+        if (enabled) this.ensureCharacterMemoryReady(contactId, { silent: true });
+    },
+
+    async ensureCharacterMemoryReady(contactId, options = {}) {
+        const memory = CharacterMemory.ensureMemory(contactId);
+        const targetDateKey = CharacterMemory.getYesterdayKey();
+        if (memory.enabled !== true || memory.isGenerating) return false;
+        const record = CharacterMemory.getRecord(memory, targetDateKey);
+        if (record && (record.memories?.length || record.error)) return true;
+        if (memory.lastAutoGenerateDateKey === targetDateKey) return true;
+        return this.generateCharacterMemory(contactId, targetDateKey, options);
+    },
+
+    async ensureEnabledCharacterMemories(options = {}) {
+        if (STATE.memoryQueueRunning) return;
+        STATE.memoryQueueRunning = true;
+
+        const enabledIds = (STATE.characterMemories || [])
+            .filter(memory => memory && memory.enabled === true)
+            .map(memory => memory.charId);
+        const priorityIds = options.priorityId ? [options.priorityId] : [];
+        const queue = [...new Set([...priorityIds, ...enabledIds])]
+            .filter(id => STATE.contacts.some(contact => contact.id === id));
+
+        for (const contactId of queue) {
+            const memory = CharacterMemory.ensureMemory(contactId);
+            if (memory.enabled === true) {
+                await this.ensureCharacterMemoryReady(contactId, { silent: true });
+            }
+        }
+
+        STATE.memoryQueueRunning = false;
+    },
+
+    startCharacterMemoryDateWatcher() {
+        STATE.memoryLastDateKey = CharacterMemory.getTodayKey();
+        if (STATE.memoryDateTimer) clearInterval(STATE.memoryDateTimer);
+
+        // ★ 前端开着跨过 0 点时，下一轮分钟检查会排队总结“刚过去的昨天”。
+        STATE.memoryDateTimer = setInterval(() => {
+            const todayKey = CharacterMemory.getTodayKey();
+            if (todayKey === STATE.memoryLastDateKey) return;
+            STATE.memoryLastDateKey = todayKey;
+            this.ensureEnabledCharacterMemories({
+                priorityId: STATE.currentContactId || STATE.currentMemoryContactId || null,
+                silent: true
+            });
+        }, 60 * 1000);
+    },
+
+    async rerollCharacterMemoryDay(dateKey) {
+        if (!STATE.currentMemoryContactId || !dateKey) return;
+        if (!confirm('你要重新总结这天的记忆吗？')) return;
+        await this.generateCharacterMemory(STATE.currentMemoryContactId, dateKey, { silent: false, force: true });
+    },
+
+    openMemoryItemModal(dateKey, itemId) {
+        const memory = CharacterMemory.getMemory(STATE.currentMemoryContactId);
+        const record = CharacterMemory.getRecord(memory, dateKey);
+        const item = record?.memories?.find(entry => entry.id === itemId);
+        const modal = document.getElementById('modal-character-memory-item');
+        const textInput = document.getElementById('character-memory-item-text');
+        if (!item || !modal || !textInput) return;
+
+        STATE.editingMemoryItem = { dateKey, itemId };
+        textInput.value = item.text || '';
+        modal.classList.remove('hidden');
+        textInput.focus();
+    },
+
+    closeMemoryItemModal() {
+        document.getElementById('modal-character-memory-item')?.classList.add('hidden');
+        STATE.editingMemoryItem = null;
+    },
+
+    async saveMemoryItemFromModal() {
+        const memory = CharacterMemory.getMemory(STATE.currentMemoryContactId);
+        const editing = STATE.editingMemoryItem;
+        const record = CharacterMemory.getRecord(memory, editing?.dateKey);
+        const item = record?.memories?.find(entry => entry.id === editing?.itemId);
+        const textInput = document.getElementById('character-memory-item-text');
+        const text = textInput ? textInput.value.trim().slice(0, CharacterMemory.maxMemoryLength) : '';
+        if (!item) return;
+        if (!text) {
+            alert('写点记忆内容吧');
+            return;
+        }
+
+        item.text = text;
+        item.userEdited = true;
+        item.updatedAt = Date.now();
+        record.updatedAt = Date.now();
+        memory.updatedAt = Date.now();
+        await Storage.saveCharacterMemories();
+        this.closeMemoryItemModal();
+        this.renderCharacterMemoryDetail();
+        this.renderCharacterMemoryList();
+    },
+
+    async deleteMemoryItem(dateKey, itemId) {
+        const memory = CharacterMemory.getMemory(STATE.currentMemoryContactId);
+        const record = CharacterMemory.getRecord(memory, dateKey);
+        if (!record) return;
+        if (!confirm('确定要删除这条记忆吗？')) return;
+
+        record.memories = (record.memories || []).filter(item => item.id !== itemId);
+        record.updatedAt = Date.now();
+        memory.updatedAt = Date.now();
+        await Storage.saveCharacterMemories();
+        this.renderCharacterMemoryDetail();
+        this.renderCharacterMemoryList();
+    },
+    // ★★★★★ 角色记忆 END：页面逻辑层 ★★★★★
+
     // ★★★★★ 角色日程 START：页面逻辑层 ★★★★★
     // 角色日程是“探索页玩法”，但生成结果会作为角色自己的动态状态注入聊天。
     renderScheduleAvatar(contact) {
@@ -7119,6 +7610,15 @@ const App = {
             routineDynamicContextPrompts.push(todoContextPrompt);
         }
         // ★★★★★ 探索 TO DO / 倒数日：收集本轮动态背景 END ★★★★★
+
+        // ★★★★★ 角色记忆：收集本轮动态背景 START ★★★★★
+        // 记忆只注入昨天及更早的总结；寄语只在 UI 展示，不进入上下文。
+        await this.ensureCharacterMemoryReady(contact.id, { priority: true, silent: true });
+        const characterMemoryPrompt = CharacterMemory.buildChatPrompt(contact.id, new Date());
+        if (characterMemoryPrompt) {
+            routineDynamicContextPrompts.push(characterMemoryPrompt);
+        }
+        // ★★★★★ 角色记忆：收集本轮动态背景 END ★★★★★
 
         // ★★★★★ Agent：skill 执行结果回注 START ★★★★★
         // 主模型只看到自然语言摘要，不能看到 worker model 的原始 JSON。
@@ -10791,6 +11291,10 @@ const App = {
             safeSwitchView('character-schedule');
         });
 
+        document.getElementById('explore-character-memory-btn')?.addEventListener('click', () => {
+            safeSwitchView('character-memory');
+        });
+
         document.getElementById('todo-plan-enable-toggle')?.addEventListener('change', (event) => {
             this.toggleTodoPlanInjectEnabled(event.target.checked);
         });
@@ -10815,21 +11319,47 @@ const App = {
             safeSwitchView('character-schedule');
         });
 
+        document.getElementById('character-memory-back-btn')?.addEventListener('click', () => {
+            safeSwitchView(this.getReturnView('character-memory', 'explore'));
+        });
+
+        document.getElementById('character-memory-detail-back-btn')?.addEventListener('click', () => {
+            safeSwitchView('character-memory');
+        });
+
         document.getElementById('character-schedule-settings-btn')?.addEventListener('click', () => {
             this.openCharacterScheduleSettings();
+        });
+
+        document.getElementById('character-memory-settings-btn')?.addEventListener('click', () => {
+            this.openCharacterMemorySettings();
         });
 
         document.getElementById('character-schedule-settings-cancel-btn')?.addEventListener('click', () => {
             document.getElementById('modal-character-schedule-settings')?.classList.add('hidden');
         });
 
+        document.getElementById('character-memory-settings-cancel-btn')?.addEventListener('click', () => {
+            document.getElementById('modal-character-memory-settings')?.classList.add('hidden');
+        });
+
         document.getElementById('character-schedule-settings-save-btn')?.addEventListener('click', () => {
             this.saveCharacterScheduleSettings();
+        });
+
+        document.getElementById('character-memory-settings-save-btn')?.addEventListener('click', () => {
+            this.saveCharacterMemorySettings();
         });
 
         document.getElementById('modal-character-schedule-settings')?.addEventListener('click', (event) => {
             if (event.target === document.getElementById('modal-character-schedule-settings')) {
                 document.getElementById('modal-character-schedule-settings')?.classList.add('hidden');
+            }
+        });
+
+        document.getElementById('modal-character-memory-settings')?.addEventListener('click', (event) => {
+            if (event.target === document.getElementById('modal-character-memory-settings')) {
+                document.getElementById('modal-character-memory-settings')?.classList.add('hidden');
             }
         });
 
@@ -11022,10 +11552,51 @@ const App = {
             this.toggleCharacterScheduleEnabled(itemEl.dataset.id, input.checked === true);
         });
 
+        document.getElementById('character-memory-list')?.addEventListener('click', (event) => {
+            const itemEl = event.target.closest('.character-memory-contact');
+            if (!itemEl?.dataset.id) return;
+
+            if (event.target.closest('.character-memory-switch')) return;
+
+            this.openCharacterMemoryDetail(itemEl.dataset.id);
+        });
+
+        document.getElementById('character-memory-list')?.addEventListener('change', (event) => {
+            const input = event.target.closest('.character-memory-switch input');
+            const itemEl = event.target.closest('.character-memory-contact');
+            if (!input || !itemEl?.dataset.id) return;
+            this.toggleCharacterMemoryEnabled(itemEl.dataset.id, input.checked === true);
+        });
+
+        document.getElementById('character-memory-inject-days')?.addEventListener('input', (event) => {
+            event.target.value = event.target.value.replace(/[^\d]/g, '');
+        });
+
+        document.getElementById('character-memory-inject-days')?.addEventListener('change', () => {
+            this.saveCharacterMemoryInjectDays();
+        });
+
         document.getElementById('character-schedule-detail-list')?.addEventListener('click', (event) => {
             const actionEl = event.target.closest('[data-action="edit-schedule-entry"]');
             const itemEl = event.target.closest('.character-schedule-entry');
             if (actionEl && itemEl?.dataset.id) this.openScheduleEntryModal(itemEl.dataset.id);
+        });
+
+        document.getElementById('character-memory-detail-list')?.addEventListener('click', (event) => {
+            const actionEl = event.target.closest('[data-action]');
+            if (!actionEl) return;
+            const cardEl = actionEl.closest('.character-memory-card');
+            const itemEl = actionEl.closest('.character-memory-item');
+            const dateKey = cardEl?.dataset.dateKey;
+            if (!dateKey) return;
+
+            if (actionEl.dataset.action === 'reroll-memory-day') {
+                this.rerollCharacterMemoryDay(dateKey);
+            } else if (actionEl.dataset.action === 'edit-memory-item' && itemEl?.dataset.id) {
+                this.openMemoryItemModal(dateKey, itemEl.dataset.id);
+            } else if (actionEl.dataset.action === 'delete-memory-item' && itemEl?.dataset.id) {
+                this.deleteMemoryItem(dateKey, itemEl.dataset.id);
+            }
         });
 
         document.getElementById('character-schedule-refresh-btn')?.addEventListener('click', () => {
@@ -11040,9 +11611,23 @@ const App = {
             this.saveScheduleEntryFromModal();
         });
 
+        document.getElementById('character-memory-item-cancel-btn')?.addEventListener('click', () => {
+            this.closeMemoryItemModal();
+        });
+
+        document.getElementById('character-memory-item-save-btn')?.addEventListener('click', () => {
+            this.saveMemoryItemFromModal();
+        });
+
         document.getElementById('modal-character-schedule-entry')?.addEventListener('click', (event) => {
             if (event.target === document.getElementById('modal-character-schedule-entry')) {
                 this.closeScheduleEntryModal();
+            }
+        });
+
+        document.getElementById('modal-character-memory-item')?.addEventListener('click', (event) => {
+            if (event.target === document.getElementById('modal-character-memory-item')) {
+                this.closeMemoryItemModal();
             }
         });
 

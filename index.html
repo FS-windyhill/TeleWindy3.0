@@ -242,27 +242,23 @@
                 </li>
                 <!-- 未来可以加：AI朋友圈、世界画廊等 -->
 
-                <!-- ★★★★★ Agent：探索页入口 START ★★★★★ -->
-                <li id="explore-agent-btn">
+                <!-- ★★★★★ 角色记忆：探索页入口 START ★★★★★ -->
+                <li id="explore-character-memory-btn">
                     <span class="icon">
                         <svg width="0.95em" height="0.95em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 3v4"></path>
-                            <path d="M12 17v4"></path>
-                            <path d="M4.22 6.22l2.83 2.83"></path>
-                            <path d="M16.95 16.95l2.83 2.83"></path>
-                            <path d="M3 12h4"></path>
-                            <path d="M17 12h4"></path>
-                            <circle cx="12" cy="12" r="4"></circle>
+                            <path d="M5 4h11a3 3 0 0 1 3 3v13l-5-3H5a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3z"></path>
+                            <path d="M7 8h8"></path>
+                            <path d="M7 12h5"></path>
                         </svg>
                     </span>
-                    <span class="text">Agent</span>
+                    <span class="text">记忆</span>
                     <span class="arrow">
                         <svg width="1.5em" height="1.5em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" style="vertical-align: -0.125em;">
                             <path d="M9 6L16 12L9 18" />
                         </svg>
                     </span>
                 </li>
-                <!-- ★★★★★ Agent：探索页入口 END ★★★★★ -->
+                <!-- ★★★★★ 角色记忆：探索页入口 END ★★★★★ -->
 
 
                 <!-- ★★★★★ 角色日程：探索页入口 START ★★★★★ -->
@@ -286,6 +282,8 @@
                 </li>
                 <!-- ★★★★★ 角色日程：探索页入口 END ★★★★★ -->
 
+
+                
                 
                 <!-- ★★★★★ 世界书：探索页入口 START ★★★★★ -->
                 <li id="explore-worldbook-btn">
@@ -305,6 +303,30 @@
                     </span>
                 </li>
                 <!-- ★★★★★ 世界书：探索页入口 END ★★★★★ -->
+
+                
+                <!-- ★★★★★ Agent：探索页入口 START ★★★★★ -->
+                <li id="explore-agent-btn">
+                    <span class="icon">
+                        <svg width="0.95em" height="0.95em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 3v4"></path>
+                            <path d="M12 17v4"></path>
+                            <path d="M4.22 6.22l2.83 2.83"></path>
+                            <path d="M16.95 16.95l2.83 2.83"></path>
+                            <path d="M3 12h4"></path>
+                            <path d="M17 12h4"></path>
+                            <circle cx="12" cy="12" r="4"></circle>
+                        </svg>
+                    </span>
+                    <span class="text">Agent</span>
+                    <span class="arrow">
+                        <svg width="1.5em" height="1.5em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" style="vertical-align: -0.125em;">
+                            <path d="M9 6L16 12L9 18" />
+                        </svg>
+                    </span>
+                </li>
+                <!-- ★★★★★ Agent：探索页入口 END ★★★★★ -->
+
 
                 <!-- ★★★★★ 探索 TO DO 计划：入口 START ★★★★★ -->
                 <li id="explore-todo-plan-btn">
@@ -550,6 +572,52 @@
             </button>
         </div>
         <!-- ★★★★★ 角色日程页面 END ★★★★★ -->
+
+        <!-- ★★★★★ 角色记忆页面 START ★★★★★ -->
+        <div id="view-character-memory" class="page-view" style="display: none;">
+            <header class="app-header">
+                <button id="character-memory-back-btn" class="header-icon-btn left" title="返回探索">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
+                <h1>角色记忆</h1>
+                <button id="character-memory-settings-btn" class="header-icon-btn right" title="角色记忆设置">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </button>
+            </header>
+
+            <main class="character-memory-page">
+                <div id="character-memory-list" class="character-memory-list"></div>
+                <div id="character-memory-empty" class="todo-empty-hint">还没有角色，先去通讯录创建一个吧。</div>
+            </main>
+        </div>
+
+        <div id="view-character-memory-detail" class="page-view" style="display: none;">
+            <header class="app-header">
+                <button id="character-memory-detail-back-btn" class="header-icon-btn left" title="返回角色记忆">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
+                <h1 id="character-memory-detail-title">角色记忆</h1>
+            </header>
+
+            <main class="character-memory-page">
+                <div class="character-memory-setting-pill">
+                    <span>注入</span>
+                    <input type="number" id="character-memory-inject-days" min="1" step="1" inputmode="numeric">
+                    <span>天的记忆</span>
+                    <div id="character-memory-status" class="character-memory-status"></div>
+                </div>
+                <div id="character-memory-detail-list" class="character-memory-detail-list"></div>
+                <div id="character-memory-detail-empty" class="todo-empty-hint">开启记忆后，会在这里显示每日总结。</div>
+            </main>
+        </div>
+        <!-- ★★★★★ 角色记忆页面 END ★★★★★ -->
 
         <!-- ★★★★★ Agent 页面 START ★★★★★ -->
         <div id="view-agent" class="page-view" style="display: none;">
@@ -1090,6 +1158,24 @@
         </div>
         <!-- ★★★★★ 角色日程：API 设置弹窗 END ★★★★★ -->
 
+        <!-- ★★★★★ 角色记忆：API 设置弹窗 START ★★★★★ -->
+        <div id="modal-character-memory-settings" class="modal-overlay character-memory-modal-bg hidden">
+            <div class="character-memory-settings-box glass-panel">
+                <h3 class="bianjixiaoxi">角色记忆设置</h3>
+                <div class="character-memory-settings-scroll">
+                    <div class="input-group">
+                        <label>记忆生成 API 预设:</label>
+                        <select id="character-memory-api-preset" class="character-memory-api-select"></select>
+                    </div>
+                </div>
+                <div class="modal-buttons fixed-footer">
+                    <button id="character-memory-settings-cancel-btn" class="cancel-btn">取消</button>
+                    <button id="character-memory-settings-save-btn" class="save-btn">保存</button>
+                </div>
+            </div>
+        </div>
+        <!-- ★★★★★ 角色记忆：API 设置弹窗 END ★★★★★ -->
+
         <!-- ★★★★★ Agent：模型设置弹窗 START ★★★★★ -->
         <div id="modal-agent-settings" class="modal-overlay agent-modal-bg hidden">
             <div class="agent-settings-box glass-panel">
@@ -1121,6 +1207,19 @@
             </div>
         </div>
         <!-- ★★★★★ 角色日程：编辑单条内容弹窗 END ★★★★★ -->
+
+        <!-- ★★★★★ 角色记忆：编辑单条内容弹窗 START ★★★★★ -->
+        <div id="modal-character-memory-item" class="modal-overlay todo-modal-bg hidden">
+            <div class="todo-edit-box glass-panel">
+                <h3 class="bianjixiaoxi">编辑记忆</h3>
+                <textarea id="character-memory-item-text" class="todo-editor-textarea" placeholder="写下这条记忆..." rows="4" maxlength="30"></textarea>
+                <div class="modal-buttons">
+                    <button id="character-memory-item-save-btn" class="primary">保存</button>
+                    <button id="character-memory-item-cancel-btn" class="cancel-btn">取消</button>
+                </div>
+            </div>
+        </div>
+        <!-- ★★★★★ 角色记忆：编辑单条内容弹窗 END ★★★★★ -->
 
         <!-- ================================================= -->
         <!-- TEMPLATES (模板区，不在页面直接显示，供JS调用) -->
@@ -2194,6 +2293,7 @@
     <script src="./js/world-sense.js"></script>
     <script src="./js/todo-countdown-context.js"></script>
     <script src="./js/character-schedule.js"></script>
+    <script src="./js/character-memory.js"></script>
     <script src="./js/agent-runtime.js"></script>
     <script src="./js/agent-todo-manager.js"></script>
     <script src="./script.js"></script>

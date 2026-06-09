@@ -10,11 +10,13 @@
 //   - TODO_PLANS_KEY: 探索页 TO DO 计划列表 key
 //   - COUNTDOWN_DAYS_KEY: 探索页倒数日 / 正数日列表 key
 //   - CHARACTER_SCHEDULES_KEY: 探索页角色日程 key
+//   - CHARACTER_MEMORIES_KEY: 探索页角色记忆 key
 //   - MOMENTS_INJECT_COUNT: 心迹在聊天里提示 AI 的次数
 //   - DEFAULT: 所有设置项的默认值
 //     - TODO_PLAN_INJECT_ENABLED: TO DO 计划是否注入 AI system prompt
 //     - COUNTDOWN_INJECT_ENABLED: 倒数日 / 正数日是否注入 AI system prompt
 //     - CHARACTER_SCHEDULE_API_PRESET_INDEX: 角色日程生成使用的 API 预设索引
+//     - CHARACTER_MEMORY_API_PRESET_INDEX: 角色记忆生成使用的 API 预设索引
 //     - AGENT_SKILL_ROUTER_ENABLED / AGENT_SKILL_ROUTER_API_PRESET_INDEX: Agent 工具路由器开关和模型预设
 //     - MOMENTS_SETTINGS: 心迹页面默认设置
 //   - SYSTEM_PROMPT: 默认系统提示词
@@ -31,6 +33,7 @@ const CONFIG = {
     TODO_PLANS_KEY: 'teleWindy_todo_plans_v1',
     COUNTDOWN_DAYS_KEY: 'teleWindy_countdown_days_v1',
     CHARACTER_SCHEDULES_KEY: 'teleWindy_character_schedules_v1',
+    CHARACTER_MEMORIES_KEY: 'teleWindy_character_memories_v1',
 
     CHAT_PAGE_SIZE: 15,
     MOMENTS_PAGE_SIZE: 15, // 心迹分页数
@@ -57,6 +60,7 @@ const CONFIG = {
         TODO_PLAN_INJECT_ENABLED: false,
         COUNTDOWN_INJECT_ENABLED: false,
         CHARACTER_SCHEDULE_API_PRESET_INDEX: -1,
+        CHARACTER_MEMORY_API_PRESET_INDEX: -1,
         AGENT_SKILL_ROUTER_ENABLED: false,
         AGENT_SKILL_ROUTER_API_PRESET_INDEX: -1,
         WALLPAPER: 'assets/images/wallpaper.jpg',

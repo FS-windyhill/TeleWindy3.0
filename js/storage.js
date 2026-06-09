@@ -22,6 +22,7 @@
 //   - Storage.saveTodoPlans(): 保存探索页 TO DO 计划列表
 //   - Storage.saveCountdownDays(): 保存探索页倒数日 / 正数日列表
 //   - Storage.saveCharacterSchedules(): 保存探索页角色日程
+//   - Storage.saveCharacterMemories(): 保存探索页角色记忆
 // =========================================
 
 // =========================================
@@ -273,7 +274,7 @@ const Storage = {
             STATE.momentsSettings = JSON.parse(JSON.stringify(CONFIG.DEFAULT.MOMENTS_SETTINGS));
         }
 
-        // ★★★★★ 探索 TO DO / 倒数日 / 角色日程 START ★★★★★
+        // ★★★★★ 探索 TO DO / 倒数日 / 角色日程 / 角色记忆 START ★★★★★
         // 这几块是用户自己的静态前端内容，单独放 IndexedDB。
         // 开关仍跟内容一起保存，关闭功能也不丢已生成/编辑过的内容。
         try {
@@ -289,13 +290,27 @@ const Storage = {
             STATE.characterSchedules.forEach(item => {
                 if (item) item.isGenerating = false;
             });
+
+            const characterMemories = await DB.get(CONFIG.CHARACTER_MEMORIES_KEY);
+            STATE.characterMemories = Array.isArray(characterMemories) ? characterMemories : [];
+            // 生成中只是前端运行态；刷新/重开后应回到可重试状态。
+            STATE.characterMemories.forEach(memory => {
+                if (!memory) return;
+                memory.isGenerating = false;
+                if (Array.isArray(memory.records)) {
+                    memory.records.forEach(record => {
+                        if (record) record.isGenerating = false;
+                    });
+                }
+            });
         } catch (e) {
-            console.warn("读取 TO DO / 倒数日 / 角色日程数据失败 (可能是第一次运行):", e);
+            console.warn("读取 TO DO / 倒数日 / 角色日程 / 角色记忆数据失败 (可能是第一次运行):", e);
             STATE.todoPlans = [];
             STATE.countdownDays = [];
             STATE.characterSchedules = [];
+            STATE.characterMemories = [];
         }
-        // ★★★★★ 探索 TO DO / 倒数日 / 角色日程 END ★★★★★
+        // ★★★★★ 探索 TO DO / 倒数日 / 角色日程 / 角色记忆 END ★★★★★
 
 
 
@@ -515,6 +530,15 @@ const Storage = {
             return;
         }
         await DB.set(CONFIG.CHARACTER_SCHEDULES_KEY, STATE.characterSchedules);
+    },
+
+    // 保存角色记忆列表
+    async saveCharacterMemories() {
+        if (!CONFIG.CHARACTER_MEMORIES_KEY) {
+            console.error("CONFIG.CHARACTER_MEMORIES_KEY 未定义！请检查配置。");
+            return;
+        }
+        await DB.set(CONFIG.CHARACTER_MEMORIES_KEY, STATE.characterMemories);
     },
 
 
