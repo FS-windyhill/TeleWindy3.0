@@ -5524,8 +5524,7 @@ const App = {
         return {
             prompt: [
                 `你已经为用户添加了 ${items.length} 项 TODO。`,
-                ...createdLines,
-                '请自然回应，不要提到系统、工具或 JSON。'
+                ...createdLines
             ].join('\n')
         };
     },
