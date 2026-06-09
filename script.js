@@ -4621,7 +4621,7 @@ const App = {
         stack.appendChild(notice);
         requestAnimationFrame(() => notice.classList.add('show'));
 
-        const timeout = Number.isFinite(options.timeout) ? options.timeout : 20000;
+        const timeout = Number.isFinite(options.timeout) ? options.timeout : 2000;
         if (timeout > 0) {
             setTimeout(closeNotice, timeout);
         }
