@@ -179,6 +179,12 @@ async function createJob(request, env) {
   const messages = sanitizeMessages(payload.messages);
   const requestBodyExtra = sanitizeRequestBodyExtra(payload.request_body_extra);
   const vision = sanitizeVisionPayload(payload.vision, authMode);
+  const agent = sanitizeAgentPayload(payload.agent, authMode);
+  const agentModelForAllowList = agent?.todoManager ? sanitizeModel(agent.todoManager.model || env.DEFAULT_MODEL) : "";
+  if (allowedModels && agentModelForAllowList && !allowedModels.has(agentModelForAllowList)) {
+    console.warn("job_agent_model_not_allowed", { model: agentModelForAllowList });
+    return json({ error: "agent_model_not_allowed" }, 400, request, env);
+  }
   if (requestBodyExtra === null) {
     console.warn("job_request_body_extra_invalid", {
       extraType: typeof payload.request_body_extra
@@ -196,6 +202,7 @@ async function createJob(request, env) {
     messageCount: messages.length,
     hasVision: !!vision,
     requestBodyExtraKeys: Object.keys(requestBodyExtra),
+    hasAgent: !!agent?.todoManager,
     ttlSeconds,
     contentLength
   });
@@ -207,6 +214,7 @@ async function createJob(request, env) {
     messageCount: messages.length,
     hasVision: !!vision,
     requestBodyExtraKeys: Object.keys(requestBodyExtra),
+    hasAgent: !!agent?.todoManager,
     ttlSeconds,
     contentLength
   });
@@ -226,6 +234,9 @@ async function createJob(request, env) {
     max_tokens: clampInteger(payload.max_tokens, 1, 8192, 2048),
     request_body_extra: requestBodyExtra,
     vision,
+    agent,
+    dynamicContextInsertMode: sanitizeDynamicContextInsertMode(payload.dynamic_context_insert_mode),
+    requestUserMessageIndex: clampInteger(payload.request_user_message_index, -1, 100000, -1),
     ttlSeconds
   };
 
@@ -365,10 +376,24 @@ async function runJob(jobId, body, env) {
     });
 
     let imageDescription = null;
+    let agentActions = [];
     let messagesForChat = body.messages;
     if (body.vision) {
       imageDescription = await analyzeVisionImage(body.vision, env, jobId, body.ttlSeconds);
       messagesForChat = injectImageDescription(body.messages, imageDescription);
+    }
+
+    if (body.agent?.todoManager) {
+      const agentResult = await runTodoManagerAgent(body.agent.todoManager, env, jobId, body.ttlSeconds);
+      if (agentResult.prompt) {
+        messagesForChat = injectVolatilePrompt(
+          messagesForChat,
+          agentResult.prompt,
+          body.dynamicContextInsertMode,
+          body.requestUserMessageIndex
+        );
+      }
+      agentActions = agentResult.actions || [];
     }
 
     const upstreamBody = {
@@ -427,6 +452,7 @@ async function runJob(jobId, body, env) {
       status: "done",
       result: content.trim(),
       image_description: imageDescription,
+      agent_actions: agentActions,
       usage: data.usage || null,
       finishedAt: Date.now()
     }, "job_run_done", {
@@ -542,10 +568,332 @@ function sanitizeVisionPayload(vision, defaultAuthMode) {
   };
 }
 
+function sanitizeDynamicContextInsertMode(value) {
+  return ["auto", "system", "user"].includes(value) ? value : "auto";
+}
+
 function visionFallbackDescription() {
   return "（系统提示：用户发送了一张图片，但由于未配置视觉模型或网络错误，无法提供图片内容的文本描述。请根据用户的文字上下文进行回复，如果需要，可以礼貌地询问图片内容。）";
 }
 // ★★★★★ 后台识图 END ★★★★★
+
+// ★★★★★ 后台 Agent：TODO 管理 START ★★★★★
+async function runTodoManagerAgent(agent, env, jobId, ttlSeconds) {
+  try {
+    const model = sanitizeModel(agent.model || env.DEFAULT_MODEL);
+    const upstream = resolveUpstream(agent.apiUrl, agent.apiKey, agent.authMode, env);
+    if (!upstream.ok) throw new Error(upstream.error || "agent_upstream_not_configured");
+
+    await appendJobEvent(jobId, env, "agent_todo_start", {
+      model,
+      todoCount: agent.todoSnapshot.length
+    }, ttlSeconds);
+
+    const response = await fetchWithTimeout(upstream.provider.url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${upstream.provider.apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model,
+        messages: buildTodoAgentMessages(agent),
+        temperature: agent.temperature,
+        max_tokens: agent.maxTokens,
+        ...(agent.requestBodyExtra || {}),
+        stream: false
+      })
+    }, UPSTREAM_TIMEOUT_MS, "agent_todo_upstream");
+
+    if (!response.ok) throw new Error(`agent_todo_upstream_${response.status}`);
+
+    const data = await response.json();
+    const rawText = extractAssistantContent(data);
+    const routerResult = parseTodoAgentResult(rawText);
+    const execution = executeTodoAgentResult(routerResult, agent.todoSnapshot);
+
+    await appendJobEvent(jobId, env, "agent_todo_done", {
+      intent: routerResult.intent,
+      actionCount: execution.actions.length
+    }, ttlSeconds);
+
+    return execution;
+  } catch (error) {
+    console.warn("agent_todo_failed", {
+      error: error?.message || String(error)
+    });
+    await appendJobEvent(jobId, env, "agent_todo_failed", {
+      error: sanitizeLogText(error?.message || String(error))
+    }, ttlSeconds);
+    return { prompt: "", actions: [] };
+  }
+}
+
+function buildTodoAgentMessages(agent) {
+  const todayKey = getDateKey(new Date());
+  const tomorrowKey = addDays(todayKey, 1);
+  const prompt = [
+    "你是 TeleWindy 的 TODO 管理 Agent，只判断用户这句话是否需要操作 TODO。",
+    "你只能从 intent 枚举中选择：NONE、CREATE_TODO、UPDATE_TODO、ASK_CONFIRMATION。",
+    "不要打分，不要输出 Markdown，不要解释，只输出 JSON。",
+    "",
+    "规则：",
+    "- 普通聊天、情绪表达、角色互动，选 NONE。",
+    "- 只有用户明确要求记录、提醒、安排任务时，才选 CREATE_TODO。",
+    "- 只有用户明确表示某个 TODO 完成、延期、修改、取消、不需要、删除时，才选 UPDATE_TODO。",
+    "- 用户说删除、取消、不需要某个 TODO 时，不要真正删除，统一输出 UPDATE_TODO 且 status=cancelled。",
+    "- 找不到唯一目标、信息不足或高风险覆盖操作，选 ASK_CONFIRMATION。",
+    "- 不要编造用户没有说的日期、任务或目标。",
+    "",
+    "JSON 格式：",
+    "{\"intent\":\"CREATE_TODO\",\"todo\":{\"text\":\"继续写论文\",\"dateKey\":\"2026-06-10\",\"startTime\":\"\",\"endTime\":\"\"},\"update\":{\"matchText\":\"\",\"dateKey\":\"\",\"newText\":\"\",\"newDateKey\":\"\",\"status\":\"\",\"startTime\":\"\",\"endTime\":\"\"},\"confirmation\":{\"message\":\"\"}}",
+    "",
+    "字段说明：",
+    "- CREATE_TODO 时填写 todo.text 和 todo.dateKey；没有明确日期时用今天。",
+    "- UPDATE_TODO 时填写 update.matchText；完成用 status=done，取消/删除/不需要用 status=cancelled，延期/改日期用 newDateKey，改内容用 newText。",
+    "- ASK_CONFIRMATION 时 confirmation.message 写给前端确认/提示用的一句话。",
+    "- 不需要的对象字段留空字符串。",
+    "",
+    `今天日期：${todayKey}`,
+    `明天日期：${tomorrowKey}`,
+    "",
+    "【当前角色】",
+    agent.contactName || "未命名角色",
+    "",
+    "【现有 TODO】",
+    JSON.stringify(agent.todoSnapshot, null, 2),
+    "",
+    "【用户当前消息】",
+    agent.userText || ""
+  ].join("\n");
+
+  return [{ role: "system", content: prompt }];
+}
+
+function parseTodoAgentResult(rawText) {
+  const data = extractJsonObject(rawText);
+  const intent = String(data.intent || "").trim().toUpperCase();
+  if (!["NONE", "CREATE_TODO", "UPDATE_TODO", "ASK_CONFIRMATION"].includes(intent)) {
+    throw new Error(`agent_unknown_intent:${intent || "empty"}`);
+  }
+  return {
+    intent,
+    todo: data.todo && typeof data.todo === "object" ? data.todo : {},
+    update: data.update && typeof data.update === "object" ? data.update : {},
+    confirmation: data.confirmation && typeof data.confirmation === "object" ? data.confirmation : {}
+  };
+}
+
+function executeTodoAgentResult(result, todoSnapshot) {
+  if (!result || result.intent === "NONE" || result.intent === "ASK_CONFIRMATION") {
+    return { prompt: "", actions: [] };
+  }
+
+  if (result.intent === "CREATE_TODO") {
+    const text = cleanAgentText(result.todo.text || result.todo.title || "", 120);
+    if (!text) return { prompt: "", actions: [] };
+    const dateKey = isDateKey(result.todo.dateKey) ? result.todo.dateKey : getDateKey(new Date());
+    const startTime = isTimeValue(result.todo.startTime) ? result.todo.startTime : "";
+    const endTime = isTimeValue(result.todo.endTime) ? result.todo.endTime : "";
+    const item = {
+      id: `todo_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
+      text,
+      dateKey,
+      done: false,
+      cancelled: false,
+      createdAt: Date.now()
+    };
+    if (startTime && endTime && startTime < endTime) {
+      item.startTime = startTime;
+      item.endTime = endTime;
+    }
+    const timeText = item.startTime && item.endTime ? `，时间 ${item.startTime}-${item.endTime}` : "";
+    return {
+      prompt: [
+        `你已经为用户添加了一项 TODO：${item.text}。`,
+        `日期：${item.dateKey}${timeText}。`,
+        "请自然回应，不要提到系统、工具或 JSON。"
+      ].join("\n"),
+      actions: [{
+        id: crypto.randomUUID(),
+        type: "todo.create",
+        item,
+        notice: `添加了 TODO：${item.text}`
+      }]
+    };
+  }
+
+  const candidates = findTodoAgentCandidates(result, todoSnapshot);
+  if (candidates.length !== 1) return { prompt: "", actions: [] };
+
+  const item = candidates[0];
+  const update = result.update || {};
+  const status = String(update.status || update.action || "").trim().toLowerCase();
+  const patch = {};
+  let actionText = "更新了 TODO";
+
+  if (["cancelled", "canceled", "cancel", "deleted", "delete", "removed", "remove"].includes(status)) {
+    patch.cancelled = true;
+    patch.done = false;
+    actionText = "取消了 TODO";
+  } else if (status === "done" || status === "completed") {
+    patch.done = true;
+    patch.cancelled = false;
+    actionText = "完成了 TODO";
+  } else if (status === "active" || status === "undone") {
+    patch.done = false;
+    patch.cancelled = false;
+    actionText = "恢复了 TODO";
+  }
+
+  const newText = cleanAgentText(update.newText || "", 120);
+  if (newText) patch.text = newText;
+  if (isDateKey(update.newDateKey)) {
+    patch.dateKey = update.newDateKey;
+    if (actionText === "更新了 TODO") actionText = "调整了 TODO 日期";
+  }
+  if (isTimeValue(update.startTime) && isTimeValue(update.endTime) && update.startTime < update.endTime) {
+    patch.startTime = update.startTime;
+    patch.endTime = update.endTime;
+    if (actionText === "更新了 TODO") actionText = "调整了 TODO 时间";
+  }
+  if (!Object.keys(patch).length) return { prompt: "", actions: [] };
+
+  const after = { ...item, ...patch };
+  return {
+    prompt: [
+      `你已经为用户${actionText}。`,
+      `原内容：${formatTodoAgentLabel(item)}`,
+      `现在：${formatTodoAgentLabel(after)}${after.done ? "，状态为已完成" : ""}${after.cancelled ? "，状态为已取消" : ""}。`,
+      "请自然回应，不要提到系统、工具或 JSON。"
+    ].join("\n"),
+    actions: [{
+      id: crypto.randomUUID(),
+      type: "todo.update",
+      todoId: item.id,
+      patch,
+      notice: `${actionText}：${after.text || item.text}`
+    }]
+  };
+}
+
+function findTodoAgentCandidates(result, todoSnapshot) {
+  const update = result?.update || {};
+  const matchId = cleanAgentText(update.id || update.todoId || "", 80);
+  const matchText = cleanAgentText(update.matchText || update.text || update.oldText || "", 80).toLowerCase();
+  const dateKey = isDateKey(update.dateKey) ? update.dateKey : "";
+  let items = Array.isArray(todoSnapshot) ? todoSnapshot.filter(item => item && item.text) : [];
+  if (matchId) items = items.filter(item => item.id === matchId);
+  if (dateKey) items = items.filter(item => item.dateKey === dateKey);
+  if (matchText) items = items.filter(item => String(item.text || "").toLowerCase().includes(matchText));
+  if (!matchId && !matchText && !dateKey) return [];
+  return items;
+}
+
+function injectVolatilePrompt(messages, prompt, insertMode, userMessageIndex) {
+  const cleanPrompt = String(prompt || "").trim();
+  if (!cleanPrompt) return messages;
+  if (insertMode === "system") {
+    return [...messages, { role: "system", content: ["=== 本轮背景资料 ===", "", cleanPrompt].join("\n\n") }];
+  }
+
+  const nextMessages = messages.map(message => ({ ...message }));
+  const index = Number.isInteger(userMessageIndex) && userMessageIndex >= 0
+    ? userMessageIndex
+    : nextMessages.map(message => message.role).lastIndexOf("user");
+  if (insertMode === "user" || insertMode === "auto") {
+    if (index >= 0 && nextMessages[index]?.role === "user") {
+      nextMessages[index].content = [
+        "【系统信息补充】",
+        cleanPrompt,
+        "",
+        "【用户当前消息】",
+        nextMessages[index].content || ""
+      ].join("\n\n");
+      return nextMessages;
+    }
+  }
+  return [...nextMessages, { role: "system", content: ["=== 本轮背景资料 ===", "", cleanPrompt].join("\n\n") }];
+}
+
+function sanitizeAgentPayload(agent, defaultAuthMode) {
+  if (!agent || typeof agent !== "object" || Array.isArray(agent)) return null;
+  const todo = agent.todo_manager && typeof agent.todo_manager === "object" ? agent.todo_manager : null;
+  if (!todo || todo.enabled !== true) return null;
+  const authMode = sanitizeAuthMode(todo.auth_mode || defaultAuthMode);
+  const requestBodyExtra = sanitizeRequestBodyExtra(todo.request_body_extra);
+  return {
+    todoManager: {
+      userText: cleanAgentText(todo.user_text || "", 1000),
+      contactName: cleanAgentText(todo.contact_name || "", 120),
+      todoSnapshot: sanitizeTodoSnapshot(todo.todo_snapshot),
+      apiUrl: normalizeUrl(todo.api_url),
+      apiKey: authMode === "server_secret" ? "" : String(todo.api_key || ""),
+      authMode,
+      model: sanitizeModel(todo.model || ""),
+      temperature: clampNumber(todo.temperature, 0, 2, 0.1),
+      maxTokens: clampInteger(todo.max_tokens, 1, 4096, 1200),
+      requestBodyExtra: requestBodyExtra && typeof requestBodyExtra === "object" ? requestBodyExtra : {}
+    }
+  };
+}
+
+function sanitizeTodoSnapshot(items) {
+  if (!Array.isArray(items)) return [];
+  return items.slice(0, 100).map(item => ({
+    id: cleanAgentText(item?.id || "", 80),
+    text: cleanAgentText(item?.text || "", 120),
+    dateKey: isDateKey(item?.dateKey) ? item.dateKey : getDateKey(new Date()),
+    done: item?.done === true,
+    cancelled: item?.cancelled === true,
+    startTime: isTimeValue(item?.startTime) ? item.startTime : "",
+    endTime: isTimeValue(item?.endTime) ? item.endTime : ""
+  })).filter(item => item.id && item.text);
+}
+
+function extractJsonObject(rawText) {
+  const text = String(rawText || "").trim();
+  if (!text) throw new Error("agent_empty_json");
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenced) return JSON.parse(fenced[1].trim());
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start >= 0 && end > start) return JSON.parse(text.slice(start, end + 1));
+    throw error;
+  }
+}
+
+function cleanAgentText(value, maxLength = 120) {
+  return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);
+}
+
+function formatTodoAgentLabel(item) {
+  const timeText = item.startTime && item.endTime ? ` ${item.startTime}-${item.endTime}` : "";
+  return `${item.dateKey || getDateKey(new Date())}${timeText}：${item.text}`;
+}
+
+function isDateKey(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""));
+}
+
+function isTimeValue(value) {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ""));
+}
+
+function getDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function addDays(dateKey, days) {
+  const [year, month, day] = String(dateKey || "").split("-").map(Number);
+  const date = new Date(year || 1970, (month || 1) - 1, day || 1);
+  date.setDate(date.getDate() + days);
+  return getDateKey(date);
+}
+// ★★★★★ 后台 Agent：TODO 管理 END ★★★★★
 
 async function fetchWithTimeout(url, options, timeoutMs, label) {
   const controller = new AbortController();

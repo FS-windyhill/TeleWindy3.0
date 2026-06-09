@@ -953,7 +953,10 @@ const API = {
             unauthorized_request: '后台密钥校验失败，请检查页面 Token 和 Worker APP_TOKEN',
             forbidden_origin: '访问来源被 Worker 拦截，请检查 ALLOWED_ORIGIN',
             async_backend_fetch_failed: '浏览器没有连上 Worker，可能是网络、域名或 CORS 被拦截',
-            vision_analyze_failed: '后台识图失败，已改用兜底图片描述'
+            vision_analyze_failed: '后台识图失败，已改用兜底图片描述',
+            agent_todo_start: '后台 TODO 管理已开始判断',
+            agent_todo_done: '后台 TODO 管理已完成',
+            agent_todo_failed: '后台 TODO 管理执行失败，已跳过'
         };
         return map[code] || `后台事件：${code}`;
     },
@@ -987,12 +990,13 @@ const API = {
                 max_tokens: settings.MAX_TOKENS,
                 stream: false,
                 ...(requestBodyExtraForLog || {}),
-                async_backend: {
-                    url: backendUrl,
-                    ttl_hours: settings.ASYNC_BACKEND_TTL_HOURS,
-                    has_vision: !!settings.ASYNC_BACKEND_VISION
-                }
-            };
+            async_backend: {
+                url: backendUrl,
+                ttl_hours: settings.ASYNC_BACKEND_TTL_HOURS,
+                has_vision: !!settings.ASYNC_BACKEND_VISION,
+                has_agent: !!settings.ASYNC_BACKEND_AGENT
+            }
+        };
 
             window.LAST_API_LOG = {
                 content: JSON.stringify(asyncLogPayload, null, 2),
@@ -1082,6 +1086,7 @@ const API = {
                 jobId: job.jobId,
                 result: (result.result || '').trim(),
                 image_description: result.image_description || null,
+                agent_actions: Array.isArray(result.agent_actions) ? result.agent_actions : [],
                 userMessageIndex: settings.ASYNC_BACKEND_USER_MESSAGE_INDEX ?? null
             };
             return (result.result || '').trim();
@@ -1161,8 +1166,11 @@ const API = {
             temperature: settings.TEMPERATURE,
             max_tokens: settings.MAX_TOKENS,
             ttl_hours: settings.ASYNC_BACKEND_TTL_HOURS,
+            request_user_message_index: settings.ASYNC_BACKEND_REQUEST_USER_MESSAGE_INDEX ?? -1,
+            dynamic_context_insert_mode: settings.DYNAMIC_CONTEXT_INSERT_MODE || 'auto',
             request_body_extra: requestBodyExtra,
-            vision: visionPayload
+            vision: visionPayload,
+            agent: settings.ASYNC_BACKEND_AGENT || null
         };
         const payloadText = JSON.stringify(payload);
         const payloadBytes = new Blob([payloadText]).size;
@@ -1182,6 +1190,7 @@ const API = {
             maxTokens: payload.max_tokens,
             ttlHours: payload.ttl_hours,
             hasVision: !!visionPayload,
+            hasAgent: !!payload.agent,
             visionModel: visionPayload?.model || '',
             hasRequestBodyExtra: !!requestBodyExtra,
             requestBodyExtraKeys: requestBodyExtra ? Object.keys(requestBodyExtra) : []
@@ -3641,6 +3650,10 @@ const App = {
                             }
                         }
 
+                        if (Array.isArray(job.agent_actions) && job.agent_actions.length) {
+                            await this.applyAsyncAgentActions(job.agent_actions, contact);
+                        }
+
                         const alreadySaved = contact.history.some(msg => msg.asyncJobId === pending.jobId);
                         if (!alreadySaved) {
                             contact.history.push({
@@ -5338,6 +5351,45 @@ const App = {
         return settings;
     },
 
+    buildAsyncBackendAgentPayload(contact, userText, requestSettings) {
+        if (STATE.settings.AGENT_SKILL_ROUTER_ENABLED !== true) return null;
+        if (typeof AgentTodoManager === 'undefined') return null;
+        if (!userText) return null;
+
+        const agentSettings = this.buildAgentTodoManagerRequestSettings();
+        const authMode = requestSettings.ASYNC_BACKEND_KEY_MODE || 'client_key';
+        return {
+            todo_manager: {
+                enabled: true,
+                user_text: userText,
+                contact_name: contact?.name || '',
+                todo_snapshot: AgentTodoManager.buildTodoSnapshot(new Date()),
+                dynamic_context_insert_mode: requestSettings.DYNAMIC_CONTEXT_INSERT_MODE || 'auto',
+                api_url: agentSettings.API_URL,
+                auth_mode: authMode,
+                api_key: authMode === 'server_secret' ? '' : agentSettings.API_KEY,
+                model: agentSettings.MODEL,
+                temperature: agentSettings.TEMPERATURE,
+                max_tokens: agentSettings.MAX_TOKENS,
+                request_body_extra: this.parseRequestBodyExtraForAgent(agentSettings.CUSTOM_REQUEST_BODY_JSON)
+            }
+        };
+    },
+
+    parseRequestBodyExtraForAgent(rawJson) {
+        const raw = String(rawJson || '').trim();
+        if (!raw) return {};
+        try {
+            const data = JSON.parse(raw);
+            return data && typeof data === 'object' && !Array.isArray(data)
+                ? { ...data, stream: false }
+                : {};
+        } catch (error) {
+            console.warn('[Agent][TODO管理] 请求体附加参数解析失败，后台 Agent 将忽略它:', error);
+            return {};
+        }
+    },
+
     async runAgentTodoManager(contact, userText) {
         if (STATE.settings.AGENT_SKILL_ROUTER_ENABLED !== true) return null;
         if (typeof AgentTodoManager === 'undefined') return null;
@@ -5525,6 +5577,90 @@ const App = {
                 '请自然回应，不要提到系统、工具或 JSON。'
             ].join('\n')
         };
+    },
+
+    appliedAgentActionStorageKey() {
+        return 'telewindy_applied_agent_actions_v1';
+    },
+
+    loadAppliedAgentActionIds() {
+        try {
+            const ids = JSON.parse(localStorage.getItem(this.appliedAgentActionStorageKey()) || '[]');
+            return Array.isArray(ids) ? ids : [];
+        } catch (error) {
+            return [];
+        }
+    },
+
+    saveAppliedAgentActionIds(ids) {
+        localStorage.setItem(this.appliedAgentActionStorageKey(), JSON.stringify(ids.slice(-300)));
+    },
+
+    async applyAsyncAgentActions(actions, contact = null) {
+        if (!Array.isArray(actions) || !actions.length) return false;
+
+        const appliedIds = this.loadAppliedAgentActionIds();
+        let changed = false;
+        for (const action of actions) {
+            if (!action || !action.id || appliedIds.includes(action.id)) continue;
+            const applied = await this.applyAsyncAgentAction(action, contact);
+            appliedIds.push(action.id);
+            if (applied) changed = true;
+        }
+
+        this.saveAppliedAgentActionIds([...new Set(appliedIds)]);
+        if (changed) {
+            await Storage.saveTodoPlans();
+            this.renderTodoPlans();
+            this.renderDesktop();
+        }
+        return changed;
+    },
+
+    async applyAsyncAgentAction(action, contact = null) {
+        console.log('[Agent][后台] 应用 action:', action);
+        if (action.type === 'todo.create' && action.item) {
+            if (STATE.todoPlans.some(item => item.id === action.item.id)) return false;
+            STATE.todoPlans.push({ ...action.item });
+            this.showTopNotice(`${contact?.name || 'TODO 管理'} ${action.notice || `添加了 TODO：${action.item.text}`}`, {
+                actionLabel: '撤销',
+                onAction: async () => {
+                    STATE.todoPlans = STATE.todoPlans.filter(item => item.id !== action.item.id);
+                    await Storage.saveTodoPlans();
+                    this.renderTodoPlans();
+                    this.renderDesktop();
+                    console.log('[Agent][后台] 已撤销 action:', action.id);
+                }
+            });
+            return true;
+        }
+
+        if (action.type === 'todo.update' && action.todoId && action.patch) {
+            const item = STATE.todoPlans.find(todo => todo.id === action.todoId);
+            if (!item) {
+                this.showTopNotice(`${contact?.name || 'TODO 管理'} 有一项后台操作未应用：本地计划已变化`, { type: 'pending' });
+                return false;
+            }
+
+            const before = { ...item };
+            Object.assign(item, action.patch, { updatedAt: Date.now() });
+            this.showTopNotice(`${contact?.name || 'TODO 管理'} ${action.notice || `更新了 TODO：${item.text}`}`, {
+                actionLabel: '撤销',
+                onAction: async () => {
+                    const current = STATE.todoPlans.find(todo => todo.id === before.id);
+                    if (!current) return;
+                    Object.keys(current).forEach(key => delete current[key]);
+                    Object.assign(current, before);
+                    await Storage.saveTodoPlans();
+                    this.renderTodoPlans();
+                    this.renderDesktop();
+                    console.log('[Agent][后台] 已撤销 action:', action.id);
+                }
+            });
+            return true;
+        }
+
+        return false;
     },
     // ★★★★★ Agent END：TODO 管理设置 + skill 执行 ★★★★★
 
@@ -6713,7 +6849,7 @@ const App = {
         // ★★★★★ Agent：TODO 管理前置执行 START ★★★★★
         // 只要本轮有用户文字，就让 worker model 判断 TODO skill；图片内容本身先不参与路由。
         // Reroll 不触发，避免重新生成时重复创建/修改 TODO。
-        const agentRuntimeResult = (!isReroll && userText && typeof AgentRuntime !== 'undefined')
+        const agentRuntimeResult = (!usingAsyncBackend && !isReroll && userText && typeof AgentRuntime !== 'undefined')
             ? await AgentRuntime.runBeforeMainModel({ app: this, contact, userText })
             : null;
         // ★★★★★ Agent：TODO 管理前置执行 END ★★★★★
@@ -6967,6 +7103,9 @@ const App = {
         requestSettings.ASYNC_BACKEND_REQUEST_USER_MESSAGE_INDEX = currentUserMessage
             ? messagesToSend.length - 1
             : -1;
+        requestSettings.ASYNC_BACKEND_AGENT = usingAsyncBackend
+            ? this.buildAsyncBackendAgentPayload(contact, userText, requestSettings)
+            : null;
         requestSettings.REQUEST_CACHE_DEBUG_LOG = this.buildRequestCacheDebugLog({
             messages: messagesToSend,
             stableMessageCount,
@@ -6989,6 +7128,7 @@ const App = {
             const aiTimestamp = formatTimestamp();
             const asyncJobId = usingAsyncBackend ? API.lastAsyncBackendResult?.jobId : null;
             const asyncImageDescription = usingAsyncBackend ? API.lastAsyncBackendResult?.image_description : null;
+            const asyncAgentActions = usingAsyncBackend ? API.lastAsyncBackendResult?.agent_actions : null;
             const asyncUserMessageIndex = usingAsyncBackend ? API.lastAsyncBackendResult?.userMessageIndex : null;
 
             // ★ 后台识图回填：
@@ -6999,6 +7139,10 @@ const App = {
                 if (imageMsg && imageMsg.role === 'user' && imageMsg.images && !imageMsg.image_description) {
                     imageMsg.image_description = asyncImageDescription;
                 }
+            }
+
+            if (Array.isArray(asyncAgentActions) && asyncAgentActions.length) {
+                await this.applyAsyncAgentActions(asyncAgentActions, contact);
             }
 
             const alreadySavedByResume = asyncJobId
