@@ -522,7 +522,7 @@
 //     - buildAgentSkillRouterRequestSettings(baseSettings): 生成 Agent 轻量模型参数，压小输出预算
 //     - buildAgentTodoManagerRequestSettings(): 生成 TODO 管理 Agent 使用的 API 配置
 //     - runAgentPostAgents(contact, assistantText, assistantMessage): 只在角色回复含『动作意图』时触发 Agent，不再每轮跑总路由
-//     - runAgentTodoIntentOperations(contact, intentTexts, assistantMessage): 把『』内自然语言意图交给 TODO Agent 翻译并执行
+//     - runAgentTodoIntentOperations(contact, intentTexts, assistantMessage): 把『』内自然语言意图交给 TODO Agent 翻译成待确认建议
 //     - executeAgentTodoSkill(routerResult, contact): 根据 TODO Agent 输出的操作包落地新增/完成/取消/改期等动作
 //     - escapeHtml(text): 渲染 innerHTML 前做 HTML 转义，TO DO、心迹、搜索结果等都会复用
 //     - sanitizeImageSrc(src): 过滤心迹图片地址，拦截 javascript: / SVG data 等危险来源
@@ -6302,7 +6302,7 @@ const App = {
         if (!validIntentTexts.length || !assistantMessage) return null;
 
         const existingState = this.getAgentExecutionState(assistantMessage, 'todo_manager_post');
-        if (['applied', 'skipped', 'failed'].includes(existingState?.status)) {
+        if (['suggested', 'applied', 'skipped', 'failed'].includes(existingState?.status)) {
             console.log('[Agent][TODO意图] 已有状态，本轮跳过:', existingState);
             return null;
         }
@@ -6329,37 +6329,70 @@ const App = {
                 source: 'frontend'
             });
 
-            // ★★★★★ Agent：TODO 意图执行 START ★★★★★
-            // 『』里已经是角色发出的动作意图，所以这里直接进入 TODO 专用解析，不再走 pre/post 总路由。
+            // ★★★★★ Agent：TODO 意图确认 START ★★★★★
+            // 『』里是角色发出的动作意图；为了防误删/误改，解析后先复用 suggestion 确认条，不直接落地。
             const messages = AgentTodoManager.buildExecutorMessages(contact, validIntentTexts.join('\n'), new Date(), '角色动作意图');
             console.log('[Agent][TODO意图] Messages:', messages);
             const rawText = await API.chat(messages, {
                 ...settings,
                 AGENT_LOG_PHASE: 'post',
-                AGENT_LOG_LABEL: 'TODO 意图执行'
+                AGENT_LOG_LABEL: 'TODO 意图确认'
             });
             console.log('[Agent][TODO意图] 原始返回:', rawText);
             const routerResult = AgentTodoManager.parseRouterResult(rawText);
             console.log('[Agent][TODO意图] 解析结果:', routerResult);
-            const result = await this.executeAgentTodoSkill(routerResult, contact);
-            // ★★★★★ Agent：TODO 意图执行 END ★★★★★
+            // ★★★★★ Agent：TODO 意图确认 END ★★★★★
 
-            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', result?.prompt
-                ? {
-                    status: 'applied',
-                    reason: 'intent_skill_applied',
-                    intentTexts: validIntentTexts,
-                    resultPrompt: String(result.prompt || '').trim(),
-                    source: 'frontend'
-                }
-                : {
+            if (routerResult.intent === 'NONE') {
+                await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
                     status: 'skipped',
-                    reason: routerResult.intent === 'NONE' ? 'intent_none' : 'intent_skill_noop',
+                    reason: 'intent_none',
                     intentTexts: validIntentTexts,
-                    resultPrompt: '',
+                    suggestions: [],
                     source: 'frontend'
                 });
-            return result;
+                return null;
+            }
+
+            if (routerResult.intent === 'ASK_CONFIRMATION') {
+                const message = AgentTodoManager.cleanText(
+                    routerResult.confirmation?.message || '这个操作需要你再确认一下，我先不自动执行。',
+                    140
+                );
+                this.showTodoTopNotice(`${contact?.name || 'TODO 管理'} 没有执行：${message}`, { type: 'pending' });
+                await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                    status: 'skipped',
+                    reason: 'intent_ask_confirmation',
+                    intentTexts: validIntentTexts,
+                    message,
+                    suggestions: [],
+                    source: 'frontend'
+                });
+                return null;
+            }
+
+            const suggestions = this.normalizeAgentPostTodoSuggestions(routerResult);
+            if (!suggestions.length) {
+                await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                    status: 'skipped',
+                    reason: 'intent_no_valid_suggestions',
+                    intentTexts: validIntentTexts,
+                    suggestions: [],
+                    source: 'frontend'
+                });
+                return null;
+            }
+
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                status: 'suggested',
+                reason: 'intent_suggested',
+                intentTexts: validIntentTexts,
+                suggestions,
+                source: 'frontend'
+            });
+            this.showAgentPostTodoSuggestionNotice(contact, assistantMessage, suggestions);
+            console.log('[Agent][TODO意图] 已展示确认条:', suggestions);
+            return { suggestions };
         } catch (error) {
             console.warn('[Agent][TODO意图] failed:', error);
             await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
