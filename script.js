@@ -7122,9 +7122,17 @@ const App = {
             const card = document.createElement('div');
             card.className = 'character-memory-card';
             card.dataset.dateKey = record.dateKey;
-            const items = (record.memories || []).map(item => `
+            const items = (record.memories || []).map(item => {
+                const alwaysInject = item && typeof item === 'object' && item.alwaysInject === true;
+                return `
                 <div class="character-memory-item" data-id="${this.escapeHtml(item.id)}">
                     <div class="character-memory-text">${this.escapeHtml(item.text || '')}</div>
+                    <button type="button" class="character-memory-icon-btn character-memory-pin-btn${alwaysInject ? ' active' : ''}" data-action="toggle-memory-pin" title="${alwaysInject ? '取消长期记住' : '长期记住'}" aria-pressed="${alwaysInject ? 'true' : 'false'}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path class="character-memory-pin-shape" d="M12 17v5"></path>
+                            <path class="character-memory-pin-shape" d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"></path>
+                        </svg>
+                    </button>
                     <button type="button" class="character-memory-icon-btn" data-action="edit-memory-item" title="修改记忆">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                     </button>
@@ -7132,7 +7140,8 @@ const App = {
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
                     </button>
                 </div>
-            `).join('');
+            `;
+            }).join('');
             const comment = record.comment
                 ? `<div class="character-memory-comment">${this.escapeHtml(record.comment)}</div>`
                 : '';
@@ -7383,6 +7392,22 @@ const App = {
         if (!confirm('确定要删除这条记忆吗？')) return;
 
         record.memories = (record.memories || []).filter(item => item.id !== itemId);
+        record.updatedAt = Date.now();
+        memory.updatedAt = Date.now();
+        await Storage.saveCharacterMemories();
+        this.renderCharacterMemoryDetail();
+        this.renderCharacterMemoryList();
+    },
+
+    async toggleMemoryItemPin(dateKey, itemId) {
+        const memory = CharacterMemory.getMemory(STATE.currentMemoryContactId);
+        const record = CharacterMemory.getRecord(memory, dateKey);
+        const item = record?.memories?.find(entry => entry.id === itemId);
+        if (!item || typeof item !== 'object') return;
+
+        // ★ 单条长期记住不改变“注入 X 天”的省 token 策略，只额外放行用户钉住的旧记忆。
+        item.alwaysInject = item.alwaysInject !== true;
+        item.updatedAt = Date.now();
         record.updatedAt = Date.now();
         memory.updatedAt = Date.now();
         await Storage.saveCharacterMemories();
@@ -12740,6 +12765,8 @@ const App = {
 
             if (actionEl.dataset.action === 'reroll-memory-day') {
                 this.rerollCharacterMemoryDay(dateKey);
+            } else if (actionEl.dataset.action === 'toggle-memory-pin' && itemEl?.dataset.id) {
+                this.toggleMemoryItemPin(dateKey, itemEl.dataset.id);
             } else if (actionEl.dataset.action === 'edit-memory-item' && itemEl?.dataset.id) {
                 this.openMemoryItemModal(dateKey, itemEl.dataset.id);
             } else if (actionEl.dataset.action === 'delete-memory-item' && itemEl?.dataset.id) {

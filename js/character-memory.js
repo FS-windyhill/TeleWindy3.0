@@ -17,7 +17,7 @@
 //   - normalizeMemoryText(text, maxLength): 清理并截短文本
 //   - parseAiMemory(rawText): 解析并校验 AI 记忆
 //   - buildGenerationMessages(contact, dateKey): 生成请求 AI 总结记忆的 messages
-//   - getInjectRecords(memory, now): 读取最近 N 天可注入记录
+//   - getInjectRecords(memory, now): 读取最近 N 天 + 手动长期记住的可注入记录
 //   - buildChatPrompt(contactId, now): 生成聊天注入的长期记忆
 // =========================================
 
@@ -108,6 +108,9 @@ const CharacterMemory = {
             memory.records.push(record);
         }
         if (!Array.isArray(record.memories)) record.memories = [];
+        record.memories.forEach(item => {
+            if (item && typeof item === 'object' && item.alwaysInject !== true) item.alwaysInject = false;
+        });
         return record;
     },
 
@@ -201,6 +204,7 @@ const CharacterMemory = {
                 return {
                     id: item?.id || `memory_item_${Date.now()}_${index}`,
                     text,
+                    alwaysInject: item?.alwaysInject === true,
                     updatedAt: Date.now()
                 };
             })
@@ -253,10 +257,22 @@ const CharacterMemory = {
         const maxDate = this.addDays(today, -1);
 
         return (memory.records || [])
+            // ★ 最近 N 天照常全量注入；更早日期只带用户手动“长期记住”的单条记忆。
             .filter(record => {
                 if (!record || !Array.isArray(record.memories) || !record.memories.length) return false;
                 const date = this.fromDateKey(record.dateKey);
-                return date >= minDate && date <= maxDate;
+                const inRecentRange = date >= minDate && date <= maxDate;
+                return inRecentRange || record.memories.some(item => item && typeof item === 'object' && item.alwaysInject === true);
+            })
+            .map(record => {
+                const date = this.fromDateKey(record.dateKey);
+                const inRecentRange = date >= minDate && date <= maxDate;
+                return {
+                    ...record,
+                    memories: inRecentRange
+                        ? record.memories
+                        : record.memories.filter(item => item && typeof item === 'object' && item.alwaysInject === true)
+                };
             })
             .sort((a, b) => a.dateKey.localeCompare(b.dateKey));
     },
@@ -269,7 +285,7 @@ const CharacterMemory = {
         const injectDays = Math.max(1, Number.parseInt(memory.injectDays, 10) || this.defaultInjectDays);
         const lines = [
             '# 角色长期记忆',
-            `以下是该角色最近 ${injectDays} 天对用户和关系的记忆，请自然参考，不要逐条复述。`
+            `以下是该角色最近 ${injectDays} 天，以及用户手动标记为长期记住的关系记忆，请自然参考，不要逐条复述。`
         ];
 
         records.forEach(record => {

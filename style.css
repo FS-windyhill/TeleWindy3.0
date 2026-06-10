@@ -5844,8 +5844,8 @@ body.custom-mode .app-top-notice-action {
 
 body.custom-mode .character-memory-contact,
 body.custom-mode .character-memory-card {
-    background: rgb(31 31 31 / 30%);
-    border: 1px solid rgba(245, 245, 245, 0.3);
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(245, 245, 245, 0.5);
 }
 
 body.custom-mode .character-memory-avatar {
@@ -5862,7 +5862,8 @@ body.custom-mode .character-memory-contact-status {
 }
 
 body.custom-mode .character-memory-item {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(245, 245, 245, 0.3);
 }
 
 body.custom-mode .character-memory-text {
@@ -5875,12 +5876,14 @@ body.custom-mode .character-memory-comment {
 }
 
 body.custom-mode .character-memory-icon-btn {
-    background: rgba(255, 255, 255, 0.12);
-    color: #e0e0e0;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(245, 245, 245, 0.3);
+    color: #adadad;
+
 }
 
 body.custom-mode .character-memory-icon-btn.danger {
-    color: #ffaaa6;
+    color: #d93838;
 }
 
 body.custom-mode .character-memory-setting-pill {
@@ -5890,7 +5893,9 @@ body.custom-mode .character-memory-setting-pill {
 }
 
 body.custom-mode .character-memory-setting-pill .character-memory-status {
-    border-left-color: rgba(245, 245, 245, 0.28);
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(245, 245, 245, 0.3);
+    color: #cdcdcdc8;
 }
 
 body.custom-mode .character-memory-setting-pill input,
@@ -5925,7 +5930,9 @@ body.custom-mode .agent-card-arrow {
     color: rgba(245, 245, 245, 0.48);
 }
 
-
+body.custom-mode .character-memory-pin-btn.active {
+    color: #ffc247;
+}
 
 
 
@@ -9037,8 +9044,8 @@ body.dark-mode .character-schedule-api-select {
 
 body.dark-mode .character-memory-contact,
 body.dark-mode .character-memory-card {
-    background: rgb(31 31 31 / 30%);
-    border: 1px solid rgba(245, 245, 245, 0.3);
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(245, 245, 245, 0.5);
 }
 
 .character-memory-avatar {
@@ -9139,9 +9146,9 @@ body.dark-mode .character-memory-contact-status {
 
 .character-memory-setting-pill {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    flex-wrap: wrap;
     gap: 8px;
     margin: 3px 0 10px;
     padding: 9px 12px;
@@ -9152,6 +9159,13 @@ body.dark-mode .character-memory-contact-status {
     font-size: 0.9rem;
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
+}
+
+.character-memory-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
 }
 
 .character-memory-setting-pill input {
@@ -9176,8 +9190,14 @@ body.dark-mode .character-memory-contact-status {
 
 .character-memory-setting-pill .character-memory-status {
     margin: 0;
-    padding-left: 8px;
-    border-left: 1px solid rgba(120, 120, 120, 0.24);
+    width: 100%;
+    padding: 7px 10px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.05);
+    color: #555;
+    box-sizing: border-box;
+    line-height: 1.35;
 }
 
 .character-memory-status.pending {
@@ -9188,11 +9208,17 @@ body.dark-mode .character-memory-contact-status {
     color: #bd5b5b;
 }
 
+.character-memory-setting-pill .character-memory-status.pending,
+.character-memory-setting-pill .character-memory-status.failure {
+    color: #555;
+}
+
 .character-memory-card {
     padding: 12px;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.62);
-    border: 1px solid rgba(255, 255, 255, 0.78);
+
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid #ffffff;
     box-shadow: 0 8px 24px rgba(70, 83, 105, 0.08);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -9226,17 +9252,20 @@ body.dark-mode .character-memory-contact-status {
 
 .character-memory-item {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
     align-items: center;
     gap: 8px;
     min-height: 38px;
     padding: 8px 10px;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.45);
+
+    background: rgb(255 255 255 / 38%);
+    border: 1px solid rgba(100, 100, 100, 0.2);
 }
 
 body.dark-mode .character-memory-item {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(245, 245, 245, 0.3);
 }
 
 .character-memory-text {
@@ -9274,8 +9303,9 @@ body.dark-mode .character-memory-comment {
     padding: 0;
     border: none;
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.52);
-    color: #6c7482;
+    background: rgba(80, 80, 80, 0.1);
+    border: 1px solid rgba(100, 100, 100, 0.3);
+    color: #707070;
     cursor: pointer;
 }
 
@@ -9284,17 +9314,35 @@ body.dark-mode .character-memory-comment {
     height: 17px;
 }
 
+.character-memory-pin-btn .character-memory-pin-shape {
+    fill: transparent;
+}
+
+.character-memory-pin-btn.active {
+    color: #ffb21c;
+}
+
+.character-memory-pin-btn.active .character-memory-pin-shape {
+    fill: currentColor;
+}
+
 .character-memory-icon-btn.danger {
-    color: #bd5b5b;
+    color: #d93838;
 }
 
 body.dark-mode .character-memory-icon-btn {
-    background: rgba(255, 255, 255, 0.12);
-    color: #e0e0e0;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(245, 245, 245, 0.3);
+    color: #adadad;
+
+}
+
+body.dark-mode .character-memory-pin-btn.active {
+    color: #ffc247;
 }
 
 body.dark-mode .character-memory-icon-btn.danger {
-    color: #ffaaa6;
+    color: #d93838;
 }
 
 .character-memory-modal-bg {
@@ -9335,7 +9383,9 @@ body.dark-mode .character-memory-setting-pill {
 }
 
 body.dark-mode .character-memory-setting-pill .character-memory-status {
-    border-left-color: rgba(245, 245, 245, 0.28);
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(245, 245, 245, 0.3);
+    color: #cdcdcdc8;
 }
 
 body.dark-mode .character-memory-setting-pill input,
@@ -9360,7 +9410,7 @@ body.dark-mode .character-memory-date {
     }
 
     .character-memory-item {
-        grid-template-columns: minmax(0, 1fr) 30px 30px;
+        grid-template-columns: minmax(0, 1fr) 30px 30px 30px;
         padding: 8px;
     }
 }
