@@ -107,6 +107,11 @@
 //     - sanitizeImageSrc(src): 过滤心迹图片地址，只允许 http/https/blob 和常见图片 data URL
 //     - rememberReturnView(pageName, fallback): 记录二级页面从哪个主入口进入
 //     - getReturnView(pageName, fallback): 获取二级页面返回时应该回到的主入口
+//     - getTopNoticeTargetHandler(options): 生成顶部通知点击后的跳转/执行处理
+//     - showTodoTopNotice(message, options): 弹出默认跳转到 TO DO 的顶部通知
+//     - isViewingContactChat(contactId): 判断用户是否真的正在查看某个角色聊天窗口
+//     - markContactIncomingMessage(contact, options): 统一处理非当前窗口 AI 新消息的红点和顶部通知
+//     - showTopNotice(message, options): 通用顶部通知栈，支持多条并发、按钮和上划关闭
 //     - isDynamicContextSystemRoleError(error): 判断错误是否像后置 system 兼容问题
 //     - getDynamicContextWarnKey(contact, requestSettings): 生成兼容提示的会话内去重 key
 //     - maybePromptDynamicContextCompatMode(error, requestSettings, contact): system/auto 模式报错时提示切换到 user 兼容模式
@@ -3897,12 +3902,11 @@ const App = {
                         }
                         // ★★★★★ Post Agent：后台恢复后补跑 END ★★★★★
 
-                        if (STATE.currentContactId === contact.id) {
+                        if (this.isViewingContactChat(contact.id)) {
                             UI.renderChatHistory(contact);
                             UI.setLoading(false, contact.id);
                         } else {
-                            contact.hasNewMsg = true;
-                            this.refreshDesktopUnreadDotsIfNeeded();
+                            this.markContactIncomingMessage(contact, { notice: !alreadySaved });
                         }
 
                         await API.deleteChatJob(pending.backendUrl, pending.jobId, pending.token);
@@ -3920,7 +3924,7 @@ const App = {
                             jobId: API.asyncJobLogId(pending.jobId),
                             error: job.error || 'Async job failed'
                         });
-                        if (STATE.currentContactId === contact.id) {
+                        if (this.isViewingContactChat(contact.id)) {
                             UI.setLoading(false, contact.id);
                         }
                     }
@@ -3940,7 +3944,7 @@ const App = {
                             ? contact.history.some(msg => msg.asyncJobId === pending.jobId)
                             : false;
 
-                        if (contact && STATE.currentContactId === contact.id) {
+                        if (contact && this.isViewingContactChat(contact.id)) {
                             UI.setLoading(false, contact.id);
                             if (!alreadySaved) {
                                 const errorIndex = contact.history.length > 0 ? contact.history.length - 1 : 0;
@@ -4002,11 +4006,11 @@ const App = {
                 asyncJobId: pending.jobId,
                 isTransientError: true
             });
-            if (STATE.currentContactId === contact.id) {
+            if (this.isViewingContactChat(contact.id)) {
                 UI.setLoading(false, contact.id);
                 UI.renderChatHistory(contact);
             } else {
-                contact.hasNewMsg = true;
+                this.markContactIncomingMessage(contact, { notice: false });
             }
             await Storage.saveContacts();
         }
@@ -4797,6 +4801,31 @@ const App = {
             targetView: options.targetView || 'todo-plan'
         });
     },
+
+    // ★★★★★ 顶部通知：AI 新消息红点 + 横幅入口 START ★★★★★
+    isViewingContactChat(contactId) {
+        const appContainer = document.getElementById('app-container');
+        // ★ currentContactId 只是“当前选中的联系人”，退到桌面/探索页时可能还没被清空；
+        // 真正判断是不是正在聊天窗口，要同时看聊天层是否处在展开状态。
+        return !!contactId
+            && STATE.currentContactId === contactId
+            && appContainer?.classList.contains('in-chat-mode');
+    },
+
+    markContactIncomingMessage(contact, options = {}) {
+        if (!contact) return;
+        contact.hasNewMsg = true;
+        this.refreshDesktopUnreadDotsIfNeeded();
+
+        if (options.notice === false || this.isViewingContactChat(contact.id)) return;
+        const name = contact.name || 'AI';
+        this.showTopNotice(`${name}发来了新消息`, {
+            type: 'incoming-message',
+            timeout: options.timeout || 6500,
+            onClick: () => this.enterChat(contact.id)
+        });
+    },
+    // ★★★★★ 顶部通知：AI 新消息红点 + 横幅入口 END ★★★★★
 
     showTopNotice(message, options = {}) {
         let stack = document.getElementById('app-top-notice-stack');
@@ -9009,7 +9038,7 @@ const App = {
 
 
             // 只有当前还在这个窗口才渲染
-            if (STATE.currentContactId === contact.id) {
+            if (this.isViewingContactChat(contact.id)) {
                 await Storage.saveContacts();
                 
                 // 渲染 AI 瀑布流
@@ -9019,7 +9048,9 @@ const App = {
                     UI.renderChatHistory(contact);
                 }
             } else {
-                if (!alreadySavedByResume) contact.hasNewMsg = true;
+                if (!alreadySavedByResume) {
+                    this.markContactIncomingMessage(contact);
+                }
                 await Storage.saveContacts();
                 UI.renderContacts(); 
                 this.refreshDesktopUnreadDotsIfNeeded();
@@ -9044,13 +9075,13 @@ const App = {
 
             await this.maybePromptDynamicContextCompatMode(error, requestSettings, contact);
 
-            if (STATE.currentContactId === contact.id) {
+            if (this.isViewingContactChat(contact.id)) {
                 UI.setLoading(false, contact.id);
                 const errorIndex = contact.history.length > 0 ? contact.history.length - 1 : 0;
                 UI.appendMessageBubble(`(发送失败: ${error.message})`, 'ai', contact.avatar, null, errorIndex);
             }
         } finally {
-            if (STATE.currentContactId === contact.id) {
+            if (this.isViewingContactChat(contact.id)) {
                 UI.updateRerollState(contact);
             }
             // 手机端不自动聚焦，防止键盘弹起遮挡
