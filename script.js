@@ -3687,10 +3687,50 @@ const UI = {
 // =========================================
 const App = {
     els: UI.els,
+    generateTodoPlanId(prefix = 'todo') {
+        const randomText = (window.crypto?.randomUUID?.() || Math.random().toString(36).slice(2))
+            .replace(/-/g, '')
+            .slice(0, 12);
+        return `${prefix}_${Date.now()}_${randomText}`;
+    },
+
+    normalizeTodoPlanIds() {
+        if (!Array.isArray(STATE.todoPlans)) {
+            STATE.todoPlans = [];
+            return false;
+        }
+
+        let changed = false;
+        const seenIds = new Set();
+
+        STATE.todoPlans.forEach((item, index) => {
+            if (!item || typeof item !== 'object') return;
+
+            const rawId = typeof item.id === 'string' ? item.id.trim() : '';
+            // ★ 旧数据/同毫秒新增可能留下空 id 或重复 id；
+            // 点击完成、取消、删除都靠 id 定位，所以首次打开时先把每条计划拆成唯一身份。
+            if (!rawId || seenIds.has(rawId)) {
+                item.id = this.generateTodoPlanId(`todo_fix_${index}`);
+                item.updatedAt = item.updatedAt || Date.now();
+                changed = true;
+            } else {
+                if (item.id !== rawId) changed = true;
+                item.id = rawId;
+            }
+
+            seenIds.add(item.id);
+        });
+
+        return changed;
+    },
+
     // 1. 初始化入口
     async init() {
         // [关键点 1] 加上 await，程序会在这里暂停，直到数据库加载完毕
         await Storage.load();
+        if (this.normalizeTodoPlanIds()) {
+            await Storage.saveTodoPlans();
+        }
         
         // [关键点 2] 初始化界面元素（绑定 DOM 节点）
         UI.init();
@@ -5063,7 +5103,7 @@ const App = {
             oldItem.updatedAt = Date.now();
         } else {
             STATE.todoPlans.push({
-                id: 'todo_' + Date.now(),
+                id: this.generateTodoPlanId(),
                 text,
                 dateKey,
                 done: false,
