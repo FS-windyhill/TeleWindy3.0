@@ -13,6 +13,7 @@
 const AgentSkillRouter = {
     allowedIntents: ['NONE', 'USE_AGENT', 'ASK_CONFIRMATION'],
     allowedAgents: ['todo_manager'],
+    allowedPostAgents: ['todo_manager_post'],
 
     buildRouterMessages(contact, userText) {
         const systemPrompt = [
@@ -56,6 +57,47 @@ const AgentSkillRouter = {
         ];
     },
 
+    buildPostRouterMessages(contact, assistantText) {
+        const systemPrompt = [
+            '你是 TeleWindy 的 Post Agent 总路由，只判断角色刚刚的回复是否需要调用某个回复后 Agent。',
+            '你只做选择，不执行任务，不解析任务字段，不输出 Markdown，不解释，只输出 JSON。',
+            '',
+            'intent 只能选择：NONE、USE_AGENT。',
+            '',
+            '可用 Post Agent：',
+            '- todo_manager_post：角色回复里明确建议用户添加待办、提醒、安排任务。',
+            '',
+            '规则：',
+            '- 只看角色刚刚的回复，不看用户原话，不猜聊天历史。',
+            '- 普通聊天、安慰、鼓励、泛泛建议、角色语气承诺，选 NONE。',
+            '- 只有回复里明确出现可添加为 TODO 的事项，才选 USE_AGENT。',
+            '- 不要解析具体任务、日期、时间；命中后交给具体 Agent 处理。',
+            '',
+            'JSON 格式：',
+            '{"intent":"USE_AGENT","agent":"todo_manager_post","confirmation":{"message":""}}',
+            '',
+            '字段说明：',
+            '- NONE 时 agent 留空字符串。',
+            '- USE_AGENT 时 agent 必须是可用 Post Agent 之一。'
+        ].join('\n');
+
+        // ★★★★★ Post Agent Router START：回复后 Agent 选择层 ★★★★★
+        // 为了省 token，这里只放角色名和刚刚生成的回复，不携带用户原话、历史或 TODO 快照。
+        const userPrompt = [
+            '【当前角色】',
+            contact?.name || '未命名角色',
+            '',
+            '【角色刚刚回复】',
+            assistantText || ''
+        ].join('\n');
+        // ★★★★★ Post Agent Router END：回复后 Agent 选择层 ★★★★★
+
+        return [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+        ];
+    },
+
     extractJson(rawText) {
         const text = String(rawText || '').trim();
         if (!text) throw new Error('Agent 路由返回为空');
@@ -84,6 +126,25 @@ const AgentSkillRouter = {
         const agent = String(data.agent || '').trim();
         if (intent === 'USE_AGENT' && !this.allowedAgents.includes(agent)) {
             throw new Error(`未知 Agent：${agent || '空'}`);
+        }
+
+        return {
+            intent,
+            agent: intent === 'USE_AGENT' ? agent : '',
+            confirmation: data.confirmation && typeof data.confirmation === 'object' ? data.confirmation : {}
+        };
+    },
+
+    parsePostRouterResult(rawText) {
+        const data = this.extractJson(rawText);
+        const intent = String(data.intent || '').trim().toUpperCase();
+        if (!['NONE', 'USE_AGENT'].includes(intent)) {
+            throw new Error(`未知 Post Agent 路由 intent：${intent || '空'}`);
+        }
+
+        const agent = String(data.agent || '').trim();
+        if (intent === 'USE_AGENT' && !this.allowedPostAgents.includes(agent)) {
+            throw new Error(`未知 Post Agent：${agent || '空'}`);
         }
 
         return {

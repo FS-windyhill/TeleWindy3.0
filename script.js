@@ -1135,6 +1135,7 @@ const API = {
                 agent_prompt: result.agent_prompt || '',
                 agent_status: result.agent_status || '',
                 agent_error: result.agent_error || '',
+                post_agent: result.post_agent || null,
                 userMessageIndex: settings.ASYNC_BACKEND_USER_MESSAGE_INDEX ?? null
             };
             return (result.result || '').trim();
@@ -3776,14 +3777,31 @@ const App = {
                         }
 
                         const alreadySaved = contact.history.some(msg => msg.asyncJobId === pending.jobId);
+                        let assistantMessage = null;
                         if (!alreadySaved) {
-                            contact.history.push({
+                            assistantMessage = {
                                 role: 'assistant',
                                 content: (job.result || '').trim(),
                                 timestamp: formatTimestamp(),
                                 asyncJobId: pending.jobId
-                            });
+                            };
+                            contact.history.push(assistantMessage);
+                        } else {
+                            assistantMessage = contact.history.find(msg => msg.asyncJobId === pending.jobId) || null;
                         }
+
+                        // ★★★★★ Post Agent：后台恢复后补跑 START ★★★★★
+                        // 轻量方案：Worker 恢复接收只负责保存 assistant 回复；保存后由前端补跑 post-agent。
+                        // 预留方案：以后 Worker 如果返回 job.post_agent，则优先消费 Worker 结果，不再前端重跑。
+                        if (assistantMessage && assistantMessage.role === 'assistant') {
+                            const consumedWorkerPostAgent = await this.consumeWorkerPostAgentResult(contact, assistantMessage, job.post_agent);
+                            if (!consumedWorkerPostAgent) {
+                                this.runAgentPostAgents(contact, assistantMessage.content || '', assistantMessage).catch(error => {
+                                    console.warn('[PostAgent][后台恢复] async failed:', error);
+                                });
+                            }
+                        }
+                        // ★★★★★ Post Agent：后台恢复后补跑 END ★★★★★
 
                         if (STATE.currentContactId === contact.id) {
                             UI.renderChatHistory(contact);
@@ -4722,20 +4740,32 @@ const App = {
         text.textContent = message || '';
         notice.appendChild(text);
 
-        if (options.actionLabel && typeof options.onAction === 'function') {
-            const actionBtn = document.createElement('button');
-            actionBtn.type = 'button';
-            actionBtn.className = 'app-top-notice-action';
-            actionBtn.textContent = options.actionLabel;
-            actionBtn.addEventListener('click', async () => {
-                try {
-                    await options.onAction();
-                } catch (error) {
-                    console.warn('[Notice] action failed:', error);
-                }
-                closeNotice();
+        const actions = Array.isArray(options.actions) && options.actions.length
+            ? options.actions
+            : (options.actionLabel && typeof options.onAction === 'function'
+                ? [{ label: options.actionLabel, onAction: options.onAction }]
+                : []);
+
+        if (actions.length) {
+            const actionWrap = document.createElement('div');
+            actionWrap.className = 'app-top-notice-actions';
+            actions.slice(0, 3).forEach(action => {
+                if (!action || !action.label || typeof action.onAction !== 'function') return;
+                const actionBtn = document.createElement('button');
+                actionBtn.type = 'button';
+                actionBtn.className = `app-top-notice-action ${action.type || ''}`.trim();
+                actionBtn.textContent = action.label;
+                actionBtn.addEventListener('click', async () => {
+                    try {
+                        await action.onAction();
+                    } catch (error) {
+                        console.warn('[Notice] action failed:', error);
+                    }
+                    closeNotice();
+                });
+                actionWrap.appendChild(actionBtn);
             });
-            notice.appendChild(actionBtn);
+            notice.appendChild(actionWrap);
         }
 
         notice.addEventListener('pointerdown', (event) => {
@@ -5555,6 +5585,15 @@ const App = {
         return routerSettings;
     },
 
+    buildAgentPostTodoRequestSettings(baseSettings) {
+        // ★★★★★ Post Agent：回复后 TODO 建议轻量参数 START ★★★★★
+        // post-agent 只看角色回复并生成待确认建议，输出很短，继续压小 token 预算。
+        return {
+            ...this.buildAgentSkillRouterRequestSettings(baseSettings),
+            MAX_TOKENS: Math.min(Number(baseSettings?.MAX_TOKENS) || 1200, 700)
+        };
+    },
+
     normalizeAgentExecutions(userMessage) {
         // ★★★★★ Agent：消息级执行状态兼容 START ★★★★★
         // 旧历史记录没有 agentExecutions 字段；读到时按空状态处理，不需要批量迁移 IndexedDB。
@@ -5594,6 +5633,37 @@ const App = {
             await Storage.saveContacts();
         }
         return executions[agentName];
+    },
+
+    normalizeAgentPostTodoSuggestions(postResult) {
+        const rawTodos = Array.isArray(postResult?.todos) ? postResult.todos : [];
+        const seenKeys = new Set((STATE.todoPlans || [])
+            .filter(item => item && item.text && item.dateKey)
+            .map(item => this.buildTodoDuplicateKey(item.text, item.dateKey)));
+
+        return rawTodos.map((todo, index) => {
+            const text = AgentTodoManager.cleanText(todo.text || todo.title || '', 120);
+            const dateKey = AgentTodoManager.isDateKey(todo.dateKey) ? todo.dateKey : AgentTodoManager.getTodayKey();
+            const startTime = AgentTodoManager.isTimeValue(todo.startTime) ? todo.startTime : '';
+            const endTime = AgentTodoManager.isTimeValue(todo.endTime) ? todo.endTime : '';
+            if (!text) return null;
+            const duplicateKey = this.buildTodoDuplicateKey(text, dateKey);
+            if (seenKeys.has(duplicateKey)) return null;
+            seenKeys.add(duplicateKey);
+            const item = {
+                id: `todo_${Date.now()}_post_${index}_${Math.random().toString(36).slice(2, 8)}`,
+                text,
+                dateKey,
+                done: false,
+                cancelled: false,
+                createdAt: Date.now()
+            };
+            if (startTime && endTime && startTime < endTime) {
+                item.startTime = startTime;
+                item.endTime = endTime;
+            }
+            return item;
+        }).filter(Boolean).slice(0, 5);
     },
 
     buildAsyncBackendAgentPayload(contact, userText, requestSettings, userMessage = null) {
@@ -5764,6 +5834,343 @@ const App = {
         } finally {
             console.groupEnd();
         }
+    },
+
+    async runAgentPostAgents(contact, assistantText, assistantMessage = null) {
+        if (STATE.settings.AGENT_SKILL_ROUTER_ENABLED !== true) return null;
+        if (typeof AgentSkillRouter === 'undefined') return null;
+        if (!assistantText || !assistantMessage) return null;
+
+        const todoPostState = this.getAgentExecutionState(assistantMessage, 'todo_manager_post');
+        if (['suggested', 'applied', 'dismissed'].includes(todoPostState?.status)) {
+            console.log('[PostAgent][总路由] 具体 Agent 已有状态，本轮跳过:', todoPostState);
+            return null;
+        }
+
+        const existingRouteState = this.getAgentExecutionState(assistantMessage, 'post_router');
+        if (['skipped', 'routed'].includes(existingRouteState?.status)) {
+            console.log('[PostAgent][总路由] 已有路由状态，本轮跳过:', existingRouteState);
+            return null;
+        }
+
+        const settings = this.buildAgentSkillRouterRequestSettings(this.buildAgentTodoManagerRequestSettings());
+        if (!settings.API_URL || !settings.API_KEY || !settings.MODEL) {
+            console.log('[PostAgent][总路由] API 配置缺失，跳过。');
+            return null;
+        }
+
+        console.groupCollapsed(`[PostAgent][总路由] ${contact?.name || '未命名角色'} · ${new Date().toLocaleTimeString()}`);
+        console.log('[PostAgent][总路由] 角色回复:', assistantText);
+        console.log('[PostAgent][总路由] 请求模型:', {
+            url: settings.API_URL,
+            model: settings.MODEL,
+            presetIndex: STATE.settings.AGENT_SKILL_ROUTER_API_PRESET_INDEX
+        });
+
+        try {
+            await this.setAgentExecutionState(contact, assistantMessage, 'post_router', {
+                status: 'pending',
+                error: '',
+                agent: '',
+                source: 'frontend'
+            });
+
+            // ★★★★★ Post Agent：总路由先判定 START ★★★★★
+            // 先用短 prompt 判断回复后要不要调用某个 Agent；命中后再发送具体 Agent 的长规则。
+            const messages = AgentSkillRouter.buildPostRouterMessages(contact, assistantText);
+            console.log('[PostAgent][总路由] Messages:', messages);
+            const rawText = await API.chat(messages, settings);
+            console.log('[PostAgent][总路由] 原始返回:', rawText);
+            const route = AgentSkillRouter.parsePostRouterResult(rawText);
+            console.log('[PostAgent][总路由] 解析结果:', route);
+            // ★★★★★ Post Agent：总路由先判定 END ★★★★★
+
+            if (route.intent === 'NONE') {
+                await this.setAgentExecutionState(contact, assistantMessage, 'post_router', {
+                    status: 'skipped',
+                    reason: 'post_router_none',
+                    agent: '',
+                    source: 'frontend'
+                });
+                return null;
+            }
+
+            if (route.agent !== 'todo_manager_post') {
+                await this.setAgentExecutionState(contact, assistantMessage, 'post_router', {
+                    status: 'skipped',
+                    reason: 'post_router_unknown_agent',
+                    agent: route.agent || '',
+                    source: 'frontend'
+                });
+                return null;
+            }
+
+            await this.setAgentExecutionState(contact, assistantMessage, 'post_router', {
+                status: 'routed',
+                reason: 'post_router_routed',
+                agent: route.agent,
+                source: 'frontend'
+            });
+            return await this.runAgentTodoPostSuggestions(contact, assistantText, assistantMessage);
+        } catch (error) {
+            console.warn('[PostAgent][总路由] failed:', error);
+            await this.setAgentExecutionState(contact, assistantMessage, 'post_router', {
+                status: 'failed',
+                error: error?.message || String(error),
+                agent: '',
+                source: 'frontend'
+            });
+            return null;
+        } finally {
+            console.groupEnd();
+        }
+    },
+
+    async runAgentTodoPostSuggestions(contact, assistantText, assistantMessage = null) {
+        if (STATE.settings.AGENT_SKILL_ROUTER_ENABLED !== true) return null;
+        if (typeof AgentTodoManager === 'undefined') return null;
+        if (!assistantText || !assistantMessage) return null;
+
+        const existingState = this.getAgentExecutionState(assistantMessage, 'todo_manager_post');
+        if (['suggested', 'applied', 'dismissed', 'skipped'].includes(existingState?.status)) {
+            console.log('[PostAgent][TODO建议] 已有状态，本轮跳过:', existingState);
+            return null;
+        }
+
+        const settings = this.buildAgentPostTodoRequestSettings(this.buildAgentTodoManagerRequestSettings());
+        if (!settings.API_URL || !settings.API_KEY || !settings.MODEL) {
+            console.log('[PostAgent][TODO建议] API 配置缺失，跳过。');
+            return null;
+        }
+
+        console.groupCollapsed(`[PostAgent][TODO建议] ${contact?.name || '未命名角色'} · ${new Date().toLocaleTimeString()}`);
+        console.log('[PostAgent][TODO建议] 角色回复:', assistantText);
+        console.log('[PostAgent][TODO建议] 请求模型:', {
+            url: settings.API_URL,
+            model: settings.MODEL,
+            presetIndex: STATE.settings.AGENT_SKILL_ROUTER_API_PRESET_INDEX
+        });
+
+        try {
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                status: 'pending',
+                error: '',
+                suggestions: [],
+                source: 'frontend'
+            });
+
+            // ★★★★★ Post Agent：回复后 TODO 建议 START ★★★★★
+            // post-agent 只看角色刚刚的回复，只产出待用户确认的新增 TODO 建议。
+            const messages = AgentTodoManager.buildPostSuggestionMessages(contact, assistantText, new Date());
+            console.log('[PostAgent][TODO建议] Messages:', messages);
+            const rawText = await API.chat(messages, settings);
+            console.log('[PostAgent][TODO建议] 原始返回:', rawText);
+            const postResult = AgentTodoManager.parsePostSuggestionResult(rawText);
+            console.log('[PostAgent][TODO建议] 解析结果:', postResult);
+            // ★★★★★ Post Agent：回复后 TODO 建议 END ★★★★★
+
+            if (postResult.intent === 'NONE') {
+                await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                    status: 'skipped',
+                    reason: 'post_none',
+                    suggestions: [],
+                    source: 'frontend'
+                });
+                return null;
+            }
+
+            const suggestions = this.normalizeAgentPostTodoSuggestions(postResult);
+            if (!suggestions.length) {
+                await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                    status: 'skipped',
+                    reason: 'post_no_valid_suggestions',
+                    suggestions: [],
+                    source: 'frontend'
+                });
+                return null;
+            }
+
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                status: 'suggested',
+                reason: 'post_suggested',
+                suggestions,
+                source: 'frontend'
+            });
+            this.showAgentPostTodoSuggestionNotice(contact, assistantMessage, suggestions);
+            console.log('[PostAgent][TODO建议] 已展示确认条:', suggestions);
+            return { suggestions };
+        } catch (error) {
+            console.warn('[PostAgent][TODO建议] failed:', error);
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                status: 'failed',
+                error: error?.message || String(error),
+                suggestions: [],
+                source: 'frontend'
+            });
+            return null;
+        } finally {
+            console.groupEnd();
+        }
+    },
+
+    formatAgentPostTodoSuggestionLine(item) {
+        const timeText = item.startTime && item.endTime
+            ? `，${item.startTime}-${item.endTime}`
+            : item.startTime
+                ? `，${item.startTime}`
+                : '';
+        return `${item.text}：${item.dateKey}${timeText}`;
+    },
+
+    showAgentPostTodoSuggestionNotice(contact, assistantMessage, suggestions = []) {
+        const validSuggestions = Array.isArray(suggestions) ? suggestions.filter(item => item && item.text) : [];
+        if (!validSuggestions.length) return null;
+
+        const roleName = contact?.name || '当前角色';
+        const previewLines = validSuggestions.slice(0, 3).map(item => `- ${this.formatAgentPostTodoSuggestionLine(item)}`);
+        const restText = validSuggestions.length > 3 ? `等 ${validSuggestions.length - 3} 项` : '';
+        const title = validSuggestions.length === 1
+            ? `${roleName} 建议添加 TODO：`
+            : `${roleName} 建议添加 ${validSuggestions.length} 项 TODO：`;
+        const message = [title, ...previewLines, restText].filter(Boolean).join('\n');
+
+        // ★★★★★ Post Agent：持久确认条 START ★★★★★
+        // 角色回复只能提出建议；真正写入 TODO 必须等用户点“添加”。
+        return this.showTopNotice(message, {
+            type: 'pending',
+            timeout: 0,
+            actions: [
+                {
+                    label: validSuggestions.length === 1 ? '添加' : '全部添加',
+                    onAction: async () => {
+                        await this.applyAgentPostTodoSuggestions(contact, assistantMessage, validSuggestions);
+                    }
+                },
+                {
+                    label: '忽略',
+                    type: 'secondary',
+                    onAction: async () => {
+                        console.log('[PostAgent][TODO建议] 用户忽略建议:', validSuggestions);
+                        await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                            status: 'dismissed',
+                            reason: 'user_dismissed',
+                            suggestions: validSuggestions,
+                            source: 'frontend'
+                        });
+                    }
+                }
+            ]
+        });
+        // ★★★★★ Post Agent：持久确认条 END ★★★★★
+    },
+
+    async applyAgentPostTodoSuggestions(contact, assistantMessage, suggestions = []) {
+        const seenKeys = new Set((STATE.todoPlans || [])
+            .filter(item => item && item.text && item.dateKey)
+            .map(item => this.buildTodoDuplicateKey(item.text, item.dateKey)));
+        const items = suggestions.filter(item => {
+            if (!item || !item.text || !item.dateKey) return false;
+            const key = this.buildTodoDuplicateKey(item.text, item.dateKey);
+            if (seenKeys.has(key)) return false;
+            seenKeys.add(key);
+            return true;
+        }).map((item, index) => ({
+            ...item,
+            id: item.id || `todo_${Date.now()}_post_apply_${index}_${Math.random().toString(36).slice(2, 8)}`,
+            done: false,
+            cancelled: false,
+            createdAt: item.createdAt || Date.now()
+        }));
+
+        if (!items.length) {
+            console.log('[PostAgent][TODO建议] 没有可添加项，可能已重复:', suggestions);
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                status: 'skipped',
+                reason: 'user_apply_noop_duplicate',
+                suggestions,
+                source: 'frontend'
+            });
+            this.showTodoTopNotice(`${contact?.name || '当前角色'} 没有添加：同一天已有相同 TODO`, { type: 'pending' });
+            return null;
+        }
+
+        STATE.todoPlans.push(...items);
+        await Storage.saveTodoPlans();
+        this.renderTodoPlans();
+        this.renderDesktop();
+        await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+            status: 'applied',
+            reason: 'user_confirmed',
+            suggestions: items,
+            source: 'frontend'
+        });
+        console.log('[PostAgent][TODO建议] 用户确认添加:', items);
+
+        const noticeText = items.length === 1
+            ? `添加了 TODO：${items[0].text}`
+            : `添加了 ${items.length} 个 TODO`;
+        this.showTodoTopNotice(`${contact?.name || '当前角色'} ${noticeText}`, {
+            actionLabel: '撤销',
+            onAction: async () => {
+                const ids = new Set(items.map(item => item.id));
+                STATE.todoPlans = STATE.todoPlans.filter(todoItem => !ids.has(todoItem.id));
+                await Storage.saveTodoPlans();
+                this.renderTodoPlans();
+                this.renderDesktop();
+                await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                    status: 'suggested',
+                    reason: 'user_undo_apply',
+                    suggestions: items,
+                    source: 'frontend'
+                });
+                console.log('[PostAgent][TODO建议] 已撤销确认添加:', items);
+            }
+        });
+        return items;
+    },
+
+    async consumeWorkerPostAgentResult(contact, assistantMessage, postAgentResult = null) {
+        if (!postAgentResult || typeof postAgentResult !== 'object') return false;
+
+        // ★★★★★ Post Agent：Worker 结果预留入口 START ★★★★★
+        // 现在 post-agent 仍走前端轻量方案；以后 Worker 若返回 job.post_agent，
+        // 这里会优先消费 Worker 结果，避免同一条 assistant 回复再跑前端 post-agent。
+        const route = postAgentResult.route && typeof postAgentResult.route === 'object'
+            ? postAgentResult.route
+            : {};
+        const agent = String(route.agent || postAgentResult.agent || '').trim();
+        await this.setAgentExecutionState(contact, assistantMessage, 'post_router', {
+            status: agent ? 'routed' : 'skipped',
+            reason: postAgentResult.reason || (agent ? 'worker_post_router_routed' : 'worker_post_router_none'),
+            agent,
+            source: 'worker'
+        });
+
+        if (agent !== 'todo_manager_post') return true;
+
+        const suggestions = this.normalizeAgentPostTodoSuggestions({
+            todos: Array.isArray(postAgentResult.suggestions) ? postAgentResult.suggestions : []
+        });
+        if (!suggestions.length) {
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                status: 'skipped',
+                reason: 'worker_post_no_valid_suggestions',
+                suggestions: [],
+                source: 'worker'
+            });
+            return true;
+        }
+
+        await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+            status: 'suggested',
+            reason: 'worker_post_suggested',
+            suggestions,
+            source: 'worker'
+        });
+        this.showAgentPostTodoSuggestionNotice(contact, assistantMessage, suggestions);
+        console.log('[PostAgent][Worker预留] 已消费 Worker 建议:', suggestions);
+        return true;
+        // ★★★★★ Post Agent：Worker 结果预留入口 END ★★★★★
     },
 
     async executeAgentTodoSkill(routerResult, contact) {
@@ -8029,8 +8436,15 @@ const App = {
             }
             // ★★★★★ 后台回复接收：双链路去重 END ★★★★★
 
-
-
+            const assistantMessage = contact.history[newAiMessageIndex] || null;
+            if (assistantMessage && assistantMessage.role === 'assistant') {
+                const consumedWorkerPostAgent = await this.consumeWorkerPostAgentResult(contact, assistantMessage, API.lastAsyncBackendResult?.post_agent);
+                if (!consumedWorkerPostAgent) {
+                    this.runAgentPostAgents(contact, aiText, assistantMessage).catch(error => {
+                        console.warn('[PostAgent][总路由] async failed:', error);
+                    });
+                }
+            }
 
             // ★★★ 【核心修改】AI回复成功后，扣除心迹通知次数 ★★★
             if (momentsUpdateInfo && momentsUpdateInfo.momentIds) {

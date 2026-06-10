@@ -7,8 +7,10 @@
 //   - getTodayKey(now): 获取今天日期 key
 //   - buildTodoSnapshot(now): 给 worker model 的精简 TODO 列表
 //   - buildExecutorMessages(contact, userText, now): 生成 TODO 管理执行请求 messages
+//   - buildPostSuggestionMessages(contact, assistantText, now): 生成回复后 TODO 建议请求 messages
 //   - extractJson(rawText): 从 worker model 返回里抽出 JSON
 //   - parseRouterResult(rawText): 解析并规范化 intent
+//   - parsePostSuggestionResult(rawText): 解析回复后 TODO 建议
 //   - findTodoCandidates(routerResult): 按 worker 给出的线索匹配 TODO
 //   - formatTodoLabel(item): 生成弹窗/摘要里可读的 TODO 名称
 // =========================================
@@ -16,6 +18,7 @@
 // ★★★★★ Agent TODO Manager START：独立工具层 ★★★★★
 const AgentTodoManager = {
     allowedIntents: ['NONE', 'CREATE_TODO', 'UPDATE_TODO', 'ASK_CONFIRMATION'],
+    allowedPostIntents: ['NONE', 'SUGGEST_TODO_CREATE'],
 
     pad(num) {
         return String(num).padStart(2, '0');
@@ -126,6 +129,55 @@ const AgentTodoManager = {
         return this.buildExecutorMessages(contact, userText, now);
     },
 
+    buildPostSuggestionMessages(contact, assistantText, now = new Date()) {
+        const todayKey = this.getTodayKey(now);
+        const tomorrowKey = this.addDays(todayKey, 1);
+        const systemPrompt = [
+            '你是 TeleWindy 的 TODO 回复后建议 Agent，只从角色刚刚的回复里提取“可让用户确认添加”的 TODO 建议。',
+            '你不能执行 TODO，不能修改/完成/取消/删除 TODO，只能建议新增 TODO。',
+            '不要输出 Markdown，不要解释，只输出 JSON。',
+            '',
+            'intent 只能选择：NONE、SUGGEST_TODO_CREATE。',
+            '',
+            '规则：',
+            '- 只看【角色刚刚回复】，不要猜用户原话或聊天历史。',
+            '- 只有回复里明确建议了一个可执行事项，才输出 SUGGEST_TODO_CREATE。',
+            '- 闲聊、安慰、鼓励、泛泛建议、角色语气承诺，选 NONE。',
+            '- 不确定日期时可以用今天；明确出现“明天”用明天日期。',
+            '- 不要编造回复里没有的任务、日期或时间。',
+            '- 多个事项拆成多个 todos，不要合并。',
+            '- 最多返回 5 项 TODO。',
+            '',
+            'JSON 格式：',
+            '{"intent":"SUGGEST_TODO_CREATE","todos":[{"text":"导出发票","dateKey":"2026-06-10","startTime":"21:00","endTime":""}],"confirmation":{"message":""}}',
+            '',
+            '字段说明：',
+            '- NONE 时 todos 为空数组。',
+            '- text 写简短任务名，不要写“建议你”。',
+            '- dateKey 必须是 YYYY-MM-DD。',
+            '- 没有明确时间就留空 startTime/endTime。'
+        ].join('\n');
+
+        // ★★★★★ Post Agent：TODO 建议 prompt START ★★★★★
+        // 为了省 token，post-agent 只看角色回复；用户原话和 TODO 快照都不放进来。
+        const userPrompt = [
+            `今天日期：${todayKey}`,
+            `明天日期：${tomorrowKey}`,
+            '',
+            '【当前角色】',
+            contact?.name || '未命名角色',
+            '',
+            '【角色刚刚回复】',
+            assistantText || ''
+        ].join('\n');
+        // ★★★★★ Post Agent：TODO 建议 prompt END ★★★★★
+
+        return [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+        ];
+    },
+
     extractJson(rawText) {
         const text = String(rawText || '').trim();
         if (!text) throw new Error('TODO 管理返回为空');
@@ -156,6 +208,20 @@ const AgentTodoManager = {
             todo: data.todo && typeof data.todo === 'object' ? data.todo : {},
             todos: Array.isArray(data.todos) ? data.todos.filter(item => item && typeof item === 'object') : [],
             update: data.update && typeof data.update === 'object' ? data.update : {},
+            confirmation: data.confirmation && typeof data.confirmation === 'object' ? data.confirmation : {}
+        };
+    },
+
+    parsePostSuggestionResult(rawText) {
+        const data = this.extractJson(rawText);
+        const intent = String(data.intent || '').trim().toUpperCase();
+        if (!this.allowedPostIntents.includes(intent)) {
+            throw new Error(`未知 post-agent intent：${intent || '空'}`);
+        }
+
+        return {
+            intent,
+            todos: Array.isArray(data.todos) ? data.todos.filter(item => item && typeof item === 'object') : [],
             confirmation: data.confirmation && typeof data.confirmation === 'object' ? data.confirmation : {}
         };
     },

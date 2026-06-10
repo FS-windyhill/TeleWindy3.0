@@ -9578,6 +9578,15 @@ body.dark-mode .agent-api-select {
     font-size: 0.9rem;
     line-height: 1.35;
     overflow-wrap: anywhere;
+    white-space: pre-line;
+}
+
+.app-top-notice-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 .app-top-notice-action {
@@ -9598,6 +9607,12 @@ body.dark-mode .agent-api-select {
     transform: scale(0.98);
 }
 
+.app-top-notice-action.secondary {
+    border-color: rgba(96, 107, 128, 0.28);
+    background: rgba(255, 255, 255, 0.32);
+    color: rgba(47, 52, 64, 0.78);
+}
+
 body.dark-mode .app-top-notice {
     background: rgba(36, 36, 36, 0.3);
     border-color: rgba(245, 245, 245, 0.28);
@@ -9609,6 +9624,12 @@ body.dark-mode .app-top-notice-action {
     color: #f4f4f4;
     background: rgba(255, 255, 255, 0.12);
     border-color: rgba(245, 245, 245, 0.34);
+}
+
+body.dark-mode .app-top-notice-action.secondary {
+    color: rgba(244, 244, 244, 0.76);
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(245, 245, 245, 0.2);
 }
 /* ★★★★★ 顶部通知 END：Agent 状态 / 通用消息条 ★★★★★ */
 
