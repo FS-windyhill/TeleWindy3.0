@@ -6,7 +6,7 @@
 // 函数目录：
 //   - getTodayKey(now): 获取今天日期 key
 //   - buildTodoSnapshot(now): 给 worker model 的精简 TODO 列表
-//   - buildExecutorMessages(contact, userText, now): 生成 TODO 管理执行请求 messages
+//   - buildExecutorMessages(contact, userText, now, sourceLabel): 生成 TODO 管理执行请求 messages，可标记输入来自用户消息或角色动作意图
 //   - buildPostSuggestionMessages(contact, assistantText, now): 生成回复后 TODO 建议请求 messages
 //   - extractJson(rawText): 从 worker model 返回里抽出 JSON
 //   - parseRouterResult(rawText): 解析并规范化 intent
@@ -129,11 +129,11 @@ const AgentTodoManager = {
         return [];
     },
 
-    buildExecutorMessages(contact, userText, now = new Date()) {
+    buildExecutorMessages(contact, userText, now = new Date(), sourceLabel = '输入文字') {
         const todayKey = this.getTodayKey(now);
         const tomorrowKey = this.addDays(todayKey, 1);
         const systemPrompt = [
-            '你是一个 TODO 管理 Agent，负责把用户这句话解析成 TODO 管理操作包。',
+            '你是一个 TODO 管理 Agent，负责把输入文字解析成 TODO 管理操作包。',
             '你只能从 intent 枚举中选择：NONE、MANAGE_TODO、ASK_CONFIRMATION。',
             '不要输出 Markdown，不要解释，只输出 JSON。',
             '',
@@ -176,7 +176,7 @@ const AgentTodoManager = {
             '【现有 TODO】',
             JSON.stringify(this.buildTodoSnapshot(now), null, 2),
             '',
-            '【用户当前消息】',
+            `【${sourceLabel}】`,
             userText || ''
         ].join('\n');
 

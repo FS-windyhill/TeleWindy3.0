@@ -1,13 +1,45 @@
 // =========================================
 // AGENT SKILL ROUTER（探索 Agent / 通用路由）
-// 这里只判断“本轮要不要调用某个 Agent”，不解析具体 TODO 字段。
+// 新协议优先使用角色回复里的『动作意图』触发 Agent，不再每段对话都跑路由。
+// 旧通用路由函数暂时保留，方便回滚和以后多 Agent 扩展。
 // 具体能力的详细规则继续放在各自 Agent 里，避免每句话都背完整技能说明。
 //
 // 函数目录：
+//   - AgentIntentMarkup.extract(text): 从角色回复里提取『』包裹的动作意图
+//   - AgentIntentMarkup.strip(text): 从 UI 和历史上下文里隐藏『』动作意图
 //   - buildRouterMessages(contact, userText): 生成通用 Agent 路由 messages
+//   - buildPostRouterMessages(contact, assistantText): 旧版回复后总路由 messages，当前主链路不再主动使用
 //   - extractJson(rawText): 从 worker model 返回里抽出 JSON
 //   - parseRouterResult(rawText): 解析并规范化路由结果
+//   - parsePostRouterResult(rawText): 解析旧版回复后路由结果
 // =========================================
+
+// ★★★★★ Agent Intent Markup START：角色动作意图标记 ★★★★★
+const AgentIntentMarkup = {
+    open: '『',
+    close: '』',
+    pattern: /『([\s\S]*?)』/g,
+
+    extract(text) {
+        const source = String(text || '');
+        const intents = [];
+        source.replace(this.pattern, (match, inner) => {
+            const intent = String(inner || '').replace(/\s+/g, ' ').trim();
+            if (intent) intents.push(intent);
+            return match;
+        });
+        return intents;
+    },
+
+    strip(text) {
+        // ★ 『』是给动作系统看的意图余波，聊天气泡里不展示。
+        return String(text || '')
+            .replace(/[ \t]*『[\s\S]*?』[ \t]*/g, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
+};
+// ★★★★★ Agent Intent Markup END：角色动作意图标记 ★★★★★
 
 // ★★★★★ Agent Skill Router START：通用 Agent 选择层 ★★★★★
 const AgentSkillRouter = {

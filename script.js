@@ -435,13 +435,13 @@
 //   - openImageLightbox(src): 打开图片大图预览遮罩，点击后关闭
 //   - showEditModal(oldText, onConfirmCallback): 显示消息编辑弹窗，确认后通过回调返回新文本
 //   - removeLatestAiBubbles(): 删除聊天窗口中最后一组 AI 消息气泡，用于重生成前清理旧回复
-//   - renderChatHistory(contact, isLoadMore = false, keepScrollPosition = false): 渲染当前联系人的聊天历史，支持分页加载、跳转模式、高亮和隐藏内容
+//   - renderChatHistory(contact, isLoadMore = false, keepScrollPosition = false): 渲染当前联系人的聊天历史，支持分页加载、跳转模式、高亮、隐藏内容，并隐藏 Agent『动作意图』
 //   - appendMessageBubble(text, sender, aiAvatarUrl, timestampRaw, historyIndex = null): 向聊天窗口追加一条消息气泡
 //   - appendSeparator(shouldAnimate = false): 在聊天窗口追加分隔线/时间分隔元素
 //   - scrollToBottom(): 将聊天滚动容器滚动到底部
 //   - setLoading(isLoading, contactId): 设置发送按钮/加载状态，并记录哪个联系人正在输入
 //   - updateRerollState(contact): 根据当前联系人和聊天历史更新“重新生成”按钮状态
-//   - playWaterfall(fullText, avatar, timestamp, historyIndex): 将 AI 完整回复按段落瀑布式逐条显示，并处理思考内容
+//   - playWaterfall(fullText, avatar, timestamp, historyIndex): 将 AI 完整回复按段落瀑布式逐条显示，并处理思考内容和 Agent『动作意图』隐藏
 //   - initStatusBar(): 初始化顶部状态栏时间、电池信息和相关监听
 //   - renderPresetMenu(): 渲染 API 预设菜单，并绑定保存、删除、加载预设事件
 //   - renderRequestBodyPresetMenu(): 渲染请求体参数预设菜单，并绑定保存、删除、加载预设事件
@@ -518,6 +518,12 @@
 //     - syncTodoContextToggles(): 同步 TO DO / 倒数日注入开关
 //     - toggleTodoPlanInjectEnabled(enabled): 保存 TO DO 注入开关
 //     - toggleCountdownInjectEnabled(enabled): 保存倒数日注入开关
+//     - buildAgentCapabilityPrompt(): 根据已开启 skill 生成注入角色描述末尾的 `# 能力` 模块，没开 skill 时返回空
+//     - buildAgentSkillRouterRequestSettings(baseSettings): 生成 Agent 轻量模型参数，压小输出预算
+//     - buildAgentTodoManagerRequestSettings(): 生成 TODO 管理 Agent 使用的 API 配置
+//     - runAgentPostAgents(contact, assistantText, assistantMessage): 只在角色回复含『动作意图』时触发 Agent，不再每轮跑总路由
+//     - runAgentTodoIntentOperations(contact, intentTexts, assistantMessage): 把『』内自然语言意图交给 TODO Agent 翻译并执行
+//     - executeAgentTodoSkill(routerResult, contact): 根据 TODO Agent 输出的操作包落地新增/完成/取消/改期等动作
 //     - escapeHtml(text): 渲染 innerHTML 前做 HTML 转义，TO DO、心迹、搜索结果等都会复用
 //     - sanitizeImageSrc(src): 过滤心迹图片地址，拦截 javascript: / SVG data 等危险来源
 //     - renderTodoDatePicker(scope): 渲染 TO DO / 倒数日弹窗的 7 天日期条
@@ -2758,6 +2764,9 @@ const UI = {
 
                 // 联系人列表只统计正文气泡，think/thinking/thought 思考块会在聊天页单独渲染，不计入未读红点
                 content = content.replace(/<(?:think|thinking|thought)[^>]*>[\s\S]*?(?:<\/(?:think|thinking|thought)>|$)/gi, '').trim();
+                if (lastMsgObj.role === 'assistant' && typeof AgentIntentMarkup !== 'undefined') {
+                    content = AgentIntentMarkup.strip(content);
+                }
 
                 // ==========================================================
                 // ★ 新增代码：在这里添加一行，用正则去除Markdown符号 ★
@@ -3210,6 +3219,9 @@ const UI = {
             // 处理 AI 引用格式
             if (sender === 'ai') {
                  cleanText = cleanText.replace(/(^|\n)>\s*/g, '\n\n');
+                 if (typeof AgentIntentMarkup !== 'undefined') {
+                     cleanText = AgentIntentMarkup.strip(cleanText);
+                 }
             }
 
             const msgTime = typeof msg === 'string' ? null : msg.timestamp;
@@ -3471,6 +3483,9 @@ const UI = {
 
         // 1. Pre-process text
         processedText = processedText.replace(/(^|\n)>\s*/g, '\n\n');
+        if (typeof AgentIntentMarkup !== 'undefined') {
+            processedText = AgentIntentMarkup.strip(processedText);
+        }
         const paragraphs = processedText.split(/\n\s*\n/).filter(p => p.trim());
         
         // 2. Create the container group
@@ -5641,6 +5656,22 @@ const App = {
         `;
     },
 
+    buildAgentCapabilityPrompt() {
+        // ★★★★★ Agent：能力注入 START ★★★★★
+        // 开启 skill 后才把能力写进角色描述；没有任何 skill 时不塞光秃秃的「# 能力」标题。
+        const capabilities = [];
+        if (STATE.settings.AGENT_SKILL_ROUTER_ENABLED === true) {
+            capabilities.push('你能操作对方的 todo 日程。当你自然地想为对方新增、修改、完成或删除一件待办/计划/提醒时，用『』包裹你的行动意图，比如『把“论文整理”设为已完成』或『加一个“吃肯德基”的计划』。');
+        }
+        if (!capabilities.length) return '';
+        return [
+            '# 能力',
+            '',
+            ...capabilities.map(text => `- ${text}`)
+        ].join('\n');
+        // ★★★★★ Agent：能力注入 END ★★★★★
+    },
+
     formatAgentContextLogItem(log, index) {
         if (!log) return '';
         const timeText = log.createdAt ? new Date(log.createdAt).toLocaleTimeString() : '未知时间';
@@ -6205,16 +6236,12 @@ const App = {
         }
     },
 
+    // ★★★★★ Agent：意图括号触发主链路 START ★★★★★
+    // 只有角色回复里出现『...』时才触发 Agent；普通对话不再每轮调用 router。
     async runAgentPostAgents(contact, assistantText, assistantMessage = null) {
         if (STATE.settings.AGENT_SKILL_ROUTER_ENABLED !== true) return null;
-        if (typeof AgentSkillRouter === 'undefined') return null;
+        if (typeof AgentIntentMarkup === 'undefined') return null;
         if (!assistantText || !assistantMessage) return null;
-
-        const todoPostState = this.getAgentExecutionState(assistantMessage, 'todo_manager_post');
-        if (['suggested', 'applied', 'dismissed'].includes(todoPostState?.status)) {
-            console.log('[PostAgent][总路由] 具体 Agent 已有状态，本轮跳过:', todoPostState);
-            return null;
-        }
 
         const existingRouteState = this.getAgentExecutionState(assistantMessage, 'post_router');
         if (['skipped', 'routed'].includes(existingRouteState?.status)) {
@@ -6222,71 +6249,38 @@ const App = {
             return null;
         }
 
-        const settings = this.buildAgentSkillRouterRequestSettings(this.buildAgentTodoManagerRequestSettings());
-        if (!settings.API_URL || !settings.API_KEY || !settings.MODEL) {
-            console.log('[PostAgent][总路由] API 配置缺失，跳过。');
-            return null;
-        }
-
-        console.groupCollapsed(`[PostAgent][总路由] ${contact?.name || '未命名角色'} · ${new Date().toLocaleTimeString()}`);
-        console.log('[PostAgent][总路由] 角色回复:', assistantText);
-        console.log('[PostAgent][总路由] 请求模型:', {
-            url: settings.API_URL,
-            model: settings.MODEL,
-            presetIndex: STATE.settings.AGENT_SKILL_ROUTER_API_PRESET_INDEX
-        });
+        const actionableText = String(assistantText || '')
+            .replace(/<(?:think|thinking|thought)[^>]*>[\s\S]*?(?:<\/(?:think|thinking|thought)>|$)/gi, '')
+            .trim();
+        const intentTexts = AgentIntentMarkup.extract(actionableText);
+        console.groupCollapsed(`[Agent][意图括号] ${contact?.name || '未命名角色'} · ${new Date().toLocaleTimeString()}`);
+        console.log('[Agent][意图括号] 角色回复:', assistantText);
+        console.log('[Agent][意图括号] 提取结果:', intentTexts);
 
         try {
-            await this.setAgentExecutionState(contact, assistantMessage, 'post_router', {
-                status: 'pending',
-                error: '',
-                agent: '',
-                source: 'frontend'
-            });
-
-            // ★★★★★ Post Agent：总路由先判定 START ★★★★★
-            // 先用短 prompt 判断回复后要不要调用某个 Agent；命中后再发送具体 Agent 的长规则。
-            const messages = AgentSkillRouter.buildPostRouterMessages(contact, assistantText);
-            console.log('[PostAgent][总路由] Messages:', messages);
-            const rawText = await API.chat(messages, {
-                ...settings,
-                AGENT_LOG_PHASE: 'post',
-                AGENT_LOG_LABEL: 'Post 总路由'
-            });
-            console.log('[PostAgent][总路由] 原始返回:', rawText);
-            const route = AgentSkillRouter.parsePostRouterResult(rawText);
-            console.log('[PostAgent][总路由] 解析结果:', route);
-            // ★★★★★ Post Agent：总路由先判定 END ★★★★★
-
-            if (route.intent === 'NONE') {
+            if (!intentTexts.length) {
                 await this.setAgentExecutionState(contact, assistantMessage, 'post_router', {
                     status: 'skipped',
-                    reason: 'post_router_none',
+                    reason: 'no_intent_markup',
                     agent: '',
                     source: 'frontend'
                 });
                 return null;
             }
 
-            if (route.agent !== 'todo_manager_post') {
-                await this.setAgentExecutionState(contact, assistantMessage, 'post_router', {
-                    status: 'skipped',
-                    reason: 'post_router_unknown_agent',
-                    agent: route.agent || '',
-                    source: 'frontend'
-                });
-                return null;
-            }
-
+            // ★★★★★ Agent：意图括号路由 START ★★★★★
+            // 主模型只留下自然语言动作意图；这里不再二次判断要不要调用，只把意图交给 TODO 专用 Agent 翻译。
             await this.setAgentExecutionState(contact, assistantMessage, 'post_router', {
                 status: 'routed',
-                reason: 'post_router_routed',
-                agent: route.agent,
+                reason: 'intent_markup_routed',
+                agent: 'todo_manager',
+                intents: intentTexts,
                 source: 'frontend'
             });
-            return await this.runAgentTodoPostSuggestions(contact, assistantText, assistantMessage);
+            return await this.runAgentTodoIntentOperations(contact, intentTexts, assistantMessage);
+            // ★★★★★ Agent：意图括号路由 END ★★★★★
         } catch (error) {
-            console.warn('[PostAgent][总路由] failed:', error);
+            console.warn('[Agent][意图括号] failed:', error);
             await this.setAgentExecutionState(contact, assistantMessage, 'post_router', {
                 status: 'failed',
                 error: error?.message || String(error),
@@ -6298,6 +6292,89 @@ const App = {
             console.groupEnd();
         }
     },
+
+    async runAgentTodoIntentOperations(contact, intentTexts = [], assistantMessage = null) {
+        if (STATE.settings.AGENT_SKILL_ROUTER_ENABLED !== true) return null;
+        if (typeof AgentTodoManager === 'undefined') return null;
+        const validIntentTexts = Array.isArray(intentTexts)
+            ? intentTexts.map(text => AgentTodoManager.cleanText(text, 200)).filter(Boolean)
+            : [];
+        if (!validIntentTexts.length || !assistantMessage) return null;
+
+        const existingState = this.getAgentExecutionState(assistantMessage, 'todo_manager_post');
+        if (['applied', 'skipped', 'failed'].includes(existingState?.status)) {
+            console.log('[Agent][TODO意图] 已有状态，本轮跳过:', existingState);
+            return null;
+        }
+
+        const settings = this.buildAgentTodoManagerRequestSettings();
+        if (!settings.API_URL || !settings.API_KEY || !settings.MODEL) {
+            console.log('[Agent][TODO意图] API 配置缺失，跳过。');
+            return null;
+        }
+
+        console.groupCollapsed(`[Agent][TODO意图] ${contact?.name || '未命名角色'} · ${new Date().toLocaleTimeString()}`);
+        console.log('[Agent][TODO意图] 意图文本:', validIntentTexts);
+        console.log('[Agent][TODO意图] 请求模型:', {
+            url: settings.API_URL,
+            model: settings.MODEL,
+            presetIndex: STATE.settings.AGENT_SKILL_ROUTER_API_PRESET_INDEX
+        });
+
+        try {
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                status: 'pending',
+                error: '',
+                intentTexts: validIntentTexts,
+                source: 'frontend'
+            });
+
+            // ★★★★★ Agent：TODO 意图执行 START ★★★★★
+            // 『』里已经是角色发出的动作意图，所以这里直接进入 TODO 专用解析，不再走 pre/post 总路由。
+            const messages = AgentTodoManager.buildExecutorMessages(contact, validIntentTexts.join('\n'), new Date(), '角色动作意图');
+            console.log('[Agent][TODO意图] Messages:', messages);
+            const rawText = await API.chat(messages, {
+                ...settings,
+                AGENT_LOG_PHASE: 'post',
+                AGENT_LOG_LABEL: 'TODO 意图执行'
+            });
+            console.log('[Agent][TODO意图] 原始返回:', rawText);
+            const routerResult = AgentTodoManager.parseRouterResult(rawText);
+            console.log('[Agent][TODO意图] 解析结果:', routerResult);
+            const result = await this.executeAgentTodoSkill(routerResult, contact);
+            // ★★★★★ Agent：TODO 意图执行 END ★★★★★
+
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', result?.prompt
+                ? {
+                    status: 'applied',
+                    reason: 'intent_skill_applied',
+                    intentTexts: validIntentTexts,
+                    resultPrompt: String(result.prompt || '').trim(),
+                    source: 'frontend'
+                }
+                : {
+                    status: 'skipped',
+                    reason: routerResult.intent === 'NONE' ? 'intent_none' : 'intent_skill_noop',
+                    intentTexts: validIntentTexts,
+                    resultPrompt: '',
+                    source: 'frontend'
+                });
+            return result;
+        } catch (error) {
+            console.warn('[Agent][TODO意图] failed:', error);
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                status: 'failed',
+                error: error?.message || String(error),
+                intentTexts: validIntentTexts,
+                source: 'frontend'
+            });
+            this.showTodoTopNotice('TODO 管理没有执行：模型返回格式不正确。', { type: 'failure' });
+            return null;
+        } finally {
+            console.groupEnd();
+        }
+    },
+    // ★★★★★ Agent：意图括号触发主链路 END ★★★★★
 
     async runAgentTodoPostSuggestions(contact, assistantText, assistantMessage = null) {
         if (STATE.settings.AGENT_SKILL_ROUTER_ENABLED !== true) return null;
@@ -8632,13 +8709,10 @@ const App = {
         await Storage.saveContacts();
         UI.setLoading(true, contact.id);
 
-        // ★★★★★ Agent：TODO 管理前置执行 START ★★★★★
-        // 只要本轮有用户文字，就让 worker model 判断 TODO skill；图片内容本身先不参与路由。
-        // Reroll 也会进入这里；是否重复执行由每条用户消息自己的 agentExecutions 状态控制。
-        const agentRuntimeResult = (!usingAsyncBackend && userText && typeof AgentRuntime !== 'undefined')
-            ? await AgentRuntime.runBeforeMainModel({ app: this, contact, userText, userMessage: agentUserMessage })
-            : this.buildAppliedAgentRuntimeResult(agentUserMessage, 'todo_manager');
-        // ★★★★★ Agent：TODO 管理前置执行 END ★★★★★
+        // ★★★★★ Agent：前置执行关闭 START ★★★★★
+        // 新协议由角色回复里的『行动意图』触发 skill；用户消息阶段不再让副模型抢先判断。
+        const agentRuntimeResult = null;
+        // ★★★★★ Agent：前置执行关闭 END ★★★★★
 
         // ============================================================
         // 3. 构建发送给 AI 的上下文 (缝合怪逻辑)
@@ -8661,6 +8735,9 @@ const App = {
                 // ============================================
                 if (msg.role === 'assistant') {
                     content = content.replace(/<(?:think|thinking|thought)>[\s\S]*?<\/(?:think|thinking|thought)>/gi, '').trim();
+                    if (typeof AgentIntentMarkup !== 'undefined') {
+                        content = AgentIntentMarkup.strip(content);
+                    }
                 }
 
 
@@ -8735,9 +8812,14 @@ const App = {
         if ((systemPrompt || '').trim()) {
             messagesToSend.push({ role: 'system', content: systemPrompt });
         }
-        // User Prompt 为空时也不塞空壳 system 消息，保持 messages 列表干净。
-        if ((contact.prompt || '').trim()) {
-            messagesToSend.push({ role: 'system', content: `=== User Prompt ===\n${contact.prompt}` });
+        const agentCapabilityPrompt = this.buildAgentCapabilityPrompt();
+        const contactPromptBlocks = [
+            (contact.prompt || '').trim(),
+            agentCapabilityPrompt
+        ].filter(Boolean);
+        // User Prompt 和 skill 能力都为空时不塞空壳 system 消息，保持 messages 列表干净。
+        if (contactPromptBlocks.length) {
+            messagesToSend.push({ role: 'system', content: `=== User Prompt ===\n${contactPromptBlocks.join('\n\n')}` });
         }
 
         // ★★★★★ 世界书分层注入 START ★★★★★
@@ -8906,9 +8988,7 @@ const App = {
         requestSettings.ASYNC_BACKEND_REQUEST_USER_MESSAGE_INDEX = currentUserMessage
             ? messagesToSend.length - 1
             : -1;
-        requestSettings.ASYNC_BACKEND_AGENT = usingAsyncBackend
-            ? this.buildAsyncBackendAgentPayload(contact, userText, requestSettings, agentUserMessage)
-            : null;
+        requestSettings.ASYNC_BACKEND_AGENT = null;
         if (requestSettings.ASYNC_BACKEND_AGENT?.todo_manager) {
             await this.setAgentExecutionState(contact, agentUserMessage, 'todo_manager', {
                 status: 'pending',
