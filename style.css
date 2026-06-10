@@ -6440,17 +6440,23 @@ body.dark-mode .tab-btn.active { color: #dedede;  }
 
 /* ================== 探索页面 ================ */
 #view-explore {
-    overflow-y: auto;                 /* ★ 探索页内容多时自己滚动，避免被 html/body 的 hidden 卡住 */
-    -webkit-overflow-scrolling: touch; /* 保留手机端顺滑滚动 */
-    padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+    /* 探索页外层只负责固定 header，真正滚动交给 .explore-list。 */
+    overflow: hidden;
     box-sizing: border-box;
 }
 
 .explore-list {
-    padding: 20px;
+    /* header 和底部 tab 都固定时，列表必须吃剩余高度并自己滚动。 */
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    padding: 20px 20px calc(70px + env(safe-area-inset-bottom, 0px));
     margin: 0;
     background: transparent;
     list-style: none;
+    box-sizing: border-box;
 }
 
 .explore-list li {
