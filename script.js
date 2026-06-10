@@ -4832,7 +4832,16 @@ const App = {
 
         const text = document.createElement('div');
         text.className = 'app-top-notice-text';
-        text.textContent = message || '';
+        if (typeof options.renderContent === 'function') {
+            const customContent = options.renderContent({ closeNotice, notice });
+            if (customContent instanceof Node) {
+                text.appendChild(customContent);
+            } else {
+                text.textContent = message || '';
+            }
+        } else {
+            text.textContent = message || '';
+        }
         notice.appendChild(text);
 
         const actions = Array.isArray(options.actions) && options.actions.length
@@ -6235,20 +6244,54 @@ const App = {
         if (!validSuggestions.length) return null;
 
         const roleName = contact?.name || '当前角色';
-        const previewLines = validSuggestions.slice(0, 3).map(item => `- ${this.formatAgentPostTodoSuggestionLine(item)}`);
-        const restText = validSuggestions.length > 3 ? `等 ${validSuggestions.length - 3} 项` : '';
         const title = validSuggestions.length === 1
             ? `${roleName} 建议添加 TODO：`
             : `${roleName} 建议添加 ${validSuggestions.length} 项 TODO：`;
-        const message = [title, ...previewLines, restText].filter(Boolean).join('\n');
 
         // ★★★★★ Post Agent：持久确认条 START ★★★★★
         // 角色回复只能提出建议；真正写入 TODO 必须等用户点“添加”。
-        return this.showTopNotice(message, {
+        let checkboxList = null;
+        const getSelectedSuggestions = () => {
+            if (!checkboxList) return validSuggestions;
+            return Array.from(checkboxList.querySelectorAll('input[type="checkbox"]:checked'))
+                .map(input => validSuggestions[Number(input.dataset.index)])
+                .filter(Boolean);
+        };
+
+        return this.showTopNotice('', {
             type: 'pending',
             layout: 'stacked',
             timeout: 0,
+            renderContent: () => {
+                const wrap = document.createElement('div');
+                wrap.className = 'agent-suggestion-notice';
+
+                const titleEl = document.createElement('div');
+                titleEl.className = 'agent-suggestion-title';
+                titleEl.textContent = title;
+                wrap.appendChild(titleEl);
+
+                checkboxList = document.createElement('div');
+                checkboxList.className = 'agent-suggestion-list';
+                validSuggestions.forEach((item, index) => {
+                    const row = document.createElement('label');
+                    row.className = 'agent-suggestion-option desktop-switch-cell';
+                    row.innerHTML = `
+                        <input type="checkbox" data-index="${index}" checked>
+                        <span>${this.escapeHtml(this.formatAgentPostTodoSuggestionLine(item))}</span>
+                    `;
+                    checkboxList.appendChild(row);
+                });
+                wrap.appendChild(checkboxList);
+                return wrap;
+            },
             actions: [
+                {
+                    label: '添加选中',
+                    onAction: async () => {
+                        await this.applyAgentPostTodoSuggestions(contact, assistantMessage, getSelectedSuggestions());
+                    }
+                },
                 {
                     label: validSuggestions.length === 1 ? '添加' : '全部添加',
                     onAction: async () => {
@@ -6274,6 +6317,18 @@ const App = {
     },
 
     async applyAgentPostTodoSuggestions(contact, assistantMessage, suggestions = []) {
+        if (!Array.isArray(suggestions) || !suggestions.length) {
+            console.log('[PostAgent][TODO建议] 用户没有选中任何建议。');
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                status: 'suggested',
+                reason: 'user_apply_empty_selection',
+                suggestions: this.getAgentExecutionState(assistantMessage, 'todo_manager_post')?.suggestions || [],
+                source: 'frontend'
+            });
+            this.showTopNotice('还没有选中要添加的 TODO。', { type: 'pending' });
+            return null;
+        }
+
         const seenKeys = new Set((STATE.todoPlans || [])
             .filter(item => item && item.text && item.dateKey)
             .map(item => this.buildTodoDuplicateKey(item.text, item.dateKey)));

@@ -9739,6 +9739,33 @@ body.dark-mode .agent-api-select {
     width: 100%;
 }
 
+.agent-suggestion-notice {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.agent-suggestion-title {
+    font-weight: 700;
+}
+
+.agent-suggestion-list {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.agent-suggestion-option.desktop-switch-cell {
+    min-height: 34px;
+    padding: 7px 9px;
+    line-height: 1.35;
+}
+
+.agent-suggestion-option span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 .app-top-notice-action {
     min-width: 58px;
     height: 30px;
