@@ -1632,10 +1632,43 @@ const API = {
     
     // ============================================
     // ============================================
+    ensureAgentContextLogs() {
+        if (!window.AGENT_CONTEXT_LOGS || typeof window.AGENT_CONTEXT_LOGS !== 'object') {
+            window.AGENT_CONTEXT_LOGS = { pre: [], post: [] };
+        }
+        if (!Array.isArray(window.AGENT_CONTEXT_LOGS.pre)) window.AGENT_CONTEXT_LOGS.pre = [];
+        if (!Array.isArray(window.AGENT_CONTEXT_LOGS.post)) window.AGENT_CONTEXT_LOGS.post = [];
+        return window.AGENT_CONTEXT_LOGS;
+    },
+
+    recordAgentContextLog(phase, entry = {}) {
+        const logs = this.ensureAgentContextLogs();
+        const key = phase === 'post' ? 'post' : 'pre';
+        logs[key].push({
+            id: `agent_log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            phase: key,
+            ...entry
+        });
+        logs[key] = logs[key].slice(-20);
+        return logs[key][logs[key].length - 1];
+    },
+
+    getLatestAgentContextLog(phase) {
+        const logs = this.ensureAgentContextLogs();
+        const key = phase === 'post' ? 'post' : 'pre';
+        return logs[key][logs[key].length - 1] || null;
+    },
+
+    getAgentContextLogs() {
+        return this.ensureAgentContextLogs();
+    },
+
     async chat(messages, settings) {
         // ★ 后台任务去重标记只属于“本次 API.chat 调用”，每次开始前先清空旧结果。
         this.lastAsyncBackendResult = null;
         this.recordDesktopRequestCount();
+        const agentLogPhase = ['pre', 'post'].includes(settings.AGENT_LOG_PHASE) ? settings.AGENT_LOG_PHASE : '';
+        const isAgentContextLog = !!agentLogPhase;
 
         // ★ 后台回复接收入口：如果用户在探索页填写了 Worker URL + Token，
         //   这里就不直接请求模型 API，而是交给后端创建 job 并轮询结果。
@@ -1745,7 +1778,7 @@ const API = {
             
             console.log(`[${provider}] Sending...`, requestBodyObject);
 
-            window.LAST_API_LOG = {
+            const apiLogEntry = {
                 content: JSON.stringify(requestBodyObject, null, 2),
 
                 // 保留你原来的 tokens 字段，避免旧代码报错
@@ -1765,6 +1798,19 @@ const API = {
 
                 isEstimated: true 
             };
+            if (isAgentContextLog) {
+                this.recordAgentContextLog(agentLogPhase, {
+                    label: settings.AGENT_LOG_LABEL || 'Agent 调用',
+                    request: apiLogEntry.content,
+                    response: '',
+                    provider,
+                    model: MODEL,
+                    createdAt: Date.now(),
+                    ...apiLogEntry
+                });
+            } else {
+                window.LAST_API_LOG = apiLogEntry;
+            }
 
         } catch (error) {
             console.error("【API日志记录失败】", error);
@@ -1783,6 +1829,10 @@ const API = {
         // 2. 发送后：拿到真实 Token
         // ==========================================
         console.log(`[${provider}] Raw Response:`, data);
+        if (isAgentContextLog) {
+            const latestAgentLog = this.getLatestAgentContextLog(agentLogPhase);
+            if (latestAgentLog) latestAgentLog.response = JSON.stringify(data, null, 2);
+        }
 
         try {
             let promptTokens = 0;
@@ -1812,18 +1862,22 @@ const API = {
                 totalTokens = data.usageMetadata.totalTokenCount ?? (promptTokens + completionTokens);
             }
 
-            if (window.LAST_API_LOG) {
+            const updateLogTarget = isAgentContextLog
+                ? this.getLatestAgentContextLog(agentLogPhase)
+                : window.LAST_API_LOG;
+
+            if (updateLogTarget) {
                 if (promptTokens || completionTokens || totalTokens) {
-                    window.LAST_API_LOG.tokens = promptTokens; // 兼容旧字段
-                    window.LAST_API_LOG.prompt_tokens = promptTokens;
-                    window.LAST_API_LOG.completion_tokens = completionTokens;
-                    window.LAST_API_LOG.total_tokens = totalTokens;
-                    window.LAST_API_LOG.prompt_cache_hit_tokens = promptCacheUsage.hitTokens;
-                    window.LAST_API_LOG.prompt_cache_miss_tokens = promptCacheUsage.missTokens;
-                    window.LAST_API_LOG.prompt_cache_total_tokens = promptCacheUsage.totalTokens;
-                    window.LAST_API_LOG.prompt_cache_hit_rate = promptCacheUsage.hitRate;
-                    window.LAST_API_LOG.has_prompt_cache_usage = promptCacheUsage.hasUsage;
-                    window.LAST_API_LOG.isEstimated = false;
+                    updateLogTarget.tokens = promptTokens; // 兼容旧字段
+                    updateLogTarget.prompt_tokens = promptTokens;
+                    updateLogTarget.completion_tokens = completionTokens;
+                    updateLogTarget.total_tokens = totalTokens;
+                    updateLogTarget.prompt_cache_hit_tokens = promptCacheUsage.hitTokens;
+                    updateLogTarget.prompt_cache_miss_tokens = promptCacheUsage.missTokens;
+                    updateLogTarget.prompt_cache_total_tokens = promptCacheUsage.totalTokens;
+                    updateLogTarget.prompt_cache_hit_rate = promptCacheUsage.hitRate;
+                    updateLogTarget.has_prompt_cache_usage = promptCacheUsage.hasUsage;
+                    updateLogTarget.isEstimated = false;
 
                     console.log("API返回真实Token消耗:", {
                         prompt_tokens: promptTokens,
@@ -1833,20 +1887,20 @@ const API = {
                         prompt_cache_miss_tokens: promptCacheUsage.missTokens,
                         prompt_cache_hit_rate: promptCacheUsage.hitRate
                     });
-                } else if (window.LAST_API_LOG.content) {
+                } else if (updateLogTarget.content) {
                     // API 没返回 usage 时，用旧的估算逻辑兜底
-                    const estimatedTokens = this.estimateTokens(window.LAST_API_LOG.content);
+                    const estimatedTokens = this.estimateTokens(updateLogTarget.content);
 
-                    window.LAST_API_LOG.tokens = estimatedTokens;
-                    window.LAST_API_LOG.prompt_tokens = estimatedTokens;
-                    window.LAST_API_LOG.completion_tokens = 0;
-                    window.LAST_API_LOG.total_tokens = estimatedTokens;
-                    window.LAST_API_LOG.prompt_cache_hit_tokens = 0;
-                    window.LAST_API_LOG.prompt_cache_miss_tokens = 0;
-                    window.LAST_API_LOG.prompt_cache_total_tokens = 0;
-                    window.LAST_API_LOG.prompt_cache_hit_rate = null;
-                    window.LAST_API_LOG.has_prompt_cache_usage = false;
-                    window.LAST_API_LOG.isEstimated = true;
+                    updateLogTarget.tokens = estimatedTokens;
+                    updateLogTarget.prompt_tokens = estimatedTokens;
+                    updateLogTarget.completion_tokens = 0;
+                    updateLogTarget.total_tokens = estimatedTokens;
+                    updateLogTarget.prompt_cache_hit_tokens = 0;
+                    updateLogTarget.prompt_cache_miss_tokens = 0;
+                    updateLogTarget.prompt_cache_total_tokens = 0;
+                    updateLogTarget.prompt_cache_hit_rate = null;
+                    updateLogTarget.has_prompt_cache_usage = false;
+                    updateLogTarget.isEstimated = true;
 
                     console.log("API未返回真实Token，已使用估算Token:", estimatedTokens);
                 }
@@ -5472,7 +5526,25 @@ const App = {
         const preset = presetIndex >= 0 ? (STATE.settings.API_PRESETS || [])[presetIndex] : null;
         const modelText = preset ? `模型：${preset.name || '未命名预设'}` : '模型：跟随全局默认设置';
 
+        const agentLogs = typeof API !== 'undefined' && typeof API.getAgentContextLogs === 'function'
+            ? API.getAgentContextLogs()
+            : { pre: [], post: [] };
+
         list.innerHTML = `
+            <div class="agent-card" data-agent-log="context">
+                <div class="agent-card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M5 4h14"></path><path d="M5 8h14"></path><path d="M5 12h10"></path><path d="M5 18h6"></path><path d="M15 18h4"></path>
+                    </svg>
+                </div>
+                <div class="agent-card-info">
+                    <div class="agent-card-name">Agent 上下文日志</div>
+                    <div class="agent-card-status">Pre ${agentLogs.pre.length} 条 · Post ${agentLogs.post.length} 条</div>
+                </div>
+                <span class="agent-card-arrow">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
+                </span>
+            </div>
             <div class="agent-card ${enabled ? 'enabled' : ''}" data-agent="todo-manager">
                 <div class="agent-card-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -5489,6 +5561,85 @@ const App = {
                 </label>
             </div>
         `;
+    },
+
+    formatAgentContextLogItem(log, index) {
+        if (!log) return '';
+        const timeText = log.createdAt ? new Date(log.createdAt).toLocaleTimeString() : '未知时间';
+        const tokenText = `输入 ${log.prompt_tokens ?? 0} / 输出 ${log.completion_tokens ?? 0} / 总 ${log.total_tokens ?? 0}`;
+        return [
+            `#${index + 1} ${log.label || 'Agent 调用'} · ${timeText}`,
+            `模型：${log.model || '未知模型'} · ${tokenText}`,
+            '',
+            '【请求】',
+            log.content || log.request || '无请求记录',
+            '',
+            '【返回】',
+            log.response || '暂无返回记录'
+        ].join('\n');
+    },
+
+    renderAgentContextLogColumn(title, logs = []) {
+        const items = Array.isArray(logs) ? logs.slice().reverse() : [];
+        if (!items.length) {
+            return `
+                <section class="agent-log-section">
+                    <h4>${this.escapeHtml(title)}</h4>
+                    <div class="agent-log-empty">暂无记录</div>
+                </section>
+            `;
+        }
+
+        return `
+            <section class="agent-log-section">
+                <h4>${this.escapeHtml(title)}</h4>
+                ${items.map((log, index) => `
+                    <details class="agent-log-item" ${index === 0 ? 'open' : ''}>
+                        <summary>${this.escapeHtml(log.label || 'Agent 调用')} · ${this.escapeHtml(log.createdAt ? new Date(log.createdAt).toLocaleTimeString() : '未知时间')}</summary>
+                        <pre>${this.escapeHtml(this.formatAgentContextLogItem(log, index))}</pre>
+                    </details>
+                `).join('')}
+            </section>
+        `;
+    },
+
+    openAgentContextLogModal() {
+        // ★★★★★ Agent 上下文日志 START：Pre / Post 独立查看 ★★★★★
+        // 主“上下文日志”只保留主模型请求；Agent 模型调用集中放在 Agent 页面里查看。
+        let modal = document.getElementById('agent-context-log-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'agent-context-log-modal';
+            modal.className = 'modal-overlay hidden';
+            modal.innerHTML = `
+                <div class="modal glass-panel agent-log-modal">
+                    <div class="agent-log-header">
+                        <h2>Agent 上下文日志</h2>
+                        <button id="agent-context-log-close-btn" class="log-close-btn" type="button">&times;</button>
+                    </div>
+                    <div id="agent-context-log-body" class="agent-log-body"></div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            modal.addEventListener('click', (event) => {
+                if (event.target === modal || event.target.closest('#agent-context-log-close-btn')) {
+                    modal.classList.add('hidden');
+                }
+            });
+        }
+
+        const logs = typeof API !== 'undefined' && typeof API.getAgentContextLogs === 'function'
+            ? API.getAgentContextLogs()
+            : { pre: [], post: [] };
+        const body = document.getElementById('agent-context-log-body');
+        if (body) {
+            body.innerHTML = [
+                this.renderAgentContextLogColumn('Pre Agent', logs.pre),
+                this.renderAgentContextLogColumn('Post Agent', logs.post)
+            ].join('');
+        }
+        modal.classList.remove('hidden');
+        // ★★★★★ Agent 上下文日志 END：Pre / Post 独立查看 ★★★★★
     },
 
     async toggleAgentTodoManagerEnabled(enabled) {
@@ -5753,7 +5904,11 @@ const App = {
             const routerSettings = this.buildAgentSkillRouterRequestSettings(settings);
             const routerMessages = AgentSkillRouter.buildRouterMessages(contact, userText);
             console.log('[Agent][总路由] Router messages:', routerMessages);
-            const rawRouteText = await API.chat(routerMessages, routerSettings);
+            const rawRouteText = await API.chat(routerMessages, {
+                ...routerSettings,
+                AGENT_LOG_PHASE: 'pre',
+                AGENT_LOG_LABEL: 'Pre 总路由'
+            });
             console.log('[Agent][总路由] 原始返回:', rawRouteText);
             const agentRoute = AgentSkillRouter.parseRouterResult(rawRouteText);
             console.log('[Agent][总路由] 解析结果:', agentRoute);
@@ -5796,7 +5951,11 @@ const App = {
             // 命中 TODO 后才发送 TODO 详细规则和现有 TODO 快照，保持后续扩展 Agent 时的成本可控。
             const messages = AgentTodoManager.buildExecutorMessages(contact, userText, new Date());
             console.log('[Agent][TODO管理] Executor messages:', messages);
-            const rawText = await API.chat(messages, settings);
+            const rawText = await API.chat(messages, {
+                ...settings,
+                AGENT_LOG_PHASE: 'pre',
+                AGENT_LOG_LABEL: 'Pre TODO 执行'
+            });
             console.log('[Agent][TODO管理] 原始返回:', rawText);
             const routerResult = AgentTodoManager.parseRouterResult(rawText);
             console.log('[Agent][TODO管理] 解析结果:', routerResult);
@@ -5880,7 +6039,11 @@ const App = {
             // 先用短 prompt 判断回复后要不要调用某个 Agent；命中后再发送具体 Agent 的长规则。
             const messages = AgentSkillRouter.buildPostRouterMessages(contact, assistantText);
             console.log('[PostAgent][总路由] Messages:', messages);
-            const rawText = await API.chat(messages, settings);
+            const rawText = await API.chat(messages, {
+                ...settings,
+                AGENT_LOG_PHASE: 'post',
+                AGENT_LOG_LABEL: 'Post 总路由'
+            });
             console.log('[PostAgent][总路由] 原始返回:', rawText);
             const route = AgentSkillRouter.parsePostRouterResult(rawText);
             console.log('[PostAgent][总路由] 解析结果:', route);
@@ -5964,7 +6127,11 @@ const App = {
             // post-agent 只看角色刚刚的回复，只产出待用户确认的新增 TODO 建议。
             const messages = AgentTodoManager.buildPostSuggestionMessages(contact, assistantText, new Date());
             console.log('[PostAgent][TODO建议] Messages:', messages);
-            const rawText = await API.chat(messages, settings);
+            const rawText = await API.chat(messages, {
+                ...settings,
+                AGENT_LOG_PHASE: 'post',
+                AGENT_LOG_LABEL: 'Post TODO 建议'
+            });
             console.log('[PostAgent][TODO建议] 原始返回:', rawText);
             const postResult = AgentTodoManager.parsePostSuggestionResult(rawText);
             console.log('[PostAgent][TODO建议] 解析结果:', postResult);
@@ -11861,6 +12028,11 @@ const App = {
             const input = event.target.closest('#agent-todo-manager-toggle');
             if (!input) return;
             this.toggleAgentTodoManagerEnabled(input.checked === true);
+        });
+
+        document.getElementById('agent-list')?.addEventListener('click', (event) => {
+            if (!event.target.closest('[data-agent-log="context"]')) return;
+            this.openAgentContextLogModal();
         });
 
         document.getElementById('agent-settings-cancel-btn')?.addEventListener('click', () => {
