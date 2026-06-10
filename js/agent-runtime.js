@@ -26,11 +26,12 @@ const AgentRuntime = {
         const app = context.app;
         const contact = context.contact;
         const userText = context.userText;
+        const userMessage = context.userMessage || null;
 
         // ★ TODO 管理暂时仍由 App 串 API 和前端写入；Runtime 只负责统一入口。
         if (!app || typeof app.runAgentTodoManager !== 'function') return null;
         if (typeof AgentTodoManager === 'undefined') return null;
-        return app.runAgentTodoManager(contact, userText);
+        return app.runAgentTodoManager(contact, userText, userMessage);
     }
 };
 // ★★★★★ Agent Runtime END：通用调度层 ★★★★★

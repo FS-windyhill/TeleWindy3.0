@@ -223,6 +223,8 @@ async function createJob(request, env) {
     status: "running",
     agent_status: agent?.todoManager ? "pending" : "disabled",
     agent_actions: [],
+    agent_prompt: "",
+    agent_error: "",
     createdAt: Date.now(),
     ttlSeconds,
     events: [createEvent]
@@ -379,6 +381,7 @@ async function runJob(jobId, body, env) {
 
     let imageDescription = null;
     let agentActions = [];
+    let agentPrompt = "";
     let agentStatus = body.agent?.todoManager ? "pending" : "disabled";
     let messagesForChat = body.messages;
     if (body.vision) {
@@ -398,6 +401,7 @@ async function runJob(jobId, body, env) {
       });
 
       const agentResult = await runTodoManagerAgent(body.agent.todoManager, env, jobId, body.ttlSeconds);
+      agentPrompt = agentResult.prompt || "";
       if (agentResult.prompt) {
         messagesForChat = injectVolatilePrompt(
           messagesForChat,
@@ -412,6 +416,8 @@ async function runJob(jobId, body, env) {
       await buildJobWithEvent(jobId, env, {
         agent_status: agentStatus,
         agent_actions: agentActions,
+        agent_prompt: agentPrompt,
+        agent_error: agentResult.failed ? sanitizeLogText(agentResult.error || "") : "",
         agent_finishedAt: Date.now()
       }, agentResult.failed ? "agent_todo_stage_failed" : "agent_todo_stage_done", {
         intent: agentResult.intent || "",
@@ -479,6 +485,7 @@ async function runJob(jobId, body, env) {
       image_description: imageDescription,
       agent_status: agentStatus,
       agent_actions: agentActions,
+      agent_prompt: agentPrompt,
       usage: data.usage || null,
       finishedAt: Date.now()
     }, "job_run_done", {
@@ -615,6 +622,41 @@ async function runTodoManagerAgent(agent, env, jobId, ttlSeconds) {
       todoCount: agent.todoSnapshot.length
     }, ttlSeconds);
 
+    // ★★★★★ 后台 Agent：总路由先判定 START ★★★★★
+    // Worker 路径也先只发送轻量路由 prompt；NONE 时直接跳过 TODO executor。
+    const routerResponse = await fetchWithTimeout(upstream.provider.url, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${upstream.provider.apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model,
+        messages: buildAgentRouterMessages(agent),
+        ...(agent.requestBodyExtra || {}),
+        temperature: 0,
+        max_tokens: Math.min(agent.maxTokens || 1200, 180),
+        stream: false
+      })
+    }, UPSTREAM_TIMEOUT_MS, "agent_router_upstream");
+
+    if (!routerResponse.ok) throw new Error(`agent_router_upstream_${routerResponse.status}`);
+
+    const routerData = await routerResponse.json();
+    const rawRouteText = extractAssistantContent(routerData);
+    const agentRoute = parseAgentRouterResult(rawRouteText);
+    if (agentRoute.intent === "NONE" || agentRoute.intent === "ASK_CONFIRMATION") {
+      await appendJobEvent(jobId, env, "agent_todo_done", {
+        intent: agentRoute.intent,
+        actionCount: 0
+      }, ttlSeconds);
+      return { prompt: "", actions: [], intent: agentRoute.intent };
+    }
+    if (agentRoute.agent !== "todo_manager") throw new Error(`agent_unknown_route:${agentRoute.agent || "empty"}`);
+    // ★★★★★ 后台 Agent：总路由先判定 END ★★★★★
+
+    // ★★★★★ 后台 Agent：TODO 专用执行 START ★★★★★
+    // 命中 TODO 后才发送 TODO 详细规则和 TODO 快照，保持多 Agent 扩展时的成本可控。
     const response = await fetchWithTimeout(upstream.provider.url, {
       method: "POST",
       headers: {
@@ -638,6 +680,7 @@ async function runTodoManagerAgent(agent, env, jobId, ttlSeconds) {
     const routerResult = parseTodoAgentResult(rawText);
     const execution = executeTodoAgentResult(routerResult, agent.todoSnapshot);
     execution.intent = routerResult.intent || "";
+    // ★★★★★ 后台 Agent：TODO 专用执行 END ★★★★★
 
     await appendJobEvent(jobId, env, "agent_todo_done", {
       intent: routerResult.intent,
@@ -655,6 +698,68 @@ async function runTodoManagerAgent(agent, env, jobId, ttlSeconds) {
     }, ttlSeconds);
     return { prompt: "", actions: [], failed: true, error: errorMessage };
   }
+}
+
+function buildAgentRouterMessages(agent) {
+  const systemPrompt = [
+    "你是 TeleWindy 的 Agent 总路由，只判断用户这句话是否需要调用某个 Agent。",
+    "你只做选择，不执行任务，不解析任务字段，不输出 Markdown，不解释，只输出 JSON。",
+    "",
+    "intent 只能选择：NONE、USE_AGENT、ASK_CONFIRMATION。",
+    "",
+    "可用 Agent：",
+    "- todo_manager：用户明确要求记录、提醒、安排 TODO；或明确表示某个 TODO 完成、延期、修改、取消、不需要、删除。",
+    "",
+    "规则：",
+    "- 普通聊天、情绪表达、角色互动、闲聊陪伴，选 NONE。",
+    "- 只有用户明确要求操作某个能力时，才选 USE_AGENT。",
+    "- 用户只是提到一件事，但没有要求记录/提醒/安排，不要调用 TODO。",
+    "- 如果看起来需要 Agent，但无法判断应该调用哪个 Agent，选 ASK_CONFIRMATION。",
+    "- 不要编造用户没有说的任务、日期、目标或 Agent。",
+    "",
+    "JSON 格式：",
+    "{\"intent\":\"USE_AGENT\",\"agent\":\"todo_manager\",\"confirmation\":{\"message\":\"\"}}",
+    "",
+    "字段说明：",
+    "- NONE 时 agent 留空字符串。",
+    "- USE_AGENT 时 agent 必须是可用 Agent 之一。",
+    "- ASK_CONFIRMATION 时 confirmation.message 写给前端提示用的一句话。"
+  ].join("\n");
+
+  // ★★★★★ 后台 Agent：总路由 prompt START ★★★★★
+  // 固定路由表放 system，本轮角色和用户原话放 user；这里不携带 TODO 快照。
+  const userPrompt = [
+    "【当前角色】",
+    agent.contactName || "未命名角色",
+    "",
+    "【用户当前消息】",
+    agent.userText || ""
+  ].join("\n");
+  // ★★★★★ 后台 Agent：总路由 prompt END ★★★★★
+
+  return [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt }
+  ];
+}
+
+function parseAgentRouterResult(rawText) {
+  const data = extractJsonObject(rawText);
+  const intent = String(data.intent || "").trim().toUpperCase();
+  if (!["NONE", "USE_AGENT", "ASK_CONFIRMATION"].includes(intent)) {
+    throw new Error(`agent_router_unknown_intent:${intent || "empty"}`);
+  }
+
+  const selectedAgent = String(data.agent || "").trim();
+  if (intent === "USE_AGENT" && selectedAgent !== "todo_manager") {
+    throw new Error(`agent_router_unknown_agent:${selectedAgent || "empty"}`);
+  }
+
+  return {
+    intent,
+    agent: intent === "USE_AGENT" ? selectedAgent : "",
+    confirmation: data.confirmation && typeof data.confirmation === "object" ? data.confirmation : {}
+  };
 }
 
 function buildTodoAgentMessages(agent) {

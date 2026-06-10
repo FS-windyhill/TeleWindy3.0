@@ -6,7 +6,7 @@
 // 函数目录：
 //   - getTodayKey(now): 获取今天日期 key
 //   - buildTodoSnapshot(now): 给 worker model 的精简 TODO 列表
-//   - buildRouterMessages(contact, userText, now): 生成 TODO 管理请求 messages
+//   - buildExecutorMessages(contact, userText, now): 生成 TODO 管理执行请求 messages
 //   - extractJson(rawText): 从 worker model 返回里抽出 JSON
 //   - parseRouterResult(rawText): 解析并规范化 intent
 //   - findTodoCandidates(routerResult): 按 worker 给出的线索匹配 TODO
@@ -72,11 +72,11 @@ const AgentTodoManager = {
             }));
     },
 
-    buildRouterMessages(contact, userText, now = new Date()) {
+    buildExecutorMessages(contact, userText, now = new Date()) {
         const todayKey = this.getTodayKey(now);
         const tomorrowKey = this.addDays(todayKey, 1);
         const systemPrompt = [
-            '你是 TeleWindy 的 TODO 管理 Agent，只判断用户这句话是否需要操作 TODO。',
+            '你是 TeleWindy 的 TODO 管理 Agent，负责把用户这句话解析成 TODO 操作包。',
             '你只能从 intent 枚举中选择：NONE、CREATE_TODO、UPDATE_TODO、ASK_CONFIRMATION。',
             '不要打分，不要输出 Markdown，不要解释，只输出 JSON。',
             '',
@@ -118,6 +118,12 @@ const AgentTodoManager = {
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt }
         ];
+    },
+
+    buildRouterMessages(contact, userText, now = new Date()) {
+        // ★ 兼容旧调用名：现在真正的“总路由”在 AgentSkillRouter。
+        // TODO Manager 这里只保留专用执行 prompt，避免以后 Agent 多了之后继续膨胀。
+        return this.buildExecutorMessages(contact, userText, now);
     },
 
     extractJson(rawText) {

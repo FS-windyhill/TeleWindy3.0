@@ -1132,6 +1132,9 @@ const API = {
                 result: (result.result || '').trim(),
                 image_description: result.image_description || null,
                 agent_actions: Array.isArray(result.agent_actions) ? result.agent_actions : [],
+                agent_prompt: result.agent_prompt || '',
+                agent_status: result.agent_status || '',
+                agent_error: result.agent_error || '',
                 userMessageIndex: settings.ASYNC_BACKEND_USER_MESSAGE_INDEX ?? null
             };
             return (result.result || '').trim();
@@ -5525,10 +5528,81 @@ const App = {
         return settings;
     },
 
-    buildAsyncBackendAgentPayload(contact, userText, requestSettings) {
+    buildAgentSkillRouterRequestSettings(baseSettings) {
+        // ★★★★★ Agent：总路由轻量模型参数 START ★★★★★
+        // 总路由只选 Agent，不解析 TODO 字段；这里把输出预算压小，减少每轮闲聊的副模型费用。
+        let customRequestBodyJson = baseSettings?.CUSTOM_REQUEST_BODY_JSON || '';
+        try {
+            const extra = customRequestBodyJson.trim() ? JSON.parse(customRequestBodyJson) : null;
+            if (extra && typeof extra === 'object' && !Array.isArray(extra)) {
+                delete extra.max_tokens;
+                delete extra.maxOutputTokens;
+                if (extra.generationConfig && typeof extra.generationConfig === 'object') {
+                    delete extra.generationConfig.maxOutputTokens;
+                }
+                customRequestBodyJson = JSON.stringify(extra);
+            }
+        } catch (error) {
+            // ★ 自定义请求体坏了就交给 API.chat 原本的报错流程；这里只负责移除路由预算覆盖项。
+        }
+        const routerSettings = {
+            ...baseSettings,
+            TEMPERATURE: 0,
+            MAX_TOKENS: Math.min(Number(baseSettings?.MAX_TOKENS) || 1200, 180),
+            CUSTOM_REQUEST_BODY_JSON: customRequestBodyJson
+        };
+        // ★★★★★ Agent：总路由轻量模型参数 END ★★★★★
+        return routerSettings;
+    },
+
+    normalizeAgentExecutions(userMessage) {
+        // ★★★★★ Agent：消息级执行状态兼容 START ★★★★★
+        // 旧历史记录没有 agentExecutions 字段；读到时按空状态处理，不需要批量迁移 IndexedDB。
+        if (!userMessage || typeof userMessage !== 'object') return {};
+        if (!userMessage.agentExecutions || typeof userMessage.agentExecutions !== 'object' || Array.isArray(userMessage.agentExecutions)) {
+            userMessage.agentExecutions = {};
+        }
+        // ★★★★★ Agent：消息级执行状态兼容 END ★★★★★
+        return userMessage.agentExecutions;
+    },
+
+    getAgentExecutionState(userMessage, agentName) {
+        const executions = this.normalizeAgentExecutions(userMessage);
+        const state = executions[agentName];
+        return state && typeof state === 'object' && !Array.isArray(state) ? state : null;
+    },
+
+    buildAppliedAgentRuntimeResult(userMessage, agentName) {
+        const state = this.getAgentExecutionState(userMessage, agentName);
+        if (state?.status !== 'applied') return null;
+        const prompt = String(state.resultPrompt || '').trim();
+        return prompt ? { results: [{ prompt, reused: true }], prompts: [prompt] } : null;
+    },
+
+    async setAgentExecutionState(contact, userMessage, agentName, patch = {}) {
+        if (!userMessage || typeof userMessage !== 'object') return null;
+        const executions = this.normalizeAgentExecutions(userMessage);
+        const current = executions[agentName] && typeof executions[agentName] === 'object'
+            ? executions[agentName]
+            : {};
+        executions[agentName] = {
+            ...current,
+            ...patch,
+            updatedAt: Date.now()
+        };
+        if (contact && Array.isArray(contact.history)) {
+            await Storage.saveContacts();
+        }
+        return executions[agentName];
+    },
+
+    buildAsyncBackendAgentPayload(contact, userText, requestSettings, userMessage = null) {
         if (STATE.settings.AGENT_SKILL_ROUTER_ENABLED !== true) return null;
         if (typeof AgentTodoManager === 'undefined') return null;
         if (!userText) return null;
+
+        const existingState = this.getAgentExecutionState(userMessage, 'todo_manager');
+        if (existingState?.status === 'applied') return null;
 
         const agentSettings = this.buildAgentTodoManagerRequestSettings();
         const authMode = requestSettings.ASYNC_BACKEND_KEY_MODE || 'client_key';
@@ -5564,10 +5638,20 @@ const App = {
         }
     },
 
-    async runAgentTodoManager(contact, userText) {
+    async runAgentTodoManager(contact, userText, userMessage = null) {
         if (STATE.settings.AGENT_SKILL_ROUTER_ENABLED !== true) return null;
         if (typeof AgentTodoManager === 'undefined') return null;
         if (!userText) return null;
+
+        const existingState = this.getAgentExecutionState(userMessage, 'todo_manager');
+        if (existingState?.status === 'applied') {
+            // ★★★★★ Agent：Reroll 防重复执行 START ★★★★★
+            // 同一条用户消息已经成功落地过 TODO 操作时，重新生成只复用摘要给主模型，不再重复改 TODO。
+            const resultPrompt = String(existingState.resultPrompt || '').trim();
+            console.log('[Agent][TODO管理] 已执行过，本轮 Reroll 复用执行摘要。', existingState);
+            // ★★★★★ Agent：Reroll 防重复执行 END ★★★★★
+            return resultPrompt ? { prompt: resultPrompt, reused: true } : null;
+        }
 
         const settings = this.buildAgentTodoManagerRequestSettings();
         if (!settings.API_URL || !settings.API_KEY || !settings.MODEL) {
@@ -5584,17 +5668,91 @@ const App = {
         });
 
         try {
-            const messages = AgentTodoManager.buildRouterMessages(contact, userText, new Date());
-            console.log('[Agent][TODO管理] Router messages:', messages);
+            await this.setAgentExecutionState(contact, userMessage, 'todo_manager', {
+                status: 'pending',
+                error: '',
+                resultPrompt: ''
+            });
+
+            // ★★★★★ Agent：总路由先判定 START ★★★★★
+            // 先用短 prompt 只判断是否需要 Agent；闲聊直接放过，不再携带 TODO 专用长 prompt。
+            if (typeof AgentSkillRouter === 'undefined') {
+                throw new Error('AgentSkillRouter 未加载');
+            }
+            const routerSettings = this.buildAgentSkillRouterRequestSettings(settings);
+            const routerMessages = AgentSkillRouter.buildRouterMessages(contact, userText);
+            console.log('[Agent][总路由] Router messages:', routerMessages);
+            const rawRouteText = await API.chat(routerMessages, routerSettings);
+            console.log('[Agent][总路由] 原始返回:', rawRouteText);
+            const agentRoute = AgentSkillRouter.parseRouterResult(rawRouteText);
+            console.log('[Agent][总路由] 解析结果:', agentRoute);
+
+            if (agentRoute.intent === 'NONE') {
+                console.log('[Agent][总路由] 本轮不需要 Agent。');
+                await this.setAgentExecutionState(contact, userMessage, 'todo_manager', {
+                    status: 'skipped',
+                    reason: 'router_none'
+                });
+                return null;
+            }
+
+            if (agentRoute.intent === 'ASK_CONFIRMATION') {
+                const message = AgentTodoManager.cleanText(
+                    agentRoute.confirmation?.message || '这个操作需要你再说清楚一点，我先不自动执行。',
+                    140
+                );
+                this.showTodoTopNotice(`${contact?.name || 'Agent'} 没有执行：${message}`, { type: 'pending' });
+                await this.setAgentExecutionState(contact, userMessage, 'todo_manager', {
+                    status: 'skipped',
+                    reason: 'router_ask_confirmation',
+                    message
+                });
+                return null;
+            }
+
+            if (agentRoute.agent !== 'todo_manager') {
+                console.log('[Agent][总路由] 未启用的 Agent：', agentRoute.agent);
+                await this.setAgentExecutionState(contact, userMessage, 'todo_manager', {
+                    status: 'skipped',
+                    reason: 'unknown_agent',
+                    agent: agentRoute.agent || ''
+                });
+                return null;
+            }
+            // ★★★★★ Agent：总路由先判定 END ★★★★★
+
+            // ★★★★★ Agent：TODO 专用执行 START ★★★★★
+            // 命中 TODO 后才发送 TODO 详细规则和现有 TODO 快照，保持后续扩展 Agent 时的成本可控。
+            const messages = AgentTodoManager.buildExecutorMessages(contact, userText, new Date());
+            console.log('[Agent][TODO管理] Executor messages:', messages);
             const rawText = await API.chat(messages, settings);
             console.log('[Agent][TODO管理] 原始返回:', rawText);
             const routerResult = AgentTodoManager.parseRouterResult(rawText);
             console.log('[Agent][TODO管理] 解析结果:', routerResult);
             const result = await this.executeAgentTodoSkill(routerResult, contact);
+            // ★★★★★ Agent：TODO 专用执行 END ★★★★★
+
+            const resultPrompt = String(result?.prompt || '').trim();
+            await this.setAgentExecutionState(contact, userMessage, 'todo_manager', resultPrompt
+                ? {
+                    status: 'applied',
+                    reason: 'skill_applied',
+                    resultPrompt
+                }
+                : {
+                    status: 'skipped',
+                    reason: routerResult.intent === 'NONE' ? 'todo_none' : 'skill_noop',
+                    resultPrompt: ''
+                });
             console.log('[Agent][TODO管理] 执行结果:', result || '无操作');
             return result;
         } catch (error) {
             console.warn('[Agent] TODO 管理 failed:', error);
+            await this.setAgentExecutionState(contact, userMessage, 'todo_manager', {
+                status: 'failed',
+                error: error?.message || String(error),
+                resultPrompt: ''
+            });
             this.showTodoTopNotice('TODO 管理没有执行：模型返回格式不正确。', { type: 'failure' });
             return {
                 prompt: [
@@ -5794,9 +5952,25 @@ const App = {
         localStorage.setItem(this.appliedAgentActionStorageKey(), JSON.stringify(ids.slice(-300)));
     },
 
-    async applyAsyncBackendAgentStage(job, contact = null) {
-        if (!job || job.agent_status !== 'done') return false;
-        if (!Array.isArray(job.agent_actions) || !job.agent_actions.length) return false;
+    async applyAsyncBackendAgentStage(job, contact = null, userMessage = null) {
+        if (!job) return false;
+        if (job.agent_status === 'failed') {
+            await this.setAgentExecutionState(contact, userMessage, 'todo_manager', {
+                status: 'failed',
+                error: String(job.agent_error || job.error || 'async_agent_failed'),
+                resultPrompt: ''
+            });
+            return false;
+        }
+        if (job.agent_status !== 'done') return false;
+        if (!Array.isArray(job.agent_actions) || !job.agent_actions.length) {
+            await this.setAgentExecutionState(contact, userMessage, 'todo_manager', {
+                status: 'skipped',
+                reason: 'async_no_actions',
+                resultPrompt: String(job.agent_prompt || '').trim()
+            });
+            return false;
+        }
 
         // ★ 后台 Agent 先完成、主模型后完成：
         // 轮询 running job 时就可以把 TODO 操作落到本地；最终 done 再看到同一批 action，
@@ -5805,7 +5979,19 @@ const App = {
             jobId: API.asyncJobLogId(job.jobId || ''),
             actionCount: job.agent_actions.length
         });
-        return await this.applyAsyncAgentActions(job.agent_actions, contact);
+        const changed = await this.applyAsyncAgentActions(job.agent_actions, contact);
+        await this.setAgentExecutionState(contact, userMessage, 'todo_manager', changed
+            ? {
+                status: 'applied',
+                reason: 'async_actions_applied',
+                resultPrompt: String(job.agent_prompt || '').trim()
+            }
+            : {
+                status: 'skipped',
+                reason: 'async_actions_noop',
+                resultPrompt: String(job.agent_prompt || '').trim()
+            });
+        return changed;
     },
 
     async applyAsyncAgentActions(actions, contact = null) {
@@ -7293,6 +7479,7 @@ const App = {
         // ============================================================
         let userText = UI.els.input.value.trim();
         const timestamp = formatTimestamp();
+        let agentUserMessage = null;
         
         // ★ 判断是否有待发送的图片 (只有非 Reroll 时才处理新图)
         const hasPendingImage = (STATE.pendingImage && !isReroll);
@@ -7326,6 +7513,7 @@ const App = {
         if (isReroll) {
             const lastUserMsg = [...contact.history].reverse().find(m => m.role === 'user');
             if (!lastUserMsg) return;
+            agentUserMessage = lastUserMsg;
             // Reroll 复用历史记录里的文本
             userText = lastUserMsg.content;
             
@@ -7468,6 +7656,7 @@ const App = {
             }
             
             contact.history.push(newUserMsg);
+            agentUserMessage = newUserMsg;
         }
 
         // 保存一次（包含刚刚优化的图片数据）
@@ -7476,10 +7665,10 @@ const App = {
 
         // ★★★★★ Agent：TODO 管理前置执行 START ★★★★★
         // 只要本轮有用户文字，就让 worker model 判断 TODO skill；图片内容本身先不参与路由。
-        // Reroll 不触发，避免重新生成时重复创建/修改 TODO。
-        const agentRuntimeResult = (!usingAsyncBackend && !isReroll && userText && typeof AgentRuntime !== 'undefined')
-            ? await AgentRuntime.runBeforeMainModel({ app: this, contact, userText })
-            : null;
+        // Reroll 也会进入这里；是否重复执行由每条用户消息自己的 agentExecutions 状态控制。
+        const agentRuntimeResult = (!usingAsyncBackend && userText && typeof AgentRuntime !== 'undefined')
+            ? await AgentRuntime.runBeforeMainModel({ app: this, contact, userText, userMessage: agentUserMessage })
+            : this.buildAppliedAgentRuntimeResult(agentUserMessage, 'todo_manager');
         // ★★★★★ Agent：TODO 管理前置执行 END ★★★★★
 
         // ============================================================
@@ -7743,10 +7932,17 @@ const App = {
             ? messagesToSend.length - 1
             : -1;
         requestSettings.ASYNC_BACKEND_AGENT = usingAsyncBackend
-            ? this.buildAsyncBackendAgentPayload(contact, userText, requestSettings)
+            ? this.buildAsyncBackendAgentPayload(contact, userText, requestSettings, agentUserMessage)
             : null;
+        if (requestSettings.ASYNC_BACKEND_AGENT?.todo_manager) {
+            await this.setAgentExecutionState(contact, agentUserMessage, 'todo_manager', {
+                status: 'pending',
+                error: '',
+                resultPrompt: ''
+            });
+        }
         requestSettings.ASYNC_BACKEND_ON_JOB_UPDATE = usingAsyncBackend
-            ? async (job) => this.applyAsyncBackendAgentStage(job, contact)
+            ? async (job) => this.applyAsyncBackendAgentStage(job, contact, agentUserMessage)
             : null;
         requestSettings.REQUEST_CACHE_DEBUG_LOG = this.buildRequestCacheDebugLog({
             messages: messagesToSend,
@@ -7771,6 +7967,9 @@ const App = {
             const asyncJobId = usingAsyncBackend ? API.lastAsyncBackendResult?.jobId : null;
             const asyncImageDescription = usingAsyncBackend ? API.lastAsyncBackendResult?.image_description : null;
             const asyncAgentActions = usingAsyncBackend ? API.lastAsyncBackendResult?.agent_actions : null;
+            const asyncAgentPrompt = usingAsyncBackend ? API.lastAsyncBackendResult?.agent_prompt : '';
+            const asyncAgentStatus = usingAsyncBackend ? API.lastAsyncBackendResult?.agent_status : '';
+            const asyncAgentError = usingAsyncBackend ? API.lastAsyncBackendResult?.agent_error : '';
             const asyncUserMessageIndex = usingAsyncBackend ? API.lastAsyncBackendResult?.userMessageIndex : null;
 
             // ★ 后台识图回填：
@@ -7785,6 +7984,28 @@ const App = {
 
             if (Array.isArray(asyncAgentActions) && asyncAgentActions.length) {
                 await this.applyAsyncAgentActions(asyncAgentActions, contact);
+            }
+
+            if (usingAsyncBackend && requestSettings.ASYNC_BACKEND_AGENT?.todo_manager) {
+                if (asyncAgentStatus === 'failed') {
+                    await this.setAgentExecutionState(contact, agentUserMessage, 'todo_manager', {
+                        status: 'failed',
+                        error: asyncAgentError || 'async_agent_failed',
+                        resultPrompt: ''
+                    });
+                } else if (Array.isArray(asyncAgentActions) && asyncAgentActions.length) {
+                    await this.setAgentExecutionState(contact, agentUserMessage, 'todo_manager', {
+                        status: 'applied',
+                        reason: 'async_final_actions',
+                        resultPrompt: String(asyncAgentPrompt || '').trim()
+                    });
+                } else {
+                    await this.setAgentExecutionState(contact, agentUserMessage, 'todo_manager', {
+                        status: 'skipped',
+                        reason: 'async_final_no_actions',
+                        resultPrompt: String(asyncAgentPrompt || '').trim()
+                    });
+                }
             }
 
             const alreadySavedByResume = asyncJobId
