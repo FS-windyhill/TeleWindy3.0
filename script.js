@@ -8714,9 +8714,15 @@ const App = {
         // ★★★★★ 世界书分层注入 START ★★★★★
         // 常驻世界书更像角色设定 / 固定背景，放在稳定区提高缓存命中；
         // 关键词触发世界书只和本轮输入相关，后面会放进“本轮背景资料”。
+        // 图片描述是给主模型看的辅助信息，不属于用户亲口说的话；
+        // 所以世界书扫描单独吃一份去掉图片描述的 history，避免图片内容误触发关键词。
+        const worldInfoScanHistory = recentHistory.map(m => ({
+            role: m.role,
+            content: (m.content || '').replace(/\n\n\[System Info: 对方发送了一张图片，图片内容描述:[\s\S]*$/g, '')
+        }));
         const worldInfoByType = (typeof WorldInfoEngine.scanByType === 'function')
-            ? WorldInfoEngine.scanByType(userText, recentHistory, contact.id, contact.name)
-            : { constant: null, triggered: WorldInfoEngine.scan(userText, recentHistory, contact.id, contact.name) };
+            ? WorldInfoEngine.scanByType(userText, worldInfoScanHistory, contact.id, contact.name)
+            : { constant: null, triggered: WorldInfoEngine.scan(userText, worldInfoScanHistory, contact.id, contact.name) };
         if (worldInfoByType.constant) {
             messagesToSend.push({ role: 'system', content: `=== 常驻世界知识/环境信息 ===\n${worldInfoByType.constant}` });
         }
