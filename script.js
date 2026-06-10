@@ -5837,22 +5837,153 @@ const App = {
     },
 
     normalizeAgentPostTodoSuggestions(postResult) {
-        const rawTodos = Array.isArray(postResult?.todos) ? postResult.todos : [];
+        const rawOperations = Array.isArray(postResult?.operations) && postResult.operations.length
+            ? postResult.operations
+            : (Array.isArray(postResult?.todos) ? postResult.todos.map(todo => ({ ...todo, action: 'create' })) : []);
         const seenKeys = new Set((STATE.todoPlans || [])
             .filter(item => item && item.text && item.dateKey)
             .map(item => this.buildTodoDuplicateKey(item.text, item.dateKey)));
 
-        return rawTodos.map((todo, index) => {
-            const text = AgentTodoManager.cleanText(todo.text || todo.title || '', 120);
-            const dateKey = AgentTodoManager.isDateKey(todo.dateKey) ? todo.dateKey : AgentTodoManager.getTodayKey();
-            const startTime = AgentTodoManager.isTimeValue(todo.startTime) ? todo.startTime : '';
-            const endTime = AgentTodoManager.isTimeValue(todo.endTime) ? todo.endTime : '';
+        return rawOperations.map((rawOperation, index) => {
+            const operation = AgentTodoManager.normalizeOperation(rawOperation);
+            if (!operation) return null;
+            if (operation.action === 'create') {
+                const text = AgentTodoManager.cleanText(operation.text || '', 120);
+                const dateKey = AgentTodoManager.isDateKey(operation.dateKey) ? operation.dateKey : AgentTodoManager.getTodayKey();
+                const startTime = AgentTodoManager.isTimeValue(operation.startTime) ? operation.startTime : '';
+                const endTime = AgentTodoManager.isTimeValue(operation.endTime) ? operation.endTime : '';
+                if (!text) return null;
+                const duplicateKey = this.buildTodoDuplicateKey(text, dateKey);
+                if (seenKeys.has(duplicateKey)) return null;
+                seenKeys.add(duplicateKey);
+                const item = {
+                    action: 'create',
+                    id: `todo_${Date.now()}_post_${index}_${Math.random().toString(36).slice(2, 8)}`,
+                    text,
+                    dateKey,
+                    done: false,
+                    cancelled: false,
+                    createdAt: Date.now()
+                };
+                if (startTime && endTime && startTime < endTime) {
+                    item.startTime = startTime;
+                    item.endTime = endTime;
+                }
+                return item;
+            }
+
+            const candidates = AgentTodoManager.findTodoCandidates(operation);
+            if (candidates.length !== 1) return null;
+            const target = candidates[0];
+            const patchInfo = this.buildTodoPatchFromOperation(operation);
+            if (!patchInfo || !Object.keys(patchInfo.patch).length) return null;
+            return {
+                ...operation,
+                targetTodoId: target.id,
+                targetText: target.text,
+                targetDateKey: target.dateKey || AgentTodoManager.getTodayKey(),
+                before: { ...target },
+                patch: patchInfo.patch,
+                actionText: patchInfo.actionText
+            };
+        }).filter(Boolean).slice(0, 5);
+    },
+
+    buildTodoPatchFromOperation(operation = {}) {
+        const action = AgentTodoManager.normalizeAction(operation.action);
+        const patch = {};
+        let actionText = '更新了 TODO';
+
+        if (action === 'complete') {
+            patch.done = true;
+            patch.cancelled = false;
+            actionText = '完成了 TODO';
+        } else if (action === 'cancel') {
+            patch.cancelled = true;
+            patch.done = false;
+            actionText = '取消了 TODO';
+        } else if (action === 'restore') {
+            patch.done = false;
+            patch.cancelled = false;
+            actionText = '恢复了 TODO';
+        }
+
+        const newText = AgentTodoManager.cleanText(operation.newText || '', 120);
+        if (newText) {
+            patch.text = newText;
+            if (actionText === '更新了 TODO') actionText = '改名了 TODO';
+        }
+
+        if (AgentTodoManager.isDateKey(operation.newDateKey)) {
+            patch.dateKey = operation.newDateKey;
+            if (actionText === '更新了 TODO') actionText = '调整了 TODO 日期';
+        }
+
+        if (AgentTodoManager.isTimeValue(operation.startTime) && AgentTodoManager.isTimeValue(operation.endTime) && operation.startTime < operation.endTime) {
+            patch.startTime = operation.startTime;
+            patch.endTime = operation.endTime;
+            if (actionText === '更新了 TODO') actionText = '调整了 TODO 时间';
+        }
+
+        return { patch, actionText };
+    },
+
+    getAgentTodoOperationVerb(operation = {}) {
+        const action = AgentTodoManager.normalizeAction(operation.action);
+        return {
+            create: '添加',
+            complete: '完成',
+            cancel: '取消',
+            restore: '恢复',
+            reschedule: '改期',
+            rename: '改名',
+            retime: '改时间'
+        }[action] || '更新';
+    },
+
+    buildAgentTodoOperationLabel(operation = {}) {
+        if (operation.action === 'create') {
+            return this.formatAgentPostTodoSuggestionLine(operation);
+        }
+        const before = operation.before || {};
+        const after = { ...before, ...(operation.patch || {}) };
+        if (operation.action === 'reschedule') {
+            return `${before.text || operation.targetText}：${before.dateKey || operation.targetDateKey || ''} -> ${after.dateKey || ''}`;
+        }
+        if (operation.action === 'retime') {
+            const oldTime = before.startTime && before.endTime ? `${before.startTime}-${before.endTime}` : '无时间';
+            const newTime = after.startTime && after.endTime ? `${after.startTime}-${after.endTime}` : '无时间';
+            return `${before.text || operation.targetText}：${oldTime} -> ${newTime}`;
+        }
+        if (operation.action === 'rename') {
+            return `${before.text || operation.targetText} -> ${after.text || ''}`;
+        }
+        return `${before.text || operation.targetText}：${before.dateKey || operation.targetDateKey || ''}`;
+    },
+
+    normalizeAgentTodoOperations(routerResult = {}) {
+        if (Array.isArray(routerResult.operations) && routerResult.operations.length) {
+            return routerResult.operations.map(item => AgentTodoManager.normalizeOperation(item)).filter(Boolean);
+        }
+        return AgentTodoManager.buildOperationsFromLegacy(routerResult);
+    },
+
+    normalizeAgentTodoCreateOperations(operations = []) {
+        const seenKeys = new Set((STATE.todoPlans || [])
+            .filter(item => item && item.text && item.dateKey)
+            .map(item => this.buildTodoDuplicateKey(item.text, item.dateKey)));
+
+        return operations.map((operation, index) => {
+            const text = AgentTodoManager.cleanText(operation.text || '', 120);
+            const dateKey = AgentTodoManager.isDateKey(operation.dateKey) ? operation.dateKey : AgentTodoManager.getTodayKey();
+            const startTime = AgentTodoManager.isTimeValue(operation.startTime) ? operation.startTime : '';
+            const endTime = AgentTodoManager.isTimeValue(operation.endTime) ? operation.endTime : '';
             if (!text) return null;
             const duplicateKey = this.buildTodoDuplicateKey(text, dateKey);
             if (seenKeys.has(duplicateKey)) return null;
             seenKeys.add(duplicateKey);
             const item = {
-                id: `todo_${Date.now()}_post_${index}_${Math.random().toString(36).slice(2, 8)}`,
+                id: `todo_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 8)}`,
                 text,
                 dateKey,
                 done: false,
@@ -5864,7 +5995,7 @@ const App = {
                 item.endTime = endTime;
             }
             return item;
-        }).filter(Boolean).slice(0, 5);
+        }).filter(Boolean).slice(0, 10);
     },
 
     buildAsyncBackendAgentPayload(contact, userText, requestSettings, userMessage = null) {
@@ -6173,7 +6304,7 @@ const App = {
             });
 
             // ★★★★★ Post Agent：回复后 TODO 建议 START ★★★★★
-            // post-agent 只看角色刚刚的回复，只产出待用户确认的新增 TODO 建议。
+            // post-agent 只产出待用户确认的 TODO 管理建议；真正写入仍然由确认条控制。
             const messages = AgentTodoManager.buildPostSuggestionMessages(contact, assistantText, new Date());
             console.log('[PostAgent][TODO建议] Messages:', messages);
             const rawText = await API.chat(messages, {
@@ -6240,16 +6371,18 @@ const App = {
     },
 
     showAgentPostTodoSuggestionNotice(contact, assistantMessage, suggestions = []) {
-        const validSuggestions = Array.isArray(suggestions) ? suggestions.filter(item => item && item.text) : [];
+        const validSuggestions = Array.isArray(suggestions)
+            ? suggestions.filter(item => item && (item.text || item.targetTodoId || item.targetText))
+            : [];
         if (!validSuggestions.length) return null;
 
         const roleName = contact?.name || '当前角色';
         const title = validSuggestions.length === 1
-            ? `${roleName} 建议添加 TODO：`
-            : `${roleName} 建议添加 ${validSuggestions.length} 项 TODO：`;
+            ? `${roleName} 建议管理 TODO：`
+            : `${roleName} 建议管理 ${validSuggestions.length} 项 TODO：`;
 
         // ★★★★★ Post Agent：持久确认条 START ★★★★★
-        // 角色回复只能提出建议；真正写入 TODO 必须等用户点“添加”。
+        // 角色回复只能提出建议；真正管理 TODO 必须等用户点“执行”。
         let checkboxList = null;
         const getSelectedSuggestions = () => {
             if (!checkboxList) return validSuggestions;
@@ -6276,9 +6409,11 @@ const App = {
                 validSuggestions.forEach((item, index) => {
                     const row = document.createElement('label');
                     row.className = 'agent-suggestion-option desktop-switch-cell';
+                    const verb = this.getAgentTodoOperationVerb(item);
+                    const label = this.buildAgentTodoOperationLabel(item);
                     row.innerHTML = `
                         <input type="checkbox" data-index="${index}" checked>
-                        <span>${this.escapeHtml(this.formatAgentPostTodoSuggestionLine(item))}</span>
+                        <span>${this.escapeHtml(`${verb} ${label}`)}</span>
                     `;
                     checkboxList.appendChild(row);
                 });
@@ -6287,13 +6422,13 @@ const App = {
             },
             actions: [
                 {
-                    label: '添加选中',
+                    label: '执行选中',
                     onAction: async () => {
                         await this.applyAgentPostTodoSuggestions(contact, assistantMessage, getSelectedSuggestions());
                     }
                 },
                 {
-                    label: validSuggestions.length === 1 ? '添加' : '全部添加',
+                    label: validSuggestions.length === 1 ? '执行' : '全部执行',
                     onAction: async () => {
                         await this.applyAgentPostTodoSuggestions(contact, assistantMessage, validSuggestions);
                     }
@@ -6325,72 +6460,93 @@ const App = {
                 suggestions: this.getAgentExecutionState(assistantMessage, 'todo_manager_post')?.suggestions || [],
                 source: 'frontend'
             });
-            this.showTopNotice('还没有选中要添加的 TODO。', { type: 'pending' });
+            this.showTopNotice('还没有选中要执行的 TODO 建议。', { type: 'pending' });
             return null;
         }
 
         const seenKeys = new Set((STATE.todoPlans || [])
             .filter(item => item && item.text && item.dateKey)
             .map(item => this.buildTodoDuplicateKey(item.text, item.dateKey)));
-        const items = suggestions.filter(item => {
-            if (!item || !item.text || !item.dateKey) return false;
-            const key = this.buildTodoDuplicateKey(item.text, item.dateKey);
-            if (seenKeys.has(key)) return false;
-            seenKeys.add(key);
-            return true;
-        }).map((item, index) => ({
-            ...item,
-            id: item.id || `todo_${Date.now()}_post_apply_${index}_${Math.random().toString(36).slice(2, 8)}`,
-            done: false,
-            cancelled: false,
-            createdAt: item.createdAt || Date.now()
-        }));
+        const applied = [];
+        const snapshots = [];
 
-        if (!items.length) {
-            console.log('[PostAgent][TODO建议] 没有可添加项，可能已重复:', suggestions);
+        for (const suggestion of suggestions) {
+            if (!suggestion) continue;
+            if (suggestion.action === 'create') {
+                if (!suggestion.text || !suggestion.dateKey) continue;
+                const key = this.buildTodoDuplicateKey(suggestion.text, suggestion.dateKey);
+                if (seenKeys.has(key)) continue;
+                seenKeys.add(key);
+                const item = {
+                    ...suggestion,
+                    id: suggestion.id || `todo_${Date.now()}_post_apply_${applied.length}_${Math.random().toString(36).slice(2, 8)}`,
+                    done: false,
+                    cancelled: false,
+                    createdAt: suggestion.createdAt || Date.now()
+                };
+                delete item.action;
+                STATE.todoPlans.push(item);
+                applied.push({ ...suggestion, appliedTodoId: item.id, text: item.text });
+                continue;
+            }
+
+            const item = STATE.todoPlans.find(todo => todo.id === suggestion.targetTodoId);
+            if (!item || !suggestion.patch || !Object.keys(suggestion.patch).length) continue;
+            snapshots.push({ ...item });
+            Object.assign(item, suggestion.patch, { updatedAt: Date.now() });
+            applied.push({ ...suggestion, text: item.text });
+        }
+
+        if (!applied.length) {
+            console.log('[PostAgent][TODO建议] 没有可执行项，可能已重复或目标已变化:', suggestions);
             await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
                 status: 'skipped',
-                reason: 'user_apply_noop_duplicate',
+                reason: 'user_apply_noop',
                 suggestions,
                 source: 'frontend'
             });
-            this.showTodoTopNotice(`${contact?.name || '当前角色'} 没有添加：同一天已有相同 TODO`, { type: 'pending' });
+            this.showTodoTopNotice(`${contact?.name || '当前角色'} 没有执行：TODO 可能已重复或目标已变化`, { type: 'pending' });
             return null;
         }
 
-        STATE.todoPlans.push(...items);
         await Storage.saveTodoPlans();
         this.renderTodoPlans();
         this.renderDesktop();
         await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
             status: 'applied',
             reason: 'user_confirmed',
-            suggestions: items,
+            suggestions: applied,
             source: 'frontend'
         });
-        console.log('[PostAgent][TODO建议] 用户确认添加:', items);
+        console.log('[PostAgent][TODO建议] 用户确认执行:', applied);
 
-        const noticeText = items.length === 1
-            ? `添加了 TODO：${items[0].text}`
-            : `添加了 ${items.length} 个 TODO`;
+        const noticeText = applied.length === 1
+            ? `${this.getAgentTodoOperationVerb(applied[0])}了 TODO：${applied[0].text || applied[0].targetText}`
+            : `执行了 ${applied.length} 项 TODO 建议`;
         this.showTodoTopNotice(`${contact?.name || '当前角色'} ${noticeText}`, {
             actionLabel: '撤销',
             onAction: async () => {
-                const ids = new Set(items.map(item => item.id));
-                STATE.todoPlans = STATE.todoPlans.filter(todoItem => !ids.has(todoItem.id));
+                const createIds = new Set(applied.filter(item => item.action === 'create').map(item => item.appliedTodoId));
+                STATE.todoPlans = STATE.todoPlans.filter(todoItem => !createIds.has(todoItem.id));
+                snapshots.forEach(snapshot => {
+                    const current = STATE.todoPlans.find(todoItem => todoItem.id === snapshot.id);
+                    if (!current) return;
+                    Object.keys(current).forEach(key => delete current[key]);
+                    Object.assign(current, snapshot);
+                });
                 await Storage.saveTodoPlans();
                 this.renderTodoPlans();
                 this.renderDesktop();
                 await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
                     status: 'suggested',
                     reason: 'user_undo_apply',
-                    suggestions: items,
+                    suggestions: applied,
                     source: 'frontend'
                 });
-                console.log('[PostAgent][TODO建议] 已撤销确认添加:', items);
+                console.log('[PostAgent][TODO建议] 已撤销确认执行:', applied);
             }
         });
-        return items;
+        return applied;
     },
 
     async consumeWorkerPostAgentResult(contact, assistantMessage, postAgentResult = null) {
@@ -6413,6 +6569,7 @@ const App = {
         if (agent !== 'todo_manager_post') return true;
 
         const suggestions = this.normalizeAgentPostTodoSuggestions({
+            operations: Array.isArray(postAgentResult.operations) ? postAgentResult.operations : [],
             todos: Array.isArray(postAgentResult.suggestions) ? postAgentResult.suggestions : []
         });
         if (!suggestions.length) {
@@ -6439,6 +6596,12 @@ const App = {
 
     async executeAgentTodoSkill(routerResult, contact) {
         if (!routerResult || routerResult.intent === 'NONE') return null;
+        if (routerResult.intent === 'MANAGE_TODO') {
+            return this.executeAgentTodoOperations(this.normalizeAgentTodoOperations(routerResult), contact);
+        }
+        if (Array.isArray(routerResult.operations) && routerResult.operations.length) {
+            return this.executeAgentTodoOperations(this.normalizeAgentTodoOperations(routerResult), contact);
+        }
         if (routerResult.intent === 'CREATE_TODO') return this.createTodosFromAgent(routerResult, contact);
         if (routerResult.intent === 'UPDATE_TODO') return this.updateTodoFromAgent(routerResult, contact);
 
@@ -6452,6 +6615,87 @@ const App = {
         }
 
         return null;
+    },
+
+    async executeAgentTodoOperations(operations = [], contact) {
+        const validOperations = Array.isArray(operations) ? operations.filter(Boolean) : [];
+        if (!validOperations.length) return null;
+
+        const createOperations = validOperations.filter(item => item.action === 'create');
+        const updateOperations = validOperations.filter(item => item.action !== 'create');
+        const createdItems = this.normalizeAgentTodoCreateOperations(createOperations);
+        const updatedItems = [];
+        const oldSnapshots = [];
+
+        for (const operation of updateOperations) {
+            const candidates = AgentTodoManager.findTodoCandidates(operation);
+            if (candidates.length !== 1) continue;
+
+            const item = candidates[0];
+            const patchInfo = this.buildTodoPatchFromOperation(operation);
+            if (!patchInfo || !Object.keys(patchInfo.patch).length) continue;
+
+            oldSnapshots.push({ ...item });
+            Object.assign(item, patchInfo.patch, { updatedAt: Date.now() });
+            updatedItems.push({
+                item,
+                before: oldSnapshots[oldSnapshots.length - 1],
+                action: operation.action,
+                actionText: patchInfo.actionText
+            });
+        }
+
+        if (!createdItems.length && !updatedItems.length) {
+            this.showTodoTopNotice(`${contact?.name || 'TODO 管理'} 没有执行：没有可落地的 TODO 操作`, { type: 'pending' });
+            return null;
+        }
+
+        STATE.todoPlans.push(...createdItems);
+        await Storage.saveTodoPlans();
+        this.renderTodoPlans();
+        this.renderDesktop();
+
+        const noticeText = createdItems.length + updatedItems.length === 1
+            ? (createdItems[0]
+                ? `添加了 TODO：${createdItems[0].text}`
+                : `${updatedItems[0].actionText}：${updatedItems[0].item.text}`)
+            : `执行了 ${createdItems.length + updatedItems.length} 项 TODO 操作`;
+        this.showTodoTopNotice(`${contact?.name || 'TODO 管理'} ${noticeText}`, {
+            actionLabel: '撤销',
+            onAction: async () => {
+                const createdIds = new Set(createdItems.map(item => item.id));
+                STATE.todoPlans = STATE.todoPlans.filter(todoItem => !createdIds.has(todoItem.id));
+                oldSnapshots.forEach(snapshot => {
+                    const current = STATE.todoPlans.find(todoItem => todoItem.id === snapshot.id);
+                    if (!current) return;
+                    Object.keys(current).forEach(key => delete current[key]);
+                    Object.assign(current, snapshot);
+                });
+                await Storage.saveTodoPlans();
+                this.renderTodoPlans();
+                this.renderDesktop();
+                console.log('[Agent][TODO管理] 已撤销统一操作:', { createdItems, oldSnapshots });
+            }
+        });
+
+        const createdLines = createdItems.map(item => {
+            const timeText = item.startTime && item.endTime ? `，时间 ${item.startTime}-${item.endTime}` : '';
+            return `- 添加：${item.text}：${item.dateKey}${timeText}`;
+        });
+        const updatedLines = updatedItems.map(entry => {
+            const after = AgentTodoManager.formatTodoLabel(entry.item);
+            const statusText = entry.item.done ? '，状态为已完成' : entry.item.cancelled ? '，状态为已取消' : '';
+            return `- ${this.getAgentTodoOperationVerb(entry)}：${after}${statusText}`;
+        });
+
+        return {
+            prompt: [
+                `你已经为用户执行了 ${createdItems.length + updatedItems.length} 项 TODO 操作。`,
+                ...createdLines,
+                ...updatedLines,
+                '请自然回应，不要提到系统、工具或 JSON。'
+            ].join('\n')
+        };
     },
 
     normalizeAgentTodoCreates(routerResult) {

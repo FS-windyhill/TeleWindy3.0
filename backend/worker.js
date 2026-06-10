@@ -767,24 +767,29 @@ function buildTodoAgentMessages(agent) {
   const tomorrowKey = addDays(todayKey, 1);
   const systemPrompt = [
     "你是 TeleWindy 的 TODO 管理 Agent，只判断用户这句话是否需要操作 TODO。",
-    "你只能从 intent 枚举中选择：NONE、CREATE_TODO、UPDATE_TODO、ASK_CONFIRMATION。",
+    "你只能从 intent 枚举中选择：NONE、MANAGE_TODO、ASK_CONFIRMATION。",
     "不要打分，不要输出 Markdown，不要解释，只输出 JSON。",
+    "",
+    "operation.action 只能选择：create、complete、cancel、restore、reschedule、rename、retime。",
     "",
     "规则：",
     "- 普通聊天、情绪表达、角色互动，选 NONE。",
-    "- 只有用户明确要求记录、提醒、安排任务时，才选 CREATE_TODO。",
-    "- 只有用户明确表示某个 TODO 完成、延期、修改、取消、不需要、删除时，才选 UPDATE_TODO。",
-    "- 用户说删除、取消、不需要某个 TODO 时，不要真正删除，统一输出 UPDATE_TODO 且 status=cancelled。",
+    "- 只有用户明确要求记录、提醒、安排任务时，输出 MANAGE_TODO 且 action=create。",
+    "- 用户明确表示某个 TODO 完成时，输出 MANAGE_TODO 且 action=complete。",
+    "- 用户明确表示某个 TODO 延期、修改、取消、不需要、删除时，输出 MANAGE_TODO 和对应 action。",
+    "- 用户说删除、取消、不需要某个 TODO 时，不要真正删除，统一输出 action=cancel。",
     "- 找不到唯一目标、信息不足或高风险覆盖操作，选 ASK_CONFIRMATION。",
     "- 不要编造用户没有说的日期、任务或目标。",
+    "- 多个事项拆成多个 operations，不要合并。",
     "",
     "JSON 格式：",
-    "{\"intent\":\"CREATE_TODO\",\"todos\":[{\"text\":\"继续写论文\",\"dateKey\":\"2026-06-10\",\"startTime\":\"\",\"endTime\":\"\"}],\"todo\":{\"text\":\"\",\"dateKey\":\"\",\"startTime\":\"\",\"endTime\":\"\"},\"update\":{\"matchText\":\"\",\"dateKey\":\"\",\"newText\":\"\",\"newDateKey\":\"\",\"status\":\"\",\"startTime\":\"\",\"endTime\":\"\"},\"confirmation\":{\"message\":\"\"}}",
+    "{\"intent\":\"MANAGE_TODO\",\"operations\":[{\"action\":\"create\",\"text\":\"继续写论文\",\"dateKey\":\"2026-06-10\",\"startTime\":\"\",\"endTime\":\"\"},{\"action\":\"complete\",\"targetText\":\"买东方树叶\",\"dateKey\":\"2026-06-10\"},{\"action\":\"reschedule\",\"targetText\":\"喝茶\",\"dateKey\":\"2026-06-10\",\"newDateKey\":\"2026-06-29\"}],\"confirmation\":{\"message\":\"\"}}",
     "",
     "字段说明：",
-    "- CREATE_TODO 时优先填写 todos 数组；只有一条时也可以填写 todo.text 和 todo.dateKey。",
-    "- 用户一次说了多件要记录的事，就拆成多个 todos，不要合并成一条。",
-    "- UPDATE_TODO 时填写 update.matchText；完成用 status=done，取消/删除/不需要用 status=cancelled，延期/改日期用 newDateKey，改内容用 newText。",
+    "- create 填 text/dateKey/startTime/endTime；没有明确时间就留空 startTime/endTime。",
+    "- complete/cancel/restore/reschedule/rename/retime 必须填写 targetText 或 targetTodoId。",
+    "- 能从现有 TODO 里确定 id 时，优先填写 targetTodoId。",
+    "- reschedule 填 newDateKey；rename 填 newText；retime 填 startTime/endTime。",
     "- ASK_CONFIRMATION 时 confirmation.message 写给前端确认/提示用的一句话。",
     "- 不需要的对象字段留空字符串。"
   ].join("\n");
@@ -813,7 +818,7 @@ function buildTodoAgentMessages(agent) {
 function parseTodoAgentResult(rawText) {
   const data = extractJsonObject(rawText);
   const intent = String(data.intent || "").trim().toUpperCase();
-  if (!["NONE", "CREATE_TODO", "UPDATE_TODO", "ASK_CONFIRMATION"].includes(intent)) {
+  if (!["NONE", "MANAGE_TODO", "CREATE_TODO", "UPDATE_TODO", "ASK_CONFIRMATION"].includes(intent)) {
     throw new Error(`agent_unknown_intent:${intent || "empty"}`);
   }
   return {
@@ -821,6 +826,9 @@ function parseTodoAgentResult(rawText) {
     todo: data.todo && typeof data.todo === "object" ? data.todo : {},
     todos: Array.isArray(data.todos) ? data.todos.filter(item => item && typeof item === "object") : [],
     update: data.update && typeof data.update === "object" ? data.update : {},
+    operations: Array.isArray(data.operations)
+      ? data.operations.map(item => normalizeTodoAgentOperation(item)).filter(Boolean)
+      : buildTodoAgentOperationsFromLegacy(data),
     confirmation: data.confirmation && typeof data.confirmation === "object" ? data.confirmation : {}
   };
 }
@@ -828,6 +836,10 @@ function parseTodoAgentResult(rawText) {
 function executeTodoAgentResult(result, todoSnapshot) {
   if (!result || result.intent === "NONE" || result.intent === "ASK_CONFIRMATION") {
     return { prompt: "", actions: [] };
+  }
+
+  if (result.intent === "MANAGE_TODO" || (Array.isArray(result.operations) && result.operations.length)) {
+    return executeTodoAgentOperations(result.operations || [], todoSnapshot);
   }
 
   if (result.intent === "CREATE_TODO") {
@@ -906,17 +918,163 @@ function executeTodoAgentResult(result, todoSnapshot) {
   };
 }
 
+function executeTodoAgentOperations(operations, todoSnapshot) {
+  const validOperations = Array.isArray(operations) ? operations.filter(Boolean) : [];
+  if (!validOperations.length) return { prompt: "", actions: [] };
+
+  const createResult = normalizeTodoAgentCreates({
+    todos: validOperations.filter(item => item.action === "create")
+  }, todoSnapshot);
+  const actions = [];
+  const promptLines = [];
+
+  if (createResult.length) {
+    actions.push({
+      id: crypto.randomUUID(),
+      type: createResult.length === 1 ? "todo.create" : "todo.create_many",
+      ...(createResult.length === 1 ? { item: createResult[0] } : { items: createResult }),
+      notice: createResult.length === 1 ? `添加了 TODO：${createResult[0].text}` : `添加了 ${createResult.length} 个 TODO`
+    });
+    createResult.forEach(item => {
+      const timeText = item.startTime && item.endTime ? `，时间 ${item.startTime}-${item.endTime}` : "";
+      promptLines.push(`- 添加：${item.text}：${item.dateKey}${timeText}`);
+    });
+  }
+
+  validOperations.filter(item => item.action !== "create").forEach(operation => {
+    const candidates = findTodoAgentCandidates(operation, todoSnapshot);
+    if (candidates.length !== 1) return;
+    const item = candidates[0];
+    const patchInfo = buildTodoAgentPatchFromOperation(operation);
+    if (!patchInfo || !Object.keys(patchInfo.patch).length) return;
+    const after = { ...item, ...patchInfo.patch };
+    actions.push({
+      id: crypto.randomUUID(),
+      type: "todo.update",
+      todoId: item.id,
+      patch: patchInfo.patch,
+      notice: `${patchInfo.actionText}：${after.text || item.text}`
+    });
+    promptLines.push(`- ${getTodoAgentOperationVerb(operation)}：${formatTodoAgentLabel(after)}${after.done ? "，状态为已完成" : ""}${after.cancelled ? "，状态为已取消" : ""}`);
+  });
+
+  if (!actions.length) return { prompt: "", actions: [] };
+  return {
+    prompt: [
+      `你已经为用户执行了 ${actions.length} 项 TODO 操作。`,
+      ...promptLines,
+      "请自然回应，不要提到系统、工具或 JSON。"
+    ].join("\n"),
+    actions
+  };
+}
+
 function findTodoAgentCandidates(result, todoSnapshot) {
-  const update = result?.update || {};
-  const matchId = cleanAgentText(update.id || update.todoId || "", 80);
-  const matchText = cleanAgentText(update.matchText || update.text || update.oldText || "", 80).toLowerCase();
+  const update = result?.update || result || {};
+  const matchId = cleanAgentText(update.id || update.todoId || update.targetTodoId || "", 80);
+  const matchText = cleanAgentText(update.matchText || update.targetText || update.text || update.oldText || "", 80).toLowerCase();
   const dateKey = isDateKey(update.dateKey) ? update.dateKey : "";
-  let items = Array.isArray(todoSnapshot) ? todoSnapshot.filter(item => item && item.text) : [];
+  const includeCancelled = normalizeTodoAgentAction(update.action) === "restore";
+  let items = Array.isArray(todoSnapshot) ? todoSnapshot.filter(item => item && item.text && (includeCancelled || item.cancelled !== true)) : [];
   if (matchId) items = items.filter(item => item.id === matchId);
   if (dateKey) items = items.filter(item => item.dateKey === dateKey);
   if (matchText) items = items.filter(item => String(item.text || "").toLowerCase().includes(matchText));
   if (!matchId && !matchText && !dateKey) return [];
   return items;
+}
+
+function normalizeTodoAgentAction(value) {
+  const action = String(value || "").trim().toLowerCase();
+  if (["create", "add", "new"].includes(action)) return "create";
+  if (["complete", "done", "completed", "finish", "finished"].includes(action)) return "complete";
+  if (["cancel", "cancelled", "canceled", "delete", "deleted", "remove", "removed"].includes(action)) return "cancel";
+  if (["restore", "active", "undone", "resume"].includes(action)) return "restore";
+  if (["reschedule", "date", "change_date", "move"].includes(action)) return "reschedule";
+  if (["rename", "text", "change_text"].includes(action)) return "rename";
+  if (["retime", "time", "change_time"].includes(action)) return "retime";
+  return "";
+}
+
+function normalizeTodoAgentOperation(raw = {}) {
+  if (!raw || typeof raw !== "object") return null;
+  const status = String(raw.status || "").trim().toLowerCase();
+  const action = normalizeTodoAgentAction(raw.action || status || (raw.newDateKey ? "reschedule" : raw.newText ? "rename" : ""));
+  if (!action) return null;
+  const operation = {
+    action,
+    text: cleanAgentText(raw.text || raw.title || "", 120),
+    dateKey: isDateKey(raw.dateKey) ? raw.dateKey : "",
+    startTime: isTimeValue(raw.startTime) ? raw.startTime : "",
+    endTime: isTimeValue(raw.endTime) ? raw.endTime : "",
+    targetTodoId: cleanAgentText(raw.targetTodoId || raw.todoId || raw.id || "", 80),
+    targetText: cleanAgentText(raw.targetText || raw.matchText || raw.oldText || "", 120),
+    newText: cleanAgentText(raw.newText || "", 120),
+    newDateKey: isDateKey(raw.newDateKey) ? raw.newDateKey : ""
+  };
+  if (operation.action !== "create" && !operation.targetText && operation.text) {
+    operation.targetText = operation.text;
+    operation.text = "";
+  }
+  return operation;
+}
+
+function buildTodoAgentOperationsFromLegacy(data = {}) {
+  const intent = String(data.intent || "").trim().toUpperCase();
+  if (intent === "CREATE_TODO") {
+    const rawTodos = Array.isArray(data.todos) && data.todos.length ? data.todos : [data.todo || {}];
+    return rawTodos.map(item => normalizeTodoAgentOperation({ ...item, action: "create" })).filter(Boolean);
+  }
+  if (intent === "UPDATE_TODO") {
+    return [normalizeTodoAgentOperation(data.update || {})].filter(Boolean);
+  }
+  return [];
+}
+
+function buildTodoAgentPatchFromOperation(operation = {}) {
+  const action = normalizeTodoAgentAction(operation.action);
+  const patch = {};
+  let actionText = "更新了 TODO";
+  if (action === "complete") {
+    patch.done = true;
+    patch.cancelled = false;
+    actionText = "完成了 TODO";
+  } else if (action === "cancel") {
+    patch.cancelled = true;
+    patch.done = false;
+    actionText = "取消了 TODO";
+  } else if (action === "restore") {
+    patch.done = false;
+    patch.cancelled = false;
+    actionText = "恢复了 TODO";
+  }
+  const newText = cleanAgentText(operation.newText || "", 120);
+  if (newText) {
+    patch.text = newText;
+    if (actionText === "更新了 TODO") actionText = "改名了 TODO";
+  }
+  if (isDateKey(operation.newDateKey)) {
+    patch.dateKey = operation.newDateKey;
+    if (actionText === "更新了 TODO") actionText = "调整了 TODO 日期";
+  }
+  if (isTimeValue(operation.startTime) && isTimeValue(operation.endTime) && operation.startTime < operation.endTime) {
+    patch.startTime = operation.startTime;
+    patch.endTime = operation.endTime;
+    if (actionText === "更新了 TODO") actionText = "调整了 TODO 时间";
+  }
+  return { patch, actionText };
+}
+
+function getTodoAgentOperationVerb(operation = {}) {
+  const action = normalizeTodoAgentAction(operation.action);
+  return {
+    create: "添加",
+    complete: "完成",
+    cancel: "取消",
+    restore: "恢复",
+    reschedule: "改期",
+    rename: "改名",
+    retime: "改时间"
+  }[action] || "更新";
 }
 
 function normalizeTodoAgentCreates(result, todoSnapshot = []) {

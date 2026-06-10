@@ -17,8 +17,8 @@
 
 // ★★★★★ Agent TODO Manager START：独立工具层 ★★★★★
 const AgentTodoManager = {
-    allowedIntents: ['NONE', 'CREATE_TODO', 'UPDATE_TODO', 'ASK_CONFIRMATION'],
-    allowedPostIntents: ['NONE', 'SUGGEST_TODO_CREATE'],
+    allowedIntents: ['NONE', 'MANAGE_TODO', 'CREATE_TODO', 'UPDATE_TODO', 'ASK_CONFIRMATION'],
+    allowedPostIntents: ['NONE', 'SUGGEST_TODO_MANAGE', 'SUGGEST_TODO_CREATE'],
 
     pad(num) {
         return String(num).padStart(2, '0');
@@ -70,35 +70,96 @@ const AgentTodoManager = {
                 text: this.cleanText(item.text, 80),
                 dateKey: item.dateKey || todayKey,
                 done: item.done === true,
+                cancelled: item.cancelled === true,
                 startTime: item.startTime || '',
                 endTime: item.endTime || ''
             }));
+    },
+
+    normalizeAction(value) {
+        const action = String(value || '').trim().toLowerCase();
+        if (['create', 'add', 'new'].includes(action)) return 'create';
+        if (['complete', 'done', 'completed', 'finish', 'finished'].includes(action)) return 'complete';
+        if (['cancel', 'cancelled', 'canceled', 'delete', 'deleted', 'remove', 'removed'].includes(action)) return 'cancel';
+        if (['restore', 'active', 'undone', 'resume'].includes(action)) return 'restore';
+        if (['reschedule', 'date', 'change_date', 'move'].includes(action)) return 'reschedule';
+        if (['rename', 'text', 'change_text'].includes(action)) return 'rename';
+        if (['retime', 'time', 'change_time'].includes(action)) return 'retime';
+        return '';
+    },
+
+    normalizeOperation(raw = {}) {
+        if (!raw || typeof raw !== 'object') return null;
+        const status = String(raw.status || '').trim().toLowerCase();
+        const action = this.normalizeAction(raw.action || status || (raw.newDateKey ? 'reschedule' : raw.newText ? 'rename' : ''));
+        if (!action) return null;
+
+        const operation = {
+            action,
+            text: this.cleanText(raw.text || raw.title || '', 120),
+            dateKey: this.isDateKey(raw.dateKey) ? raw.dateKey : '',
+            startTime: this.isTimeValue(raw.startTime) ? raw.startTime : '',
+            endTime: this.isTimeValue(raw.endTime) ? raw.endTime : '',
+            targetTodoId: this.cleanText(raw.targetTodoId || raw.todoId || raw.id || '', 80),
+            targetText: this.cleanText(raw.targetText || raw.matchText || raw.oldText || '', 120),
+            newText: this.cleanText(raw.newText || '', 120),
+            newDateKey: this.isDateKey(raw.newDateKey) ? raw.newDateKey : '',
+            reason: this.cleanText(raw.reason || '', 160)
+        };
+
+        // ★ 兼容旧模型：UPDATE_TODO 经常只给 matchText/text，这里补成统一 targetText。
+        if (operation.action !== 'create' && !operation.targetText && operation.text) {
+            operation.targetText = operation.text;
+            operation.text = '';
+        }
+        return operation;
+    },
+
+    buildOperationsFromLegacy(data = {}) {
+        const intent = String(data.intent || '').trim().toUpperCase();
+        if (intent === 'CREATE_TODO' || intent === 'SUGGEST_TODO_CREATE') {
+            const rawTodos = Array.isArray(data.todos) && data.todos.length ? data.todos : [data.todo || {}];
+            return rawTodos
+                .map(item => this.normalizeOperation({ ...item, action: 'create' }))
+                .filter(Boolean);
+        }
+        if (intent === 'UPDATE_TODO') {
+            return [this.normalizeOperation(data.update || {})].filter(Boolean);
+        }
+        return [];
     },
 
     buildExecutorMessages(contact, userText, now = new Date()) {
         const todayKey = this.getTodayKey(now);
         const tomorrowKey = this.addDays(todayKey, 1);
         const systemPrompt = [
-            '你是一个 TODO 管理 Agent，负责把用户这句话解析成 TODO 操作包。',
-            '你只能从 intent 枚举中选择：NONE、CREATE_TODO、UPDATE_TODO、ASK_CONFIRMATION。',
+            '你是一个 TODO 管理 Agent，负责把用户这句话解析成 TODO 管理操作包。',
+            '你只能从 intent 枚举中选择：NONE、MANAGE_TODO、ASK_CONFIRMATION。',
             '不要输出 Markdown，不要解释，只输出 JSON。',
+            '',
+            'operation.action 只能选择：create、complete、cancel、restore、reschedule、rename、retime。',
             '',
             '规则：',
             '- 普通聊天，选 NONE。',
-            '- 用户要求安排任务，或者做记录、提醒时，选 CREATE_TODO。',
-            '- 用户表示某个事项/计划完成、延期、修改、取消、不需要、删除时，选 UPDATE_TODO。',
-            '- 用户说删除、取消、不需要某个事项/计划时，输出 UPDATE_TODO 且 status=cancelled。',
+            '- 用户要求安排任务，或者做记录、提醒时，输出 MANAGE_TODO 且 action=create。',
+            '- 用户表示某个事项/计划完成时，输出 MANAGE_TODO 且 action=complete。',
+            '- 用户表示某个事项/计划延期、改日期时，输出 MANAGE_TODO 且 action=reschedule。',
+            '- 用户表示某个事项/计划修改内容时，输出 MANAGE_TODO 且 action=rename。',
+            '- 用户表示某个事项/计划修改时间时，输出 MANAGE_TODO 且 action=retime。',
+            '- 用户说删除、取消、不需要某个事项/计划时，输出 MANAGE_TODO 且 action=cancel。',
             '- 找不到唯一目标、信息不足或高风险覆盖操作，选 ASK_CONFIRMATION。',
             '- 不确定日期时，就放在今天。',
             '- 不要编造用户没有说的日期、任务或目标。',
+            '- 多个事项拆成多个 operations，不要合并。',
             '',
             'JSON 格式：',
-            '{"intent":"CREATE_TODO","todos":[{"text":"继续写论文","dateKey":"2026-06-10","startTime":"","endTime":""}],"todo":{"text":"","dateKey":"","startTime":"","endTime":""},"update":{"matchText":"","dateKey":"","newText":"","newDateKey":"","status":"","startTime":"","endTime":""},"confirmation":{"message":""}}',
+            '{"intent":"MANAGE_TODO","operations":[{"action":"create","text":"继续写论文","dateKey":"2026-06-10","startTime":"","endTime":""},{"action":"complete","targetText":"买东方树叶","dateKey":"2026-06-10"},{"action":"reschedule","targetText":"喝茶","dateKey":"2026-06-10","newDateKey":"2026-06-29"}],"confirmation":{"message":""}}',
             '',
             '字段说明：',
-            '- CREATE_TODO 时优先填写 todos 数组；只有一条时也可以填写 todo.text 和 todo.dateKey。',
-            '- 用户一次说了多件要记录的事，就拆成多个 todos，不要合并成一条。',
-            '- UPDATE_TODO 时填写 update.matchText；完成用 status=done，取消/删除/不需要用 status=cancelled，延期/改日期用 newDateKey，改内容用 newText。',
+            '- create 填 text/dateKey/startTime/endTime；没有明确时间就留空 startTime/endTime。',
+            '- complete/cancel/restore/reschedule/rename/retime 必须填写 targetText 或 targetTodoId。',
+            '- 能从现有 TODO 里确定 id 时，优先填写 targetTodoId。',
+            '- reschedule 填 newDateKey；rename 填 newText；retime 填 startTime/endTime。',
             '- ASK_CONFIRMATION 时 confirmation.message 写给前端确认/提示用的一句话。',
             '- 不需要的对象字段留空字符串。'
         ].join('\n');
@@ -134,38 +195,44 @@ const AgentTodoManager = {
         const todayKey = this.getTodayKey(now);
         const tomorrowKey = this.addDays(todayKey, 1);
         const systemPrompt = [
-            '你是一个 TODO 管理 Agent，只从刚刚的回复里提取“可让用户确认添加”的 TODO 建议。',
-            '你不能执行 TODO，不能修改/完成/取消/删除 TODO，只能建议新增 TODO。',
+            '你是一个 TODO 管理 Agent，只从刚刚的回复里提取“可让用户确认执行”的 TODO 管理建议。',
+            '你不能执行 TODO，只能建议新增、完成、取消、恢复、改期、改名或改时间，最终必须由用户确认。',
             '不要输出 Markdown，不要解释，只输出 JSON。',
             '',
-            'intent 只能选择：NONE、SUGGEST_TODO_CREATE。',
+            'intent 只能选择：NONE、SUGGEST_TODO_MANAGE。',
+            'operation.action 只能选择：create、complete、cancel、restore、reschedule、rename、retime。',
             '',
             '规则：',
-            '- 回复里建议了一个可执行事项，输出 SUGGEST_TODO_CREATE。',
+            '- 回复里建议了一个可执行事项或 TODO 调整，输出 SUGGEST_TODO_MANAGE。',
             '- 闲聊、泛泛建议、角色语气承诺，选 NONE。',
             '- 不确定日期时，就放在今天。',
             '- 不要编造回复里没有的任务、日期或时间。',
-            '- 多个事项拆成多个 todos，不要合并。',
-            '- 最多返回 5 项 TODO。',
+            '- complete/cancel/restore/reschedule/rename/retime 只有能匹配唯一现有 TODO 时才输出。',
+            '- 多个事项拆成多个 operations，不要合并。',
+            '- 最多返回 5 项操作。',
             '',
             'JSON 格式：',
-            '{"intent":"SUGGEST_TODO_CREATE","todos":[{"text":"导出发票","dateKey":"2026-06-10","startTime":"21:00","endTime":""}],"confirmation":{"message":""}}',
+            '{"intent":"SUGGEST_TODO_MANAGE","operations":[{"action":"create","text":"导出发票","dateKey":"2026-06-10","startTime":"21:00","endTime":""},{"action":"cancel","targetText":"去图书馆","dateKey":"2026-06-10"},{"action":"reschedule","targetText":"喝茶","dateKey":"2026-06-10","newDateKey":"2026-06-29"}],"confirmation":{"message":""}}',
             '',
             '字段说明：',
-            '- NONE 时 todos 为空数组。',
-            '- text 写简短任务名，不要写“建议你”。',
-            '- dateKey 必须是 YYYY-MM-DD。',
+            '- NONE 时 operations 为空数组。',
+            '- create 的 text 写简短任务名，不要写“建议你”。',
+            '- 能从现有 TODO 里确定 id 时，优先填写 targetTodoId。',
+            '- dateKey/newDateKey 必须是 YYYY-MM-DD。',
             '- 没有明确时间就留空 startTime/endTime。'
         ].join('\n');
 
         // ★★★★★ Post Agent：TODO 建议 prompt START ★★★★★
-        // 为了省 token，post-agent 只看角色回复；用户原话和 TODO 快照都不放进来。
+        // 角色侧可以建议完成/取消/改期，所以这里带精简 TODO 快照，避免模型凭空改不存在的事项。
         const userPrompt = [
             `今天日期：${todayKey}`,
             `明天日期：${tomorrowKey}`,
             '',
             '【当前角色】',
             contact?.name || '未命名角色',
+            '',
+            '【现有 TODO】',
+            JSON.stringify(this.buildTodoSnapshot(now), null, 2),
             '',
             '【角色刚刚回复】',
             assistantText || ''
@@ -208,6 +275,9 @@ const AgentTodoManager = {
             todo: data.todo && typeof data.todo === 'object' ? data.todo : {},
             todos: Array.isArray(data.todos) ? data.todos.filter(item => item && typeof item === 'object') : [],
             update: data.update && typeof data.update === 'object' ? data.update : {},
+            operations: Array.isArray(data.operations)
+                ? data.operations.map(item => this.normalizeOperation(item)).filter(Boolean)
+                : this.buildOperationsFromLegacy(data),
             confirmation: data.confirmation && typeof data.confirmation === 'object' ? data.confirmation : {}
         };
     },
@@ -222,17 +292,21 @@ const AgentTodoManager = {
         return {
             intent,
             todos: Array.isArray(data.todos) ? data.todos.filter(item => item && typeof item === 'object') : [],
+            operations: Array.isArray(data.operations)
+                ? data.operations.map(item => this.normalizeOperation(item)).filter(Boolean)
+                : this.buildOperationsFromLegacy(data),
             confirmation: data.confirmation && typeof data.confirmation === 'object' ? data.confirmation : {}
         };
     },
 
     findTodoCandidates(routerResult) {
-        const update = routerResult?.update || {};
-        const matchId = this.cleanText(update.id || update.todoId || '', 80);
-        const matchText = this.cleanText(update.matchText || update.text || update.oldText || '', 80).toLowerCase();
+        const update = routerResult?.update || routerResult || {};
+        const matchId = this.cleanText(update.id || update.todoId || update.targetTodoId || '', 80);
+        const matchText = this.cleanText(update.matchText || update.targetText || update.text || update.oldText || '', 80).toLowerCase();
         const dateKey = this.isDateKey(update.dateKey) ? update.dateKey : '';
 
-        let items = (STATE.todoPlans || []).filter(item => item && item.text && item.cancelled !== true);
+        const includeCancelled = this.normalizeAction(update.action) === 'restore';
+        let items = (STATE.todoPlans || []).filter(item => item && item.text && (includeCancelled || item.cancelled !== true));
         if (matchId) items = items.filter(item => item.id === matchId);
         if (dateKey) items = items.filter(item => item.dateKey === dateKey);
         if (matchText) {
@@ -252,4 +326,3 @@ const AgentTodoManager = {
     }
 };
 // ★★★★★ Agent TODO Manager END：独立工具层 ★★★★★
-

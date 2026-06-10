@@ -63,7 +63,7 @@ const AgentSkillRouter = {
             'intent 只能选择：NONE、USE_AGENT。',
             '',
             '可用 Agent：',
-            '- todo_manager_post：角色回复里建议用户添加待办、提醒、安排任务。',
+            '- todo_manager_post：角色回复里建议用户添加待办、提醒、安排任务，或建议完成、取消、恢复、改期、改名、改时间等 TODO 管理操作。',
             '',
             '规则：',
             '- 普通聊天，选 NONE。',
