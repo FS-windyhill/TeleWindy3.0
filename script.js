@@ -4715,6 +4715,7 @@ const App = {
 
         const notice = document.createElement('div');
         notice.className = `app-top-notice ${options.type || ''}`.trim();
+        if (options.layout === 'stacked') notice.classList.add('stacked');
         const targetHandler = this.getTopNoticeTargetHandler(options);
         if (targetHandler) {
             notice.classList.add('clickable');
@@ -6038,6 +6039,7 @@ const App = {
         // 角色回复只能提出建议；真正写入 TODO 必须等用户点“添加”。
         return this.showTopNotice(message, {
             type: 'pending',
+            layout: 'stacked',
             timeout: 0,
             actions: [
                 {

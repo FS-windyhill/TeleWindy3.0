@@ -9543,6 +9543,13 @@ body.dark-mode .agent-api-select {
     -webkit-backdrop-filter: blur(8px);
 }
 
+.app-top-notice.stacked {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 8px;
+    padding: 11px 12px 10px 14px;
+}
+
 .app-top-notice.show {
     opacity: 1;
     transform: translateY(0);
@@ -9587,6 +9594,17 @@ body.dark-mode .agent-api-select {
     justify-content: flex-end;
     gap: 8px;
     flex-wrap: wrap;
+}
+
+.app-top-notice.stacked .app-top-notice-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+    justify-content: stretch;
+    width: 100%;
+}
+
+.app-top-notice.stacked .app-top-notice-action {
+    width: 100%;
 }
 
 .app-top-notice-action {
