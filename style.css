@@ -9755,12 +9755,6 @@ body.dark-mode .agent-api-select {
     gap: 7px;
 }
 
-.agent-suggestion-option.desktop-switch-cell {
-    min-height: 34px;
-    padding: 7px 9px;
-    line-height: 1.35;
-}
-
 .agent-suggestion-option span {
     min-width: 0;
     overflow-wrap: anywhere;
@@ -10786,8 +10780,8 @@ button.desktop-card {
     display: flex;
     align-items: center;
     gap: 8px;
-    min-height: 38px;
-    padding: 0 10px;
+    min-height: 32px;
+    padding: 2px 10px;
     border-radius: 7px;
     background: rgba(255, 255, 255, 0.48);
     font-size: 0.88rem;
