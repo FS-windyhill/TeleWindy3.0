@@ -112,7 +112,7 @@
 //     - isViewingContactChat(contactId): 判断用户是否真的正在查看某个角色聊天窗口
 //     - markContactIncomingMessage(contact, options): 统一处理非当前窗口 AI 新消息的红点和顶部通知
 //     - showTopNotice(message, options): 通用顶部通知栈，支持多条并发、按钮和上划关闭
-//     - isDynamicContextSystemRoleError(error): 判断错误是否像后置 system 兼容问题
+//     - isDynamicContextSystemRoleError(error): 判断错误是否像多 system / system role 兼容问题
 //     - getDynamicContextWarnKey(contact, requestSettings): 生成兼容提示的会话内去重 key
 //     - maybePromptDynamicContextCompatMode(error, requestSettings, contact): system/auto 模式报错时提示切换到 user 兼容模式
 //     - ensureHistoryCacheMetadata(contact): 给历史消息补稳定 cacheId/cacheSeq，供缓存友好分块使用
@@ -124,9 +124,9 @@
 //
 // 发送消息主链路
 //   - handleSend() 会先拼稳定 system / 角色 prompt，再追加历史消息
-//   - handleSend() 会把世界感知、用户计划、角色日程、世界书和心迹收集成本轮动态背景
-//   - handleSend() 会在 auto 模式下拆分日常动态背景和本轮触发世界书：前者作为后置 system，后者并入当前 user
-//   - DYNAMIC_CONTEXT_INSERT_MODE 控制本轮动态背景作为后置 system、全部合并到当前 user，或自动把触发世界书并入 user
+//   - handleSend() 会把世界感知、用户计划、角色日程、世界书和心迹收集成本轮背景
+//   - handleSend() 会在 auto 模式下拆分日级稳定背景和本轮触发世界书：前者前置为 system，后者并入当前 user
+//   - DYNAMIC_CONTEXT_INSERT_MODE 控制本轮触发背景作为前置 system、全部合并到当前 user，或自动把触发世界书并入 user
 // =========================================
 
 // 世界感知工具层已拆到 js/world-sense.js。
@@ -8171,7 +8171,7 @@ const App = {
         const message = String(error?.message || error || '').toLowerCase();
         if (!message.includes('system') && !message.includes('系统')) return false;
 
-        // 只拦“后置 system / system role 不兼容”这一类错误，避免普通 API 报错也弹兼容提示。
+        // 只拦“多 system / system role 不兼容”这一类错误，避免普通 API 报错也弹兼容提示。
         const roleRelated = /(role|message|messages|system\s*message|系统消息|角色)/i.test(message);
         const incompatible = /(invalid|unsupported|not supported|not allowed|must be first|only.*first|should be first|不支持|不允许|非法|无效|必须.*第一|只能.*第一)/i.test(message);
         return roleRelated && incompatible;
@@ -8198,7 +8198,7 @@ const App = {
             ? `API 预设「${presetName}」`
             : '当前全局文字模型设置';
         const shouldSwitch = confirm(
-            `这个接口看起来不支持后置 system 消息。\n\n是否把${targetText}的「本轮背景插入方式」切换为「合并到用户消息（兼容）」？\n\n本次失败不会自动重试，切换后下次发送生效。`
+            `这个接口看起来不支持额外的 system 消息。\n\n是否把${targetText}的「本轮背景插入方式」切换为「合并到用户消息（兼容）」？\n\n本次失败不会自动重试，切换后下次发送生效。`
         );
         if (!shouldSwitch) return false;
 
@@ -8828,8 +8828,7 @@ const App = {
         requestSettings.HISTORY_WINDOW_LOG = historyWindow.log;
 
         // ★★★ 缓存优化：把“当前 user”从历史尾部拆出来。
-        // 稳定提示词和历史先进入 payload；日常动态背景继续放后置 system。
-        // auto 模式会把“本轮触发世界书”单独并入当前 user，避免新世界书作为 system 首次出现时打穿缓存。
+        // 日级稳定背景前置到角色设定后；auto 模式把本轮触发世界书并入当前 user，避免打穿历史前缀缓存。
         const historyForPayload = [...recentHistory];
         let currentUserMessage = null;
         if (historyForPayload.length && historyForPayload[historyForPayload.length - 1].role === 'user') {
@@ -8857,8 +8856,7 @@ const App = {
         }
 
         // ★★★★★ 世界书分层注入 START ★★★★★
-        // 常驻世界书更像角色设定 / 固定背景，放在稳定区提高缓存命中；
-        // 关键词触发世界书只和本轮输入相关，后面会放进“本轮背景资料”。
+        // 常驻世界书放进前置世界书 system；关键词触发世界书按插入方式进入 user 或同一个世界书 system。
         // 图片描述是给主模型看的辅助信息，不属于用户亲口说的话；
         // 所以世界书扫描单独吃一份去掉图片描述的 history，避免图片内容误触发关键词。
         const worldInfoScanHistory = recentHistory.map(m => ({
@@ -8868,9 +8866,6 @@ const App = {
         const worldInfoByType = (typeof WorldInfoEngine.scanByType === 'function')
             ? WorldInfoEngine.scanByType(userText, worldInfoScanHistory, contact.id, contact.name)
             : { constant: null, triggered: WorldInfoEngine.scan(userText, worldInfoScanHistory, contact.id, contact.name) };
-        if (worldInfoByType.constant) {
-            messagesToSend.push({ role: 'system', content: `=== 常驻世界知识/环境信息 ===\n${worldInfoByType.constant}` });
-        }
         // ★★★★★ 世界书分层注入 END ★★★★★
 
         // ★★★★★ 世界感知：收集本轮动态背景 START ★★★★★
@@ -8937,17 +8932,13 @@ const App = {
 
             if (momentsUpdateInfo && momentsUpdateInfo.prompt) {
                 console.log(`[Chat] 注入心迹动态 context (${momentsUpdateInfo.momentIds.length}条)`);
-                // 心迹是“本轮会变化”的通知型背景，也放到历史后面，避免影响前缀缓存。
-                routineDynamicContextPrompts.push(momentsUpdateInfo.prompt);
+                // 心迹是本轮通知型背景，不混进“今日稳定背景”；auto 下随本轮触发世界书并入当前 user。
+                volatileDynamicContextPrompts.push(momentsUpdateInfo.prompt);
             }
         } catch (e) {
             console.warn("心迹注入失败:", e);
         }
 
-        // 追加历史：当前 user 已经拆到最后单独处理，保证用户原话仍然压轴。
-        historyForPayload.forEach(h => messagesToSend.push(h));
-
-        const stableMessageCount = messagesToSend.length;
         let dynamicContextContent = '';
         const allDynamicContextPrompts = [
             ...routineDynamicContextPrompts,
@@ -8956,9 +8947,7 @@ const App = {
         ].filter(Boolean);
         const systemDynamicContextPrompts = requestSettings.DYNAMIC_CONTEXT_INSERT_MODE === 'user'
             ? []
-            : requestSettings.DYNAMIC_CONTEXT_INSERT_MODE === 'auto'
-                ? routineDynamicContextPrompts
-                : allDynamicContextPrompts;
+            : routineDynamicContextPrompts;
         const userDynamicContextPrompts = requestSettings.DYNAMIC_CONTEXT_INSERT_MODE === 'user'
             ? allDynamicContextPrompts
             : requestSettings.DYNAMIC_CONTEXT_INSERT_MODE === 'auto'
@@ -8974,20 +8963,52 @@ const App = {
         }
 
         if (systemDynamicContextPrompts.length) {
+            // ★★★★★ 日级稳定背景前置 START ★★★★★
+            // 天气、日期、TODO、日程等一天内相对稳定的信息，紧跟角色设定；不再插到最新 user 前面。
             messagesToSend.push({
                 role: 'system',
                 content: [
-                    '=== 本轮背景资料 ===',
+                    '=== 今日稳定背景资料 ===',
                     '',
                     ...systemDynamicContextPrompts
                 ].join('\n\n')
             });
+            // ★★★★★ 日级稳定背景前置 END ★★★★★
         }
+
+        const worldInfoSystemBlocks = [];
+        if (worldInfoByType.constant) {
+            worldInfoSystemBlocks.push(`=== 常驻世界知识/环境信息 ===\n${worldInfoByType.constant}`);
+        }
+        if (requestSettings.DYNAMIC_CONTEXT_INSERT_MODE === 'system' && triggeredWorldInfoPrompt) {
+            // ★ system 模式没有缓存收益；本轮触发世界书和常驻世界书放在同一条世界书 system 里，语义更集中。
+            worldInfoSystemBlocks.push(triggeredWorldInfoPrompt);
+        }
+        if (requestSettings.DYNAMIC_CONTEXT_INSERT_MODE === 'system' && volatileDynamicContextPrompts.length) {
+            worldInfoSystemBlocks.push([
+                '=== 本轮即时系统信息 ===',
+                '',
+                ...volatileDynamicContextPrompts
+            ].join('\n\n'));
+        }
+        if (worldInfoSystemBlocks.length) {
+            messagesToSend.push({
+                role: 'system',
+                content: [
+                    '=== 世界书/环境信息 ===',
+                    '',
+                    ...worldInfoSystemBlocks
+                ].join('\n\n')
+            });
+        }
+
+        // 追加历史：当前 user 已经拆到最后单独处理，保证用户原话仍然压轴。
+        historyForPayload.forEach(h => messagesToSend.push(h));
 
         if (userDynamicContextPrompts.length && currentUserMessage) {
             // ★★★★★ 自动缓存优化：本轮触发世界书并入当前 user START ★★★★★
             // user 模式会把所有动态背景合并进当前 user；auto 模式只合并变化最大的本轮触发世界书。
-            // 这样日常背景仍可作为后置 system，新增世界书则尽量压到末尾，保护历史前缀缓存。
+            // 日级稳定背景已经前置；新增世界书尽量压到末尾，保护历史前缀缓存。
             const userContextTitle = requestSettings.DYNAMIC_CONTEXT_INSERT_MODE === 'auto'
                 ? '【系统信息补充】'
                 : '【系统信息补充】';
@@ -9006,7 +9027,9 @@ const App = {
             // ★★★★★ 自动缓存优化：本轮触发世界书并入当前 user END ★★★★★
         } else if (userDynamicContextPrompts.length) {
             // 极少数没有当前 user 的调用兜底：不能合并时仍保留动态背景，避免世界书静默丢失。
-            messagesToSend.push({
+            const firstNonSystemIndex = messagesToSend.findIndex(message => message?.role !== 'system');
+            const insertIndex = firstNonSystemIndex >= 0 ? firstNonSystemIndex : messagesToSend.length;
+            messagesToSend.splice(insertIndex, 0, {
                 role: 'system',
                 content: [
                     '=== 本轮背景资料 ===',
@@ -9015,6 +9038,8 @@ const App = {
                 ].join('\n\n')
             });
         }
+
+        const stableMessageCount = messagesToSend.length;
 
         if (currentUserMessage) {
             messagesToSend.push(currentUserMessage);

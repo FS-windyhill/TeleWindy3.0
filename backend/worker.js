@@ -447,7 +447,7 @@ async function runJob(jobId, body, env) {
 
     if (!response.ok) {
       // ★★★★★ 上游错误原文回传 START ★★★★★
-      // 前端需要看到一小段真实错误，才能判断是不是“后置 system 不兼容”，并提示切换 user 兼容模式。
+      // 前端需要看到一小段真实错误，才能判断是不是“多 system 不兼容”，并提示切换 user 兼容模式。
       const upstreamErrorText = sanitizeLogText(await response.text());
       const upstreamError = upstreamErrorText
         ? `upstream_${response.status}: ${upstreamErrorText}`
@@ -1117,11 +1117,28 @@ function buildTodoDuplicateKey(text, dateKey) {
 function injectVolatilePrompt(messages, prompt, insertMode, userMessageIndex) {
   const cleanPrompt = String(prompt || "").trim();
   if (!cleanPrompt) return messages;
+  const nextMessages = messages.map(message => ({ ...message }));
+
   if (insertMode === "system") {
-    return [...messages, { role: "system", content: ["=== 本轮背景资料 ===", "", cleanPrompt].join("\n\n") }];
+    const systemContent = ["=== 本轮即时系统信息 ===", "", cleanPrompt].join("\n\n");
+    const worldInfoIndex = nextMessages.findIndex(message =>
+      message?.role === "system" && String(message.content || "").includes("=== 世界书/环境信息 ===")
+    );
+    if (worldInfoIndex >= 0) {
+      nextMessages[worldInfoIndex].content = [
+        nextMessages[worldInfoIndex].content || "",
+        systemContent
+      ].filter(Boolean).join("\n\n");
+      return nextMessages;
+    }
+
+    // ★ 后台 Agent 回注也保持前置 system，不再插到最新 user 前面打断对话流。
+    const firstNonSystemIndex = nextMessages.findIndex(message => message?.role !== "system");
+    const insertIndex = firstNonSystemIndex >= 0 ? firstNonSystemIndex : nextMessages.length;
+    nextMessages.splice(insertIndex, 0, { role: "system", content: systemContent });
+    return nextMessages;
   }
 
-  const nextMessages = messages.map(message => ({ ...message }));
   const index = Number.isInteger(userMessageIndex) && userMessageIndex >= 0
     ? userMessageIndex
     : nextMessages.map(message => message.role).lastIndexOf("user");
@@ -1137,7 +1154,10 @@ function injectVolatilePrompt(messages, prompt, insertMode, userMessageIndex) {
       return nextMessages;
     }
   }
-  return [...nextMessages, { role: "system", content: ["=== 本轮背景资料 ===", "", cleanPrompt].join("\n\n") }];
+  const firstNonSystemIndex = nextMessages.findIndex(message => message?.role !== "system");
+  const insertIndex = firstNonSystemIndex >= 0 ? firstNonSystemIndex : nextMessages.length;
+  nextMessages.splice(insertIndex, 0, { role: "system", content: ["=== 本轮背景资料 ===", "", cleanPrompt].join("\n\n") });
+  return nextMessages;
 }
 
 function sanitizeAgentPayload(agent, defaultAuthMode) {

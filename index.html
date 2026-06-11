@@ -1726,13 +1726,13 @@
                                     <span>本轮触发世界知识插入方式</span>
                                     <select id="dynamic-context-insert-mode" class="setting-input">
                                         <option value="auto">自动优化（推荐）</option>
-                                        <option value="system">全部作为system发送</option>
+                                        <option value="system">全部作为前置system发送</option>
                                         <option value="user">全部合并到用户消息</option>
                                     </select>
                                 </label>
 
                                 <div class="request-body-tip">
-                                    自动优化：世界背景知识采用system发送，本轮触发世界书拼进user消息中发送，能最大化缓存命中，且保持相对简洁的请求体结构。
+                                    自动优化：今日稳定背景放在角色设定后，本轮触发世界书拼进user消息中发送；全部作为前置system时，本轮触发世界书会并入世界书system。
                                 </div>
 
                                 <label class="cache-optimization-row cache-optimization-row-wide" for="history-window-strategy">
