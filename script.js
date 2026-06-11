@@ -5952,20 +5952,44 @@ const App = {
     },
 
     normalizeAgentExecutions(userMessage) {
-        // ★★★★★ Agent：消息级执行状态兼容 START ★★★★★
-        // 旧历史记录没有 agentExecutions 字段；读到时按空状态处理，不需要批量迁移 IndexedDB。
+        // ★★★★★ Agent：消息级执行状态协议 START ★★★★★
+        // agentExecutions 是消息级幂等表：每个 skill 一个 key。
+        // 新 skill 请写成 agentExecutions.<skillName>，只保存 status / intents / suggestions / reason / error / message 等运行恢复字段；
+        // 不要把日志字段（source、updatedAt、空数组、空 error）塞进聊天历史。
         if (!userMessage || typeof userMessage !== 'object') return {};
         if (!userMessage.agentExecutions || typeof userMessage.agentExecutions !== 'object' || Array.isArray(userMessage.agentExecutions)) {
             userMessage.agentExecutions = {};
         }
-        // ★★★★★ Agent：消息级执行状态兼容 END ★★★★★
+        // ★★★★★ Agent：消息级执行状态协议 END ★★★★★
         return userMessage.agentExecutions;
+    },
+
+    normalizeAgentExecutionSkillName(agentName) {
+        // ★★★★★ Agent：旧 key 兼容 START ★★★★★
+        // post_router / todo_manager_post 是早期 post-agent 分层留下的历史 key；
+        // 新的『』协议里，router 只是过程，真正需要防重复的是 todo 这个 skill。
+        const name = String(agentName || '').trim();
+        if (name === 'todo_manager_post' || name === 'post_router') return 'todo';
+        return name;
+        // ★★★★★ Agent：旧 key 兼容 END ★★★★★
+    },
+
+    getAgentExecutionLegacyKeys(agentName) {
+        const name = String(agentName || '').trim();
+        if (name === 'todo' || name === 'todo_manager_post' || name === 'post_router') {
+            return ['todo', 'todo_manager_post', 'post_router'];
+        }
+        return [name];
     },
 
     getAgentExecutionState(userMessage, agentName) {
         const executions = this.normalizeAgentExecutions(userMessage);
-        const state = executions[agentName];
-        return state && typeof state === 'object' && !Array.isArray(state) ? state : null;
+        const keys = this.getAgentExecutionLegacyKeys(agentName);
+        for (const key of keys) {
+            const state = executions[key];
+            if (state && typeof state === 'object' && !Array.isArray(state)) return state;
+        }
+        return null;
     },
 
     buildAppliedAgentRuntimeResult(userMessage, agentName) {
@@ -5975,21 +5999,53 @@ const App = {
         return prompt ? { results: [{ prompt, reused: true }], prompts: [prompt] } : null;
     },
 
+    compactAgentExecutionState(current = {}, patch = {}) {
+        const merged = {
+            ...(current && typeof current === 'object' && !Array.isArray(current) ? current : {}),
+            ...(patch && typeof patch === 'object' && !Array.isArray(patch) ? patch : {})
+        };
+        const compact = {};
+        const status = String(merged.status || '').trim();
+        if (status) compact.status = status;
+
+        const rawIntents = Array.isArray(merged.intents) ? merged.intents : (Array.isArray(merged.intentTexts) ? merged.intentTexts : []);
+        const intents = rawIntents.map(text => String(text || '').trim()).filter(Boolean);
+        if (intents.length) compact.intents = intents;
+
+        const suggestions = Array.isArray(merged.suggestions) ? merged.suggestions.filter(Boolean) : [];
+        if (status === 'suggested' && suggestions.length) compact.suggestions = suggestions;
+
+        const reason = String(merged.reason || '').trim();
+        if (reason && status !== 'applied') compact.reason = reason;
+
+        const error = String(merged.error || '').trim();
+        if (error) compact.error = error;
+
+        const message = String(merged.message || '').trim();
+        if (message) compact.message = message;
+
+        const resultPrompt = String(merged.resultPrompt || '').trim();
+        if (resultPrompt) compact.resultPrompt = resultPrompt;
+
+        return compact;
+    },
+
     async setAgentExecutionState(contact, userMessage, agentName, patch = {}) {
         if (!userMessage || typeof userMessage !== 'object') return null;
         const executions = this.normalizeAgentExecutions(userMessage);
-        const current = executions[agentName] && typeof executions[agentName] === 'object'
-            ? executions[agentName]
+        const skillName = this.normalizeAgentExecutionSkillName(agentName);
+        const current = executions[skillName] && typeof executions[skillName] === 'object'
+            ? executions[skillName]
             : {};
-        executions[agentName] = {
-            ...current,
-            ...patch,
-            updatedAt: Date.now()
-        };
+        executions[skillName] = this.compactAgentExecutionState(current, patch);
+        if (skillName === 'todo') {
+            delete executions.todo_manager_post;
+            delete executions.post_router;
+        }
         if (contact && Array.isArray(contact.history)) {
             await Storage.saveContacts();
         }
-        return executions[agentName];
+        return executions[skillName];
     },
 
     normalizeAgentPostTodoSuggestions(postResult) {
@@ -6356,9 +6412,9 @@ const App = {
         if (typeof AgentIntentMarkup === 'undefined') return null;
         if (!assistantText || !assistantMessage) return null;
 
-        const existingRouteState = this.getAgentExecutionState(assistantMessage, 'post_router');
-        if (['skipped', 'routed'].includes(existingRouteState?.status)) {
-            console.log('[PostAgent][总路由] 已有路由状态，本轮跳过:', existingRouteState);
+        const existingRouteState = this.getAgentExecutionState(assistantMessage, 'todo');
+        if (['pending', 'routed', 'suggested', 'applied', 'dismissed', 'skipped', 'failed'].includes(existingRouteState?.status)) {
+            console.log('[Agent][意图括号] 已有 TODO 状态，本轮跳过:', existingRouteState);
             return null;
         }
 
@@ -6372,33 +6428,18 @@ const App = {
 
         try {
             if (!intentTexts.length) {
-                await this.setAgentExecutionState(contact, assistantMessage, 'post_router', {
-                    status: 'skipped',
-                    reason: 'no_intent_markup',
-                    agent: '',
-                    source: 'frontend'
-                });
                 return null;
             }
 
             // ★★★★★ Agent：意图括号路由 START ★★★★★
-            // 主模型只留下自然语言动作意图；这里不再二次判断要不要调用，只把意图交给 TODO 专用 Agent 翻译。
-            await this.setAgentExecutionState(contact, assistantMessage, 'post_router', {
-                status: 'routed',
-                reason: 'intent_markup_routed',
-                agent: 'todo_manager',
-                intents: intentTexts,
-                source: 'frontend'
-            });
+            // 主模型只留下自然语言动作意图；router 不再单独入库，只把意图交给 TODO 专用 Agent 翻译。
             return await this.runAgentTodoIntentOperations(contact, intentTexts, assistantMessage);
             // ★★★★★ Agent：意图括号路由 END ★★★★★
         } catch (error) {
             console.warn('[Agent][意图括号] failed:', error);
-            await this.setAgentExecutionState(contact, assistantMessage, 'post_router', {
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
                 status: 'failed',
-                error: error?.message || String(error),
-                agent: '',
-                source: 'frontend'
+                error: error?.message || String(error)
             });
             return null;
         } finally {
@@ -6414,7 +6455,7 @@ const App = {
             : [];
         if (!validIntentTexts.length || !assistantMessage) return null;
 
-        const existingState = this.getAgentExecutionState(assistantMessage, 'todo_manager_post');
+        const existingState = this.getAgentExecutionState(assistantMessage, 'todo');
         if (['suggested', 'applied', 'skipped', 'failed'].includes(existingState?.status)) {
             console.log('[Agent][TODO意图] 已有状态，本轮跳过:', existingState);
             return null;
@@ -6435,11 +6476,9 @@ const App = {
         });
 
         try {
-            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
                 status: 'pending',
-                error: '',
-                intentTexts: validIntentTexts,
-                source: 'frontend'
+                intents: validIntentTexts
             });
 
             // ★★★★★ Agent：TODO 意图确认 START ★★★★★
@@ -6457,12 +6496,10 @@ const App = {
             // ★★★★★ Agent：TODO 意图确认 END ★★★★★
 
             if (routerResult.intent === 'NONE') {
-                await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
                     status: 'skipped',
                     reason: 'intent_none',
-                    intentTexts: validIntentTexts,
-                    suggestions: [],
-                    source: 'frontend'
+                    intents: validIntentTexts
                 });
                 return null;
             }
@@ -6473,13 +6510,11 @@ const App = {
                     140
                 );
                 this.showTodoTopNotice(`${contact?.name || 'TODO 管理'} 没有执行：${message}`, { type: 'pending' });
-                await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
                     status: 'skipped',
                     reason: 'intent_ask_confirmation',
-                    intentTexts: validIntentTexts,
-                    message,
-                    suggestions: [],
-                    source: 'frontend'
+                    intents: validIntentTexts,
+                    message
                 });
                 return null;
             }
@@ -6492,33 +6527,28 @@ const App = {
                     todoCount: Array.isArray(STATE.todoPlans) ? STATE.todoPlans.length : 0
                 });
                 this.showTodoTopNotice(`${contact?.name || 'TODO 管理'} 没有执行：没有匹配到唯一的 TODO`, { type: 'pending' });
-                await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
                     status: 'skipped',
                     reason: 'intent_no_valid_suggestions',
-                    intentTexts: validIntentTexts,
-                    suggestions: [],
-                    source: 'frontend'
+                    intents: validIntentTexts
                 });
                 return null;
             }
 
-            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
                 status: 'suggested',
-                reason: 'intent_suggested',
-                intentTexts: validIntentTexts,
-                suggestions,
-                source: 'frontend'
+                intents: validIntentTexts,
+                suggestions
             });
             this.showAgentPostTodoSuggestionNotice(contact, assistantMessage, suggestions);
             console.log('[Agent][TODO意图] 已展示确认条:', suggestions);
             return { suggestions };
         } catch (error) {
             console.warn('[Agent][TODO意图] failed:', error);
-            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
                 status: 'failed',
                 error: error?.message || String(error),
-                intentTexts: validIntentTexts,
-                source: 'frontend'
+                intents: validIntentTexts
             });
             this.showTodoTopNotice('TODO 管理没有执行：模型返回格式不正确。', { type: 'failure' });
             return null;
@@ -6533,7 +6563,7 @@ const App = {
         if (typeof AgentTodoManager === 'undefined') return null;
         if (!assistantText || !assistantMessage) return null;
 
-        const existingState = this.getAgentExecutionState(assistantMessage, 'todo_manager_post');
+        const existingState = this.getAgentExecutionState(assistantMessage, 'todo');
         if (['suggested', 'applied', 'dismissed', 'skipped'].includes(existingState?.status)) {
             console.log('[PostAgent][TODO建议] 已有状态，本轮跳过:', existingState);
             return null;
@@ -6554,11 +6584,9 @@ const App = {
         });
 
         try {
-            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
                 status: 'pending',
-                error: '',
-                suggestions: [],
-                source: 'frontend'
+                intents: typeof AgentIntentMarkup !== 'undefined' ? AgentIntentMarkup.extract(assistantText || '') : []
             });
 
             // ★★★★★ Post Agent：回复后 TODO 建议 START ★★★★★
@@ -6576,42 +6604,34 @@ const App = {
             // ★★★★★ Post Agent：回复后 TODO 建议 END ★★★★★
 
             if (postResult.intent === 'NONE') {
-                await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
                     status: 'skipped',
-                    reason: 'post_none',
-                    suggestions: [],
-                    source: 'frontend'
+                    reason: 'post_none'
                 });
                 return null;
             }
 
             const suggestions = this.normalizeAgentPostTodoSuggestions(postResult);
             if (!suggestions.length) {
-                await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
                     status: 'skipped',
-                    reason: 'post_no_valid_suggestions',
-                    suggestions: [],
-                    source: 'frontend'
+                    reason: 'post_no_valid_suggestions'
                 });
                 return null;
             }
 
-            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
                 status: 'suggested',
-                reason: 'post_suggested',
-                suggestions,
-                source: 'frontend'
+                suggestions
             });
             this.showAgentPostTodoSuggestionNotice(contact, assistantMessage, suggestions);
             console.log('[PostAgent][TODO建议] 已展示确认条:', suggestions);
             return { suggestions };
         } catch (error) {
             console.warn('[PostAgent][TODO建议] failed:', error);
-            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
                 status: 'failed',
-                error: error?.message || String(error),
-                suggestions: [],
-                source: 'frontend'
+                error: error?.message || String(error)
             });
             return null;
         } finally {
@@ -6696,11 +6716,10 @@ const App = {
                     type: 'secondary',
                     onAction: async () => {
                         console.log('[PostAgent][TODO建议] 用户忽略建议:', validSuggestions);
-                        await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                        await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
                             status: 'dismissed',
                             reason: 'user_dismissed',
-                            suggestions: validSuggestions,
-                            source: 'frontend'
+                            suggestions: validSuggestions
                         });
                     }
                 }
@@ -6712,11 +6731,10 @@ const App = {
     async applyAgentPostTodoSuggestions(contact, assistantMessage, suggestions = []) {
         if (!Array.isArray(suggestions) || !suggestions.length) {
             console.log('[PostAgent][TODO建议] 用户没有选中任何建议。');
-            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
                 status: 'suggested',
                 reason: 'user_apply_empty_selection',
-                suggestions: this.getAgentExecutionState(assistantMessage, 'todo_manager_post')?.suggestions || [],
-                source: 'frontend'
+                suggestions: this.getAgentExecutionState(assistantMessage, 'todo')?.suggestions || []
             });
             this.showTopNotice('还没有选中要执行的 TODO 建议。', { type: 'pending' });
             return null;
@@ -6757,11 +6775,10 @@ const App = {
 
         if (!applied.length) {
             console.log('[PostAgent][TODO建议] 没有可执行项，可能已重复或目标已变化:', suggestions);
-            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
                 status: 'skipped',
                 reason: 'user_apply_noop',
-                suggestions,
-                source: 'frontend'
+                suggestions
             });
             this.showTodoTopNotice(`${contact?.name || '当前角色'} 没有执行：TODO 可能已重复或目标已变化`, { type: 'pending' });
             return null;
@@ -6770,11 +6787,9 @@ const App = {
         await Storage.saveTodoPlans();
         this.renderTodoPlans();
         this.renderDesktop();
-        await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+        await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
             status: 'applied',
-            reason: 'user_confirmed',
-            suggestions: applied,
-            source: 'frontend'
+            suggestions: applied
         });
         console.log('[PostAgent][TODO建议] 用户确认执行:', applied);
 
@@ -6795,11 +6810,10 @@ const App = {
                 await Storage.saveTodoPlans();
                 this.renderTodoPlans();
                 this.renderDesktop();
-                await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+                await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
                     status: 'suggested',
                     reason: 'user_undo_apply',
-                    suggestions: applied,
-                    source: 'frontend'
+                    suggestions: applied
                 });
                 console.log('[PostAgent][TODO建议] 已撤销确认执行:', applied);
             }
@@ -6817,34 +6831,23 @@ const App = {
             ? postAgentResult.route
             : {};
         const agent = String(route.agent || postAgentResult.agent || '').trim();
-        await this.setAgentExecutionState(contact, assistantMessage, 'post_router', {
-            status: agent ? 'routed' : 'skipped',
-            reason: postAgentResult.reason || (agent ? 'worker_post_router_routed' : 'worker_post_router_none'),
-            agent,
-            source: 'worker'
-        });
-
-        if (agent !== 'todo_manager_post') return true;
+        if (agent !== 'todo_manager_post' && agent !== 'todo') return true;
 
         const suggestions = this.normalizeAgentPostTodoSuggestions({
             operations: Array.isArray(postAgentResult.operations) ? postAgentResult.operations : [],
             todos: Array.isArray(postAgentResult.suggestions) ? postAgentResult.suggestions : []
         });
         if (!suggestions.length) {
-            await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+            await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
                 status: 'skipped',
-                reason: 'worker_post_no_valid_suggestions',
-                suggestions: [],
-                source: 'worker'
+                reason: postAgentResult.reason || 'worker_post_no_valid_suggestions'
             });
             return true;
         }
 
-        await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
+        await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
             status: 'suggested',
-            reason: 'worker_post_suggested',
-            suggestions,
-            source: 'worker'
+            suggestions
         });
         this.showAgentPostTodoSuggestionNotice(contact, assistantMessage, suggestions);
         console.log('[PostAgent][Worker预留] 已消费 Worker 建议:', suggestions);
