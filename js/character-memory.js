@@ -284,8 +284,8 @@ const CharacterMemory = {
 
         const injectDays = Math.max(1, Number.parseInt(memory.injectDays, 10) || this.defaultInjectDays);
         const lines = [
-            '# 角色长期记忆',
-            `以下是该角色最近 ${injectDays} 天，以及用户手动标记为长期记住的关系记忆，请自然参考，不要逐条复述。`
+            '# 过往记忆',
+            `以下是你近期的记忆内容。`
         ];
 
         records.forEach(record => {
