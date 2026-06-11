@@ -1122,7 +1122,11 @@ function injectVolatilePrompt(messages, prompt, insertMode, userMessageIndex) {
   if (insertMode === "system") {
     const systemContent = ["=== 本轮即时系统信息 ===", "", cleanPrompt].join("\n\n");
     const worldInfoIndex = nextMessages.findIndex(message =>
-      message?.role === "system" && String(message.content || "").includes("=== 世界书/环境信息 ===")
+      message?.role === "system"
+      && (
+        String(message.content || "").includes("=== 常驻世界知识/环境信息 ===")
+        || String(message.content || "").includes("=== 背景信息补充 ===")
+      )
     );
     if (worldInfoIndex >= 0) {
       nextMessages[worldInfoIndex].content = [

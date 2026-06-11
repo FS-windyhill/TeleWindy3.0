@@ -523,7 +523,7 @@
 //     - buildAgentTodoManagerRequestSettings(): 生成 TODO 管理 Agent 使用的 API 配置
 //     - runAgentPostAgents(contact, assistantText, assistantMessage): 只在角色回复含『动作意图』时触发 Agent，不再每轮跑总路由
 //     - runAgentTodoIntentOperations(contact, intentTexts, assistantMessage): 把『』内自然语言意图交给 TODO Agent 翻译成待确认建议
-//     - executeAgentTodoSkill(routerResult, contact): 根据 TODO Agent 输出的操作包落地新增/完成/取消/改期等动作
+//     - executeAgentTodoSkill(routerResult, contact): 旧 pre-agent 直接落地入口，根据 TODO Agent 输出的操作包新增/完成/取消/改期
 //     - escapeHtml(text): 渲染 innerHTML 前做 HTML 转义，TO DO、心迹、搜索结果等都会复用
 //     - sanitizeImageSrc(src): 过滤心迹图片地址，拦截 javascript: / SVG data 等危险来源
 //     - renderTodoDatePicker(scope): 渲染 TO DO / 倒数日弹窗的 7 天日期条
@@ -6063,6 +6063,8 @@ const App = {
     },
 
     buildAsyncBackendAgentPayload(contact, userText, requestSettings, userMessage = null) {
+        // ★ 旧 pre-agent 后台执行入口默认关闭；新协议只从角色回复里的『动作意图』触发 TODO 建议。
+        if (requestSettings?.AGENT_LEGACY_PRE_AGENT_ENABLED !== true) return null;
         if (STATE.settings.AGENT_SKILL_ROUTER_ENABLED !== true) return null;
         if (typeof AgentTodoManager === 'undefined') return null;
         if (!userText) return null;
@@ -6104,7 +6106,9 @@ const App = {
         }
     },
 
-    async runAgentTodoManager(contact, userText, userMessage = null) {
+    async runAgentTodoManager(contact, userText, userMessage = null, options = {}) {
+        // ★ 旧 pre-agent 直接落地链路默认关闭；当前主协议只允许『动作意图』走 post-agent 确认条。
+        if (options?.allowLegacyPreAgent !== true) return null;
         if (STATE.settings.AGENT_SKILL_ROUTER_ENABLED !== true) return null;
         if (typeof AgentTodoManager === 'undefined') return null;
         if (!userText) return null;
@@ -6738,6 +6742,8 @@ const App = {
     },
 
     async executeAgentTodoSkill(routerResult, contact) {
+        // ★ 旧 pre-agent 直接落地入口：
+        // 现在主链路不主动调用它；保留给以后恢复“用户消息直接触发 Agent”时复用。
         if (!routerResult || routerResult.intent === 'NONE') return null;
         if (routerResult.intent === 'MANAGE_TODO') {
             return this.executeAgentTodoOperations(this.normalizeAgentTodoOperations(routerResult), contact);
@@ -6761,6 +6767,8 @@ const App = {
     },
 
     async executeAgentTodoOperations(operations = [], contact) {
+        // ★ 旧 pre-agent 直接落地执行器：
+        // 会立刻写入/修改 TODO，并把执行摘要回注主模型；当前『』协议改走确认条，不直接调用这里。
         const validOperations = Array.isArray(operations) ? operations.filter(Boolean) : [];
         if (!validOperations.length) return null;
 
@@ -8968,7 +8976,7 @@ const App = {
             messagesToSend.push({
                 role: 'system',
                 content: [
-                    '=== 今日稳定背景资料 ===',
+                    '=== 今日背景信息 ===',
                     '',
                     ...systemDynamicContextPrompts
                 ].join('\n\n')
@@ -8994,11 +9002,7 @@ const App = {
         if (worldInfoSystemBlocks.length) {
             messagesToSend.push({
                 role: 'system',
-                content: [
-                    '=== 世界书/环境信息 ===',
-                    '',
-                    ...worldInfoSystemBlocks
-                ].join('\n\n')
+                content: worldInfoSystemBlocks.join('\n\n')
             });
         }
 
