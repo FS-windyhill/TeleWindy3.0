@@ -5,6 +5,7 @@
 //
 // 函数目录：
 //   - getTodayKey(now): 获取今天日期 key
+//   - buildCapabilityPrompt(): 生成注入主模型角色描述的 TODO 能力说明
 //   - buildTodoSnapshot(now): 给 worker model 的精简 TODO 列表
 //   - buildExecutorMessages(contact, userText, now, sourceLabel): 生成 TODO 管理执行请求 messages，可标记输入来自用户消息或角色动作意图
 //   - buildPostSuggestionMessages(contact, assistantText, now): 生成回复后 TODO 建议请求 messages
@@ -55,10 +56,17 @@ const AgentTodoManager = {
         return String(value || '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
     },
 
+    buildCapabilityPrompt() {
+        // ★ 能力说明跟随 TODO skill 自己走；Router 只负责分发，不背业务提示词。
+        return '你能管理对方的 todo 日程。当你想为对方新增、修改、完成或删除一件日程时，把你的意图放进『』内，如『把“论文整理”设为已完成』或『加一个“吃肯德基”的计划』，todo系统会为你解析并执行';
+    },
+
     buildTodoSnapshot(now = new Date()) {
         const todayKey = this.getTodayKey(now);
         return (STATE.todoPlans || [])
             .filter(item => item && item.text)
+            // ★ 只给 Agent 今天和未来的 TODO，避免过往已完成/已取消事项把注意力和 token 都拖走。
+            .filter(item => (this.isDateKey(item.dateKey) ? item.dateKey : todayKey) >= todayKey)
             .sort((a, b) => {
                 if (a.done !== b.done) return a.done ? 1 : -1;
                 if (a.dateKey !== b.dateKey) return String(a.dateKey).localeCompare(String(b.dateKey));

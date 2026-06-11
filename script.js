@@ -5658,10 +5658,14 @@ const App = {
 
     buildAgentCapabilityPrompt() {
         // ★★★★★ Agent：能力注入 START ★★★★★
-        // 开启 skill 后才把能力写进角色描述；没有任何 skill 时不塞光秃秃的「# 能力」标题。
+        // 开启 skill 后向各 skill 收集能力说明；Router 只管分发，不直接塞业务 prompt。
         const capabilities = [];
-        if (STATE.settings.AGENT_SKILL_ROUTER_ENABLED === true) {
-            capabilities.push('你能操作对方的 todo 日程。当你自然地想为对方新增、修改、完成或删除一件待办/计划/提醒时，用『』包裹你的行动意图，比如『把“论文整理”设为已完成』或『加一个“吃肯德基”的计划』。');
+        if (
+            STATE.settings.AGENT_SKILL_ROUTER_ENABLED === true
+            && typeof AgentTodoManager !== 'undefined'
+            && typeof AgentTodoManager.buildCapabilityPrompt === 'function'
+        ) {
+            capabilities.push(AgentTodoManager.buildCapabilityPrompt());
         }
         if (!capabilities.length) return '';
         return [
@@ -8768,9 +8772,6 @@ const App = {
                 // ============================================
                 if (msg.role === 'assistant') {
                     content = content.replace(/<(?:think|thinking|thought)>[\s\S]*?<\/(?:think|thinking|thought)>/gi, '').trim();
-                    if (typeof AgentIntentMarkup !== 'undefined') {
-                        content = AgentIntentMarkup.strip(content);
-                    }
                 }
 
 

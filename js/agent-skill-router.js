@@ -6,7 +6,7 @@
 //
 // 函数目录：
 //   - AgentIntentMarkup.extract(text): 从角色回复里提取『』包裹的动作意图
-//   - AgentIntentMarkup.strip(text): 从 UI 和历史上下文里隐藏『』动作意图
+//   - AgentIntentMarkup.strip(text): 从 UI 展示层隐藏『』动作意图
 //   - buildRouterMessages(contact, userText): 生成通用 Agent 路由 messages
 //   - buildPostRouterMessages(contact, assistantText): 旧版回复后总路由 messages，当前主链路不再主动使用
 //   - extractJson(rawText): 从 worker model 返回里抽出 JSON
@@ -32,7 +32,7 @@ const AgentIntentMarkup = {
     },
 
     strip(text) {
-        // ★ 『』是给动作系统看的意图余波，聊天气泡里不展示。
+        // ★ 『』是给动作系统看的意图余波，只在聊天气泡/预览里隐藏，原始历史保留给主模型。
         return String(text || '')
             .replace(/[ \t]*『[\s\S]*?』[ \t]*/g, '')
             .replace(/\n{3,}/g, '\n\n')

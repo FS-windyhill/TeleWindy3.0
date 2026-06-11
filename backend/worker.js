@@ -1164,15 +1164,20 @@ function sanitizeAgentPayload(agent, defaultAuthMode) {
 
 function sanitizeTodoSnapshot(items) {
   if (!Array.isArray(items)) return [];
-  return items.slice(0, 100).map(item => ({
-    id: cleanAgentText(item?.id || "", 80),
-    text: cleanAgentText(item?.text || "", 120),
-    dateKey: isDateKey(item?.dateKey) ? item.dateKey : getDateKey(new Date()),
-    done: item?.done === true,
-    cancelled: item?.cancelled === true,
-    startTime: isTimeValue(item?.startTime) ? item.startTime : "",
-    endTime: isTimeValue(item?.endTime) ? item.endTime : ""
-  })).filter(item => item.id && item.text);
+  const todayKey = getDateKey(new Date());
+  return items
+    // ★ 后台兜底也只保留今天和未来的 TODO，避免旧前端把大段历史事项带进 Agent。
+    .filter(item => item && item.text && (isDateKey(item.dateKey) ? item.dateKey : todayKey) >= todayKey)
+    .slice(0, 100)
+    .map(item => ({
+      id: cleanAgentText(item?.id || "", 80),
+      text: cleanAgentText(item?.text || "", 120),
+      dateKey: isDateKey(item?.dateKey) ? item.dateKey : todayKey,
+      done: item?.done === true,
+      cancelled: item?.cancelled === true,
+      startTime: isTimeValue(item?.startTime) ? item.startTime : "",
+      endTime: isTimeValue(item?.endTime) ? item.endTime : ""
+    })).filter(item => item.id && item.text);
 }
 
 function extractJsonObject(rawText) {
