@@ -1052,7 +1052,7 @@ const API = {
             }
         };
 
-            window.LAST_API_LOG = {
+            this.setLatestMainContextLog({
                 content: JSON.stringify(asyncLogPayload, null, 2),
                 tokens: 0,
                 prompt_tokens: 0,
@@ -1067,7 +1067,7 @@ const API = {
                 source: 'async-backend',
                 history_window: settings.HISTORY_WINDOW_LOG || null,
                 request_cache_debug: settings.REQUEST_CACHE_DEBUG_LOG || null
-            };
+            });
         } catch (error) {
             console.error('[AsyncBackend] log record failed:', error);
         }
@@ -1129,6 +1129,7 @@ const API = {
                     window.LAST_API_LOG.has_prompt_cache_usage = false;
                     window.LAST_API_LOG.isEstimated = true;
                 }
+                this.persistContextLog('main', window.LAST_API_LOG);
             }
 
             await this.deleteChatJob(backendUrl, job.jobId, settings.ASYNC_BACKEND_TOKEN);
@@ -1643,31 +1644,70 @@ const API = {
     
     // ============================================
     // ============================================
+    persistContextLog(kind, log) {
+        const key = kind === 'agent' ? CONFIG.AGENT_CONTEXT_LOG_KEY : CONFIG.MAIN_CONTEXT_LOG_KEY;
+        if (!key || typeof DB === 'undefined' || !log) return;
+        // ★ 上下文日志只保留最新一条，直接覆盖 IndexedDB；失败不影响聊天主流程。
+        DB.set(key, log).catch(error => console.warn('[ContextLog] save failed:', error));
+    },
+
+    setLatestMainContextLog(log) {
+        window.LAST_API_LOG = log || null;
+        if (log) this.persistContextLog('main', log);
+        return window.LAST_API_LOG;
+    },
+
+    async getLatestMainContextLog() {
+        if (window.LAST_API_LOG) return window.LAST_API_LOG;
+        if (typeof DB === 'undefined' || !CONFIG.MAIN_CONTEXT_LOG_KEY) return null;
+        const log = await DB.get(CONFIG.MAIN_CONTEXT_LOG_KEY);
+        if (log) window.LAST_API_LOG = log;
+        return log || null;
+    },
+
     ensureAgentContextLogs() {
         if (!window.AGENT_CONTEXT_LOGS || typeof window.AGENT_CONTEXT_LOGS !== 'object') {
-            window.AGENT_CONTEXT_LOGS = { pre: [], post: [] };
+            window.AGENT_CONTEXT_LOGS = { latest: null, pre: [], post: [] };
         }
         if (!Array.isArray(window.AGENT_CONTEXT_LOGS.pre)) window.AGENT_CONTEXT_LOGS.pre = [];
         if (!Array.isArray(window.AGENT_CONTEXT_LOGS.post)) window.AGENT_CONTEXT_LOGS.post = [];
+        if (!('latest' in window.AGENT_CONTEXT_LOGS)) window.AGENT_CONTEXT_LOGS.latest = null;
         return window.AGENT_CONTEXT_LOGS;
     },
 
     recordAgentContextLog(phase, entry = {}) {
         const logs = this.ensureAgentContextLogs();
-        const key = phase === 'post' ? 'post' : 'pre';
-        logs[key].push({
+        const key = phase === 'pre' ? 'pre' : 'post';
+        const log = {
             id: `agent_log_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
             phase: key,
             ...entry
-        });
-        logs[key] = logs[key].slice(-20);
-        return logs[key][logs[key].length - 1];
+        };
+        // ★ Agent 日志不再维护 Pre/Post 列表，只保留最新一次模型调用；pre/post 数组只给旧引用兜底。
+        logs.latest = log;
+        logs.pre = key === 'pre' ? [log] : [];
+        logs.post = key === 'post' ? [log] : [];
+        this.persistContextLog('agent', log);
+        return log;
     },
 
     getLatestAgentContextLog(phase) {
         const logs = this.ensureAgentContextLogs();
-        const key = phase === 'post' ? 'post' : 'pre';
-        return logs[key][logs[key].length - 1] || null;
+        if (!phase || !logs.latest || logs.latest.phase === phase) return logs.latest || null;
+        return null;
+    },
+
+    async getLatestAgentContextLogPersisted() {
+        const logs = this.ensureAgentContextLogs();
+        if (logs.latest) return logs.latest;
+        if (typeof DB === 'undefined' || !CONFIG.AGENT_CONTEXT_LOG_KEY) return null;
+        const log = await DB.get(CONFIG.AGENT_CONTEXT_LOG_KEY);
+        if (log) {
+            logs.latest = log;
+            logs.pre = log.phase === 'pre' ? [log] : [];
+            logs.post = log.phase === 'post' ? [log] : [];
+        }
+        return log || null;
     },
 
     getAgentContextLogs() {
@@ -1820,7 +1860,7 @@ const API = {
                     ...apiLogEntry
                 });
             } else {
-                window.LAST_API_LOG = apiLogEntry;
+                this.setLatestMainContextLog(apiLogEntry);
             }
 
         } catch (error) {
@@ -1842,7 +1882,10 @@ const API = {
         console.log(`[${provider}] Raw Response:`, data);
         if (isAgentContextLog) {
             const latestAgentLog = this.getLatestAgentContextLog(agentLogPhase);
-            if (latestAgentLog) latestAgentLog.response = JSON.stringify(data, null, 2);
+            if (latestAgentLog) {
+                latestAgentLog.response = JSON.stringify(data, null, 2);
+                this.persistContextLog('agent', latestAgentLog);
+            }
         }
 
         try {
@@ -1915,6 +1958,7 @@ const API = {
 
                     console.log("API未返回真实Token，已使用估算Token:", estimatedTokens);
                 }
+                this.persistContextLog(isAgentContextLog ? 'agent' : 'main', updateLogTarget);
             }
         } catch (error) {
             console.error("【Token日志处理失败】", error);
@@ -5621,7 +5665,10 @@ const App = {
 
         const agentLogs = typeof API !== 'undefined' && typeof API.getAgentContextLogs === 'function'
             ? API.getAgentContextLogs()
-            : { pre: [], post: [] };
+            : { latest: null, pre: [], post: [] };
+        const agentLogStatus = agentLogs.latest
+            ? `最新：${agentLogs.latest.label || 'Agent 调用'}`
+            : '点击查看最新记录';
 
         list.innerHTML = `
             <div class="agent-card" data-agent-log="context">
@@ -5632,7 +5679,7 @@ const App = {
                 </div>
                 <div class="agent-card-info">
                     <div class="agent-card-name">Agent 上下文日志</div>
-                    <div class="agent-card-status">Pre ${agentLogs.pre.length} 条 · Post ${agentLogs.post.length} 条</div>
+                    <div class="agent-card-status">${this.escapeHtml(agentLogStatus)}</div>
                 </div>
                 <span class="agent-card-arrow">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
@@ -5716,21 +5763,26 @@ const App = {
         `;
     },
 
-    openAgentContextLogModal() {
-        // ★★★★★ Agent 上下文日志 START：Pre / Post 独立查看 ★★★★★
-        // 主“上下文日志”只保留主模型请求；Agent 模型调用集中放在 Agent 页面里查看。
+    async openAgentContextLogModal() {
+        // ★★★★★ Agent 上下文日志 START：最新一条持久化查看 ★★★★★
+        // Agent 模型日志只保留最新一次调用，面板样式跟主模型“上下文日志”保持一致。
         let modal = document.getElementById('agent-context-log-modal');
         if (!modal) {
             modal = document.createElement('div');
             modal.id = 'agent-context-log-modal';
-            modal.className = 'modal-overlay hidden';
+            modal.className = 'log-modal hidden';
             modal.innerHTML = `
-                <div class="modal glass-panel agent-log-modal">
-                    <div class="agent-log-header">
-                        <h2>Agent 上下文日志</h2>
+                <div class="glass-panel log-modal-content">
+                    <div class="log-modal-header">
+                        <div>
+                            <h3 class="shangxiawen">Agent 上下文日志</h3>
+                        </div>
                         <button id="agent-context-log-close-btn" class="log-close-btn" type="button">&times;</button>
                     </div>
-                    <div id="agent-context-log-body" class="agent-log-body"></div>
+                    <div class="log-modal-body">
+                        <pre><code id="agent-context-log-content" class="log-content-text">暂无 Agent 调用记录...</code></pre>
+                    </div>
+                    <div id="agent-context-log-token" class="log-token-count"></div>
                 </div>
             `;
             document.body.appendChild(modal);
@@ -5741,18 +5793,58 @@ const App = {
             });
         }
 
-        const logs = typeof API !== 'undefined' && typeof API.getAgentContextLogs === 'function'
-            ? API.getAgentContextLogs()
-            : { pre: [], post: [] };
-        const body = document.getElementById('agent-context-log-body');
-        if (body) {
-            body.innerHTML = [
-                this.renderAgentContextLogColumn('Pre Agent', logs.pre),
-                this.renderAgentContextLogColumn('Post Agent', logs.post)
-            ].join('');
+        const log = typeof API !== 'undefined' && typeof API.getLatestAgentContextLogPersisted === 'function'
+            ? await API.getLatestAgentContextLogPersisted()
+            : null;
+        const contentEl = document.getElementById('agent-context-log-content');
+        const tokenEl = document.getElementById('agent-context-log-token');
+        if (log) {
+            const promptTokens = log.prompt_tokens ?? log.tokens ?? 0;
+            const completionTokens = log.completion_tokens ?? 0;
+            const totalTokens = log.total_tokens ?? promptTokens + completionTokens;
+            const tokenSource = log.isEstimated ? '估算' : '真实';
+            const sourceText = log.label || 'Agent 调用';
+            const hasPromptCacheUsage = log.has_prompt_cache_usage === true;
+            const hitTokens = log.prompt_cache_hit_tokens ?? 0;
+            const missTokens = log.prompt_cache_miss_tokens ?? 0;
+            const hitRate = log.prompt_cache_hit_rate;
+            const hitRateText = Number.isFinite(hitRate) ? `${(hitRate * 100).toFixed(2)}%` : '暂无比例';
+            const promptCacheText = hasPromptCacheUsage
+                ? `${hitTokens} 命中 / ${missTokens} 未命中（${hitRateText}）`
+                : '未返回';
+
+            if (contentEl) contentEl.innerText = log.content || log.request || '无请求记录';
+            if (tokenEl) {
+                tokenEl.innerHTML = `
+                    <div class="log-token-grid single">
+                        <div class="log-token-column">
+                            <div>来源：${this.escapeHtml(sourceText)}（${this.escapeHtml(tokenSource)} Token）</div>
+                            <div>输入 Token：${this.escapeHtml(promptTokens)}</div>
+                            <div>输出 Token：${this.escapeHtml(completionTokens)}</div>
+                            <div>总 Token：${this.escapeHtml(totalTokens)}</div>
+                            <div>缓存命中：${this.escapeHtml(promptCacheText)}</div>
+                        </div>
+                    </div>
+                `;
+            }
+        } else {
+            if (contentEl) contentEl.innerText = '暂无 Agent 调用记录。';
+            if (tokenEl) {
+                tokenEl.innerHTML = `
+                    <div class="log-token-grid single">
+                        <div class="log-token-column">
+                            <div>来源：无</div>
+                            <div>输入 Token：0</div>
+                            <div>输出 Token：0</div>
+                            <div>总 Token：0</div>
+                            <div>缓存命中：未返回</div>
+                        </div>
+                    </div>
+                `;
+            }
         }
         modal.classList.remove('hidden');
-        // ★★★★★ Agent 上下文日志 END：Pre / Post 独立查看 ★★★★★
+        // ★★★★★ Agent 上下文日志 END：最新一条持久化查看 ★★★★★
     },
 
     async toggleAgentTodoManagerEnabled(enabled) {
@@ -5937,7 +6029,20 @@ const App = {
             }
 
             const candidates = AgentTodoManager.findTodoCandidates(operation);
-            if (candidates.length !== 1) return null;
+            if (candidates.length !== 1) {
+                console.warn('[Agent][TODO建议] 目标匹配失败:', {
+                    operation,
+                    candidateCount: candidates.length,
+                    candidates: candidates.map(item => ({
+                        id: item.id,
+                        text: item.text,
+                        dateKey: item.dateKey,
+                        done: item.done === true,
+                        cancelled: item.cancelled === true
+                    }))
+                });
+                return null;
+            }
             const target = candidates[0];
             const patchInfo = this.buildTodoPatchFromOperation(operation);
             if (!patchInfo || !Object.keys(patchInfo.patch).length) return null;
@@ -6381,6 +6486,12 @@ const App = {
 
             const suggestions = this.normalizeAgentPostTodoSuggestions(routerResult);
             if (!suggestions.length) {
+                console.warn('[Agent][TODO意图] 操作包没有匹配到可执行 TODO:', {
+                    intentTexts: validIntentTexts,
+                    operations: routerResult.operations,
+                    todoCount: Array.isArray(STATE.todoPlans) ? STATE.todoPlans.length : 0
+                });
+                this.showTodoTopNotice(`${contact?.name || 'TODO 管理'} 没有执行：没有匹配到唯一的 TODO`, { type: 'pending' });
                 await this.setAgentExecutionState(contact, assistantMessage, 'todo_manager_post', {
                     status: 'skipped',
                     reason: 'intent_no_valid_suggestions',
@@ -12016,7 +12127,7 @@ const App = {
         // 1. 打开日志弹窗的按钮
         // 日志
         // 1. 打开日志弹窗的按钮
-        document.getElementById('btn-show-log').addEventListener('click', () => {
+        document.getElementById('btn-show-log').addEventListener('click', async () => {
             const logModal = document.getElementById('log-display-modal');
             const logContent = document.getElementById('log-content');
             const logToken = document.getElementById('log-token-count');
@@ -12055,7 +12166,11 @@ const App = {
             };
             
             // 从全局变量读取刚才 API 存进去的数据
-            if (window.LAST_API_LOG) {
+            const latestMainLog = typeof API !== 'undefined' && typeof API.getLatestMainContextLog === 'function'
+                ? await API.getLatestMainContextLog()
+                : window.LAST_API_LOG;
+            if (latestMainLog) {
+                window.LAST_API_LOG = latestMainLog;
                 const promptTokens = window.LAST_API_LOG.prompt_tokens ?? window.LAST_API_LOG.tokens ?? 0;
                 const completionTokens = window.LAST_API_LOG.completion_tokens ?? 0;
                 const totalTokens = window.LAST_API_LOG.total_tokens ?? promptTokens + completionTokens;

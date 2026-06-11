@@ -3715,9 +3715,11 @@ body.dark-mode .edit-buttons .primary {
     border-radius: 4px;
 }
 
-#log-content {
+#log-content,
+.log-content-text {
     white-space: pre-wrap;
     word-wrap: break-word;
+    overflow-wrap: anywhere;
     font-family: monospace;
     font-size: 12px;
     color: #0f0;
@@ -3759,6 +3761,10 @@ body.dark-mode .edit-buttons .primary {
     grid-template-columns: minmax(0, 1fr) minmax(0, 0.78fr);
     gap: 8px 12px;
     align-items: start;
+}
+
+.log-token-grid.single {
+    grid-template-columns: minmax(0, 1fr);
 }
 
 .log-token-column {

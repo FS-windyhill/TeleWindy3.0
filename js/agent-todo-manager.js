@@ -56,6 +56,16 @@ const AgentTodoManager = {
         return String(value || '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
     },
 
+    normalizeMatchText(value) {
+        // ★ TODO 匹配用：抹平全半角、空白和常见引号，避免模型多/少一点标点就找不到目标。
+        return String(value || '')
+            .normalize('NFKC')
+            .toLowerCase()
+            .replace(/[“”"『』「」'`]/g, '')
+            .replace(/\s+/g, '')
+            .trim();
+    },
+
     buildCapabilityPrompt() {
         // ★ 能力说明跟随 TODO skill 自己走；Router 只负责分发，不背业务提示词。
         return '你能管理对方的 todo 日程。当你想为对方新增、修改、完成或删除一件日程时，把你的意图放进『』内，如『把“论文整理”设为已完成』或『加一个“吃肯德基”的计划』，todo系统会为你解析并执行';
@@ -311,19 +321,46 @@ const AgentTodoManager = {
     findTodoCandidates(routerResult) {
         const update = routerResult?.update || routerResult || {};
         const matchId = this.cleanText(update.id || update.todoId || update.targetTodoId || '', 80);
-        const matchText = this.cleanText(update.matchText || update.targetText || update.text || update.oldText || '', 80).toLowerCase();
+        const matchText = this.cleanText(update.matchText || update.targetText || update.text || update.oldText || '', 80);
+        const matchTextKey = this.normalizeMatchText(matchText);
         const dateKey = this.isDateKey(update.dateKey) ? update.dateKey : '';
 
-        const includeCancelled = this.normalizeAction(update.action) === 'restore';
+        const action = this.normalizeAction(update.action);
+        const includeCancelled = action === 'restore';
         let items = (STATE.todoPlans || []).filter(item => item && item.text && (includeCancelled || item.cancelled !== true));
+        if (action === 'complete') {
+            items = items.filter(item => item.done !== true);
+        }
         if (matchId) items = items.filter(item => item.id === matchId);
-        if (dateKey) items = items.filter(item => item.dateKey === dateKey);
-        if (matchText) {
-            items = items.filter(item => String(item.text || '').toLowerCase().includes(matchText));
+        const beforeDateFilter = items;
+        if (dateKey) items = items.filter(item => (item.dateKey || this.getTodayKey()) === dateKey);
+        if (matchTextKey) {
+            const pickByText = sourceItems => {
+                const keyedItems = sourceItems
+                    .map(item => ({ item, key: this.normalizeMatchText(item.text || '') }))
+                    .filter(entry => entry.key);
+                const exactMatches = keyedItems
+                    .filter(entry => entry.key === matchTextKey)
+                    .map(entry => entry.item);
+                if (exactMatches.length) return exactMatches;
+
+                const containsMatches = keyedItems
+                    .filter(entry => entry.key.includes(matchTextKey))
+                    .map(entry => entry.item);
+                if (containsMatches.length) return containsMatches;
+
+                // ★ 只有没有更完整匹配时，才允许 targetText 包含现有 TODO 文本；否则会把拆开的旧任务一起捞进来。
+                return keyedItems
+                    .filter(entry => matchTextKey.includes(entry.key))
+                    .map(entry => entry.item);
+            };
+            const textMatchedItems = pickByText(items);
+            // ★ 日期被模型猜错时，先在全列表里找“精确文本”唯一命中，再考虑宽松匹配。
+            items = textMatchedItems.length ? textMatchedItems : (dateKey ? pickByText(beforeDateFilter) : textMatchedItems);
         }
 
         // ★ 没给任何线索时不猜，交回确认流程。
-        if (!matchId && !matchText && !dateKey) return [];
+        if (!matchId && !matchTextKey && !dateKey) return [];
         return items;
     },
 

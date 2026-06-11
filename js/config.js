@@ -34,6 +34,8 @@ const CONFIG = {
     COUNTDOWN_DAYS_KEY: 'teleWindy_countdown_days_v1',
     CHARACTER_SCHEDULES_KEY: 'teleWindy_character_schedules_v1',
     CHARACTER_MEMORIES_KEY: 'teleWindy_character_memories_v1',
+    MAIN_CONTEXT_LOG_KEY: 'teleWindy_main_context_log_v1',
+    AGENT_CONTEXT_LOG_KEY: 'teleWindy_agent_context_log_v1',
 
     CHAT_PAGE_SIZE: 15,
     MOMENTS_PAGE_SIZE: 15, // 心迹分页数
