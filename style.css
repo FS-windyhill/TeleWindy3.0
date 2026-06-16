@@ -2580,7 +2580,7 @@ button#wi-scope-cancel-btn.cancel-btn {
 
 
 
-body.dark-mode .button#wi-scope-save-btn.save-btn {
+body.dark-mode button#wi-scope-save-btn.save-btn {
   
     background: var(--btn-color);
     color: #ffffff;
@@ -2591,7 +2591,7 @@ body.dark-mode .button#wi-scope-save-btn.save-btn {
 
 
 
-body.dark-mode .button#wi-scope-cancel-btn.cancel-btn {
+body.dark-mode button#wi-scope-cancel-btn.cancel-btn {
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
@@ -5021,7 +5021,7 @@ body.custom-mode .gist-btn.primary, body.custom-mode #fetch-models-btn.fetch-mod
 }
 
 body.custom-mode .wi-btn.secondary {
-    background: #3a3a3a;
+    background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
 }
@@ -6017,7 +6017,7 @@ body.custom-mode .worldbook-scope-checkbox-group {
 }
 
 
-body.custom-mode .button#wi-scope-save-btn.save-btn {
+body.custom-mode button#wi-scope-save-btn.save-btn {
   
     background: var(--btn-color);
     color: #ffffff;
@@ -6028,7 +6028,7 @@ body.custom-mode .button#wi-scope-save-btn.save-btn {
 
 
 
-body.custom-mode .button#wi-scope-cancel-btn.cancel-btn {
+body.custom-mode button#wi-scope-cancel-btn.cancel-btn {
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
