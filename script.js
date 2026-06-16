@@ -181,10 +181,9 @@
 //       - allowedChars: 允许参与心迹的角色列表
 //     - MAX_TOKENS: 默认最大输出 token
 //     - TEMPERATURE: 默认温度参数
-//     - CONTEXT_LIMIT: 默认上下文限制
-//     - HISTORY_WINDOW_STRATEGY: 历史窗口策略，cache_friendly 为分块缓存友好，strict_recent 为严格最近 N 条
-//     - HISTORY_WINDOW_BLOCK_SIZE: 缓存友好模式下每块原始历史消息数
-//     - HISTORY_WINDOW_EXTRA_BLOCKS: 缓存友好模式下额外保留的历史块数
+//     - CONTEXT_LIMIT: 缓存友好模式的最短上下文；严格模式下就是最近 N 条
+//     - HISTORY_WINDOW_STRATEGY: 历史窗口策略，cache_friendly 为最短/最长窗口，strict_recent 为严格最近 N 条
+//     - HISTORY_WINDOW_MAX_CONTEXT: 缓存友好模式下窗口增长到的最长上下文
 //     - DYNAMIC_CONTEXT_INSERT_MODE: 本轮动态背景插入方式，auto 为缓存优化，system 为独立消息，user 为兼容模式
 //     - CUSTOM_REQUEST_BODY_JSON: 自定义请求体附加 JSON
 //     - REQUEST_BODY_PRESETS: 请求体参数预设列表
@@ -464,7 +463,7 @@
 //     - handleSend(isReroll): 异步处理消息发送或重新生成（Reroll），包括API配置准备、内容处理、识图、上下文构建、AI请求和UI更新
 //     - openSettings(): 打开设置弹窗，加载并回显所有设置项的值（API配置、视觉配置、壁纸、主题、CSS等）
 //     - switchWorldInfoBook(bookId): 切换当前编辑的世界书，更新UI和列表
-//     - bindCurrentBookToChar(charId): 将当前选中的世界书绑定到指定角色ID
+//     - bindCurrentBookToChars(charIds): 将当前选中的世界书绑定到指定角色范围，空数组代表全局
 //     - loadWorldInfoEntry(uid): 根据唯一标识符(uid)加载世界书条目数据到编辑表单中
 //     - saveWorldInfoEntry(): 异步保存当前编辑的世界书条目（新建或更新），处理键词、内容和常量标志
 //     - deleteWorldInfoEntry(): 异步删除当前编辑的世界书条目
@@ -2069,7 +2068,8 @@ const UI = {
         wiModal: document.getElementById('world-info-modal'),
         wiList: document.getElementById('wi-list-container'),
         wiBookSelect: document.getElementById('wi-book-select'), // ★★★ 新增：大分类选择
-        wiBookCharSelect: document.getElementById('wi-book-char-select'), // ★★★ 新增：大分类绑定角色
+        wiBookScopeBtn: document.getElementById('wi-book-scope-btn'), // 世界书生效范围按钮
+        wiBookScopeSummary: document.getElementById('wi-book-scope-summary'), // 世界书生效范围摘要
         
         settingUrl: document.getElementById('custom-api-url'),
         settingKey: document.getElementById('custom-api-key'),
@@ -2925,9 +2925,20 @@ const UI = {
 
     updateCurrentBookSettingsUI() {
         const book = STATE.worldInfoBooks.find(b => b.id === STATE.currentBookId);
-        if (book && this.els.wiBookCharSelect) {
-            this.els.wiBookCharSelect.value = book.characterId || "";
+        if (!book || !this.els.wiBookScopeSummary) return;
+
+        const scopeIds = App.getWorldInfoBookScopeIds(book);
+        if (scopeIds.length === 0) {
+            this.els.wiBookScopeSummary.textContent = '全局生效';
+            return;
         }
+
+        const names = scopeIds
+            .map(id => STATE.contacts.find(c => c.id === id)?.name)
+            .filter(Boolean);
+        this.els.wiBookScopeSummary.textContent = names.length
+            ? names.join('、')
+            : `已选 ${scopeIds.length} 个角色`;
     },
 
     // ★★★ 渲染世界书：条目列表（纯逻辑版）★★★
@@ -2969,19 +2980,7 @@ const UI = {
 
     // ★★★ 初始化世界书 Tab 的数据 ★★★
     initWorldInfoTab() {
-        // 1. 填充书的全局绑定角色下拉框
-        const charSelect = this.els.wiBookCharSelect;
-        if (charSelect) {
-            charSelect.innerHTML = '<option value="">全局 (对所有角色生效)</option>';
-            STATE.contacts.forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c.id;
-                opt.innerText = c.name;
-                charSelect.appendChild(opt);
-            });
-        }
-        
-        // 2. 渲染大分类，并触发一次列表渲染
+        // 1. 渲染大分类，并触发一次列表渲染
         this.renderBookSelect();
         this.renderWorldInfoList();
         App.clearWorldInfoEditor(); 
@@ -8385,12 +8384,11 @@ const App = {
 
     selectHistoryWindowRecords(contact, requestSettings) {
         const history = Array.isArray(contact?.history) ? contact.history : [];
-        const limit = Math.max(1, parseInt(requestSettings.CONTEXT_LIMIT, 10) || 30);
+        const minLimit = Math.max(1, parseInt(requestSettings.CONTEXT_LIMIT, 10) || 5);
+        const maxLimit = Math.max(minLimit, parseInt(requestSettings.HISTORY_WINDOW_MAX_CONTEXT, 10) || 25);
         const strategy = requestSettings.HISTORY_WINDOW_STRATEGY === 'strict_recent'
             ? 'strict_recent'
             : 'cache_friendly';
-        const blockSize = Math.max(1, Math.min(100, parseInt(requestSettings.HISTORY_WINDOW_BLOCK_SIZE, 10) || 20));
-        const extraBlocks = Math.max(0, Math.min(10, parseInt(requestSettings.HISTORY_WINDOW_EXTRA_BLOCKS, 10) || 0));
 
         const eligibleRecords = history
             .map((msg, index) => ({ msg, index }))
@@ -8402,19 +8400,23 @@ const App = {
 
         if (strategy === 'strict_recent') {
             const visibleRecords = eligibleRecords.filter(record => record.msg?.isHidden !== true);
-            const selected = visibleRecords.slice(-limit);
+            const selected = visibleRecords.slice(-minLimit);
             return {
                 records: selected,
                 log: {
                     strategy: '严格最近 N 条',
                     startIndex: selected.length ? selected[0].index + 1 : 0,
                     rawCount: selected.length,
-                    sentCount: 0
-                }
+                    sentCount: 0,
+                    minContext: minLimit,
+                    maxContext: maxLimit
+                },
+                changed: false
             };
         }
 
-        const latestSeq = eligibleRecords.reduce((max, record) => {
+        const visibleRecords = eligibleRecords.filter(record => record.msg?.isHidden !== true);
+        const latestSeq = visibleRecords.reduce((max, record) => {
             const seq = Number.isInteger(record.msg?.cacheSeq) ? record.msg.cacheSeq : -1;
             return Math.max(max, seq);
         }, -1);
@@ -8426,22 +8428,40 @@ const App = {
                     strategy: '缓存友好',
                     startIndex: 0,
                     rawCount: 0,
-                    sentCount: 0
-                }
+                    sentCount: 0,
+                    minContext: minLimit,
+                    maxContext: maxLimit
+                },
+                changed: false
             };
         }
 
-        const latestBlock = Math.floor(latestSeq / blockSize);
-        const baseBlocks = Math.max(1, Math.ceil(limit / blockSize));
-        const totalBlocks = baseBlocks + extraBlocks;
-        const startBlock = Math.max(0, latestBlock - totalBlocks + 1);
+        let changed = false;
+        const minStartRecord = visibleRecords.slice(-minLimit)[0] || visibleRecords[0];
+        let startSeq = Number.isInteger(contact?.historyWindowStartSeq)
+            ? contact.historyWindowStartSeq
+            : -1;
 
-        const selected = eligibleRecords
+        // ★ 缓存友好窗口：先固定最近“最短上下文”的起点，再只往尾部追加。
+        // 增长到“最长上下文”后重新换成最近的最短窗口，避免上下文条数被块大小放大。
+        let selected = visibleRecords
             .filter(record => {
                 const seq = Number.isInteger(record.msg?.cacheSeq) ? record.msg.cacheSeq : -1;
-                return seq >= 0 && Math.floor(seq / blockSize) >= startBlock;
-            })
-            .filter(record => record.msg?.isHidden !== true);
+                return seq >= 0 && seq >= startSeq;
+            });
+
+        if (startSeq < 0 || latestSeq < startSeq || selected.length < Math.min(minLimit, visibleRecords.length) || selected.length > maxLimit) {
+            startSeq = Number.isInteger(minStartRecord?.msg?.cacheSeq) ? minStartRecord.msg.cacheSeq : 0;
+            selected = visibleRecords.filter(record => {
+                const seq = Number.isInteger(record.msg?.cacheSeq) ? record.msg.cacheSeq : -1;
+                return seq >= 0 && seq >= startSeq;
+            });
+        }
+
+        if (contact && contact.historyWindowStartSeq !== startSeq) {
+            contact.historyWindowStartSeq = startSeq;
+            changed = true;
+        }
 
         return {
             records: selected,
@@ -8450,11 +8470,12 @@ const App = {
                 startIndex: selected.length ? selected[0].index + 1 : 0,
                 rawCount: selected.length,
                 sentCount: 0,
-                blockSize,
-                extraBlocks,
-                startBlock,
-                latestBlock
-            }
+                minContext: minLimit,
+                maxContext: maxLimit,
+                startSeq,
+                latestSeq
+            },
+            changed
         };
     },
     // ★★★★★ 缓存友好历史窗口 END ★★★★★
@@ -8556,10 +8577,9 @@ const App = {
 
             MAX_TOKENS: STATE.settings.MAX_TOKENS || 32700,
             TEMPERATURE: STATE.settings.TEMPERATURE !== undefined ? STATE.settings.TEMPERATURE : 1.1,
-            CONTEXT_LIMIT: STATE.settings.CONTEXT_LIMIT || 30,
+            CONTEXT_LIMIT: STATE.settings.CONTEXT_LIMIT || CONFIG.DEFAULT.CONTEXT_LIMIT || 5,
             HISTORY_WINDOW_STRATEGY: STATE.settings.HISTORY_WINDOW_STRATEGY || CONFIG.DEFAULT.HISTORY_WINDOW_STRATEGY || 'cache_friendly',
-            HISTORY_WINDOW_BLOCK_SIZE: STATE.settings.HISTORY_WINDOW_BLOCK_SIZE || CONFIG.DEFAULT.HISTORY_WINDOW_BLOCK_SIZE || 20,
-            HISTORY_WINDOW_EXTRA_BLOCKS: STATE.settings.HISTORY_WINDOW_EXTRA_BLOCKS ?? CONFIG.DEFAULT.HISTORY_WINDOW_EXTRA_BLOCKS ?? 1,
+            HISTORY_WINDOW_MAX_CONTEXT: STATE.settings.HISTORY_WINDOW_MAX_CONTEXT || CONFIG.DEFAULT.HISTORY_WINDOW_MAX_CONTEXT || 25,
             DYNAMIC_CONTEXT_INSERT_MODE: STATE.settings.DYNAMIC_CONTEXT_INSERT_MODE || CONFIG.DEFAULT.DYNAMIC_CONTEXT_INSERT_MODE || 'auto',
 
             // ★★★ 新增：请求体附加参数 JSON ★★★
@@ -8594,12 +8614,11 @@ const App = {
                     requestSettings.HISTORY_WINDOW_STRATEGY = targetPreset.history_window_strategy;
                 }
 
-                if (targetPreset.history_window_block_size !== undefined && targetPreset.history_window_block_size !== "") {
-                    requestSettings.HISTORY_WINDOW_BLOCK_SIZE = parseInt(targetPreset.history_window_block_size, 10);
-                }
-
-                if (targetPreset.history_window_extra_blocks !== undefined && targetPreset.history_window_extra_blocks !== "") {
-                    requestSettings.HISTORY_WINDOW_EXTRA_BLOCKS = parseInt(targetPreset.history_window_extra_blocks, 10);
+                if (targetPreset.history_window_max_context !== undefined && targetPreset.history_window_max_context !== "") {
+                    requestSettings.HISTORY_WINDOW_MAX_CONTEXT = parseInt(targetPreset.history_window_max_context, 10);
+                } else if (targetPreset.history_window_block_size !== undefined && targetPreset.history_window_block_size !== "") {
+                    // ★ 兼容旧预设：旧“每块消息数”近似迁移为新的最长上下文。
+                    requestSettings.HISTORY_WINDOW_MAX_CONTEXT = parseInt(targetPreset.history_window_block_size, 10);
                 }
 
                 // ★★★ 新增：角色绑定 API 总预设时，也使用这个总预设保存的请求体附加参数 ★★★
@@ -8624,18 +8643,17 @@ const App = {
 
         requestSettings.CONTEXT_LIMIT = parseInt(requestSettings.CONTEXT_LIMIT, 10);
         if (isNaN(requestSettings.CONTEXT_LIMIT) || requestSettings.CONTEXT_LIMIT <= 0) {
-            requestSettings.CONTEXT_LIMIT = 30;
+            requestSettings.CONTEXT_LIMIT = CONFIG.DEFAULT.CONTEXT_LIMIT || 5;
         }
         if (!['cache_friendly', 'strict_recent'].includes(requestSettings.HISTORY_WINDOW_STRATEGY)) {
             requestSettings.HISTORY_WINDOW_STRATEGY = 'cache_friendly';
         }
-        requestSettings.HISTORY_WINDOW_BLOCK_SIZE = parseInt(requestSettings.HISTORY_WINDOW_BLOCK_SIZE, 10);
-        if (isNaN(requestSettings.HISTORY_WINDOW_BLOCK_SIZE) || requestSettings.HISTORY_WINDOW_BLOCK_SIZE <= 0) {
-            requestSettings.HISTORY_WINDOW_BLOCK_SIZE = 20;
+        requestSettings.HISTORY_WINDOW_MAX_CONTEXT = parseInt(requestSettings.HISTORY_WINDOW_MAX_CONTEXT, 10);
+        if (isNaN(requestSettings.HISTORY_WINDOW_MAX_CONTEXT) || requestSettings.HISTORY_WINDOW_MAX_CONTEXT <= 0) {
+            requestSettings.HISTORY_WINDOW_MAX_CONTEXT = CONFIG.DEFAULT.HISTORY_WINDOW_MAX_CONTEXT || 25;
         }
-        requestSettings.HISTORY_WINDOW_EXTRA_BLOCKS = parseInt(requestSettings.HISTORY_WINDOW_EXTRA_BLOCKS, 10);
-        if (isNaN(requestSettings.HISTORY_WINDOW_EXTRA_BLOCKS) || requestSettings.HISTORY_WINDOW_EXTRA_BLOCKS < 0) {
-            requestSettings.HISTORY_WINDOW_EXTRA_BLOCKS = 1;
+        if (requestSettings.HISTORY_WINDOW_MAX_CONTEXT < requestSettings.CONTEXT_LIMIT) {
+            requestSettings.HISTORY_WINDOW_MAX_CONTEXT = requestSettings.CONTEXT_LIMIT;
         }
         if (!['auto', 'system', 'user'].includes(requestSettings.DYNAMIC_CONTEXT_INSERT_MODE)) {
             requestSettings.DYNAMIC_CONTEXT_INSERT_MODE = CONFIG.DEFAULT.DYNAMIC_CONTEXT_INSERT_MODE || 'auto';
@@ -8654,10 +8672,9 @@ const App = {
             model: requestSettings.MODEL, 
             tokens: requestSettings.MAX_TOKENS, 
             temp: requestSettings.TEMPERATURE,
-            historyLimit: requestSettings.CONTEXT_LIMIT,
+            historyMinContext: requestSettings.CONTEXT_LIMIT,
             historyWindowStrategy: requestSettings.HISTORY_WINDOW_STRATEGY,
-            historyWindowBlockSize: requestSettings.HISTORY_WINDOW_BLOCK_SIZE,
-            historyWindowExtraBlocks: requestSettings.HISTORY_WINDOW_EXTRA_BLOCKS,
+            historyWindowMaxContext: requestSettings.HISTORY_WINDOW_MAX_CONTEXT,
             dynamicContextInsertMode: requestSettings.DYNAMIC_CONTEXT_INSERT_MODE,
             linkedPresetName: contact.linkedPresetName || "跟随全局默认设置",
             extraBodyJson: requestSettings.CUSTOM_REQUEST_BODY_JSON || ""
@@ -8882,6 +8899,9 @@ const App = {
             await Storage.saveContacts();
         }
         const historyWindow = this.selectHistoryWindowRecords(contact, requestSettings);
+        if (historyWindow.changed) {
+            await Storage.saveContacts();
+        }
 
         // 预处理 History (你的分段隐藏逻辑 + 我的图片描述注入)
         const recentHistory = historyWindow.records
@@ -9349,10 +9369,14 @@ const App = {
     syncHistoryWindowStrategyUI() {
         const strategySelect = document.getElementById('history-window-strategy');
         const cacheControls = document.getElementById('history-window-cache-controls');
+        const maxContextRow = document.getElementById('history-window-max-context-row');
         if (!strategySelect || !cacheControls) return;
 
-        // ★ 缓存友好模式才需要块大小和额外块数；严格最近 N 条只看“上下文条数”。
-        cacheControls.style.display = strategySelect.value === 'cache_friendly' ? 'grid' : 'none';
+        // ★ 缓存友好和严格模式都用最短上下文；最长上下文只在缓存友好模式下生效。
+        cacheControls.style.display = 'grid';
+        if (maxContextRow) {
+            maxContextRow.style.display = strategySelect.value === 'cache_friendly' ? '' : 'none';
+        }
     },
 
     openSettings() {
@@ -9377,13 +9401,12 @@ const App = {
             UI.els.settingModel.appendChild(option);
         }
 
-        // 回显 MaxTokens、Temperature、Context Limit
+        // 回显 MaxTokens、Temperature 和缓存友好上下文窗口
         const maxTokensInput = document.getElementById('custom-max-tokens');
         const tempInput = document.getElementById('custom-temperature');
         const contextLimitInput = document.getElementById('custom-context-limit');
         const historyWindowStrategySelect = document.getElementById('history-window-strategy');
-        const historyWindowBlockSizeInput = document.getElementById('history-window-block-size');
-        const historyWindowExtraBlocksInput = document.getElementById('history-window-extra-blocks');
+        const historyWindowMaxContextInput = document.getElementById('history-window-max-context');
         const dynamicContextModeSelect = document.getElementById('dynamic-context-insert-mode');
         
         if (maxTokensInput) {
@@ -9395,7 +9418,7 @@ const App = {
         }
 
         if (contextLimitInput) {
-            contextLimitInput.value = s.CONTEXT_LIMIT || 30;
+            contextLimitInput.value = s.CONTEXT_LIMIT || CONFIG.DEFAULT.CONTEXT_LIMIT || 5;
         }
 
         if (historyWindowStrategySelect) {
@@ -9403,12 +9426,13 @@ const App = {
             historyWindowStrategySelect.onchange = () => this.syncHistoryWindowStrategyUI();
         }
 
-        if (historyWindowBlockSizeInput) {
-            historyWindowBlockSizeInput.value = s.HISTORY_WINDOW_BLOCK_SIZE || CONFIG.DEFAULT.HISTORY_WINDOW_BLOCK_SIZE || 20;
-        }
-
-        if (historyWindowExtraBlocksInput) {
-            historyWindowExtraBlocksInput.value = s.HISTORY_WINDOW_EXTRA_BLOCKS ?? CONFIG.DEFAULT.HISTORY_WINDOW_EXTRA_BLOCKS ?? 1;
+        if (historyWindowMaxContextInput) {
+            const minContextValue = parseInt(contextLimitInput?.value, 10) || CONFIG.DEFAULT.CONTEXT_LIMIT || 5;
+            const maxContextValue = s.HISTORY_WINDOW_MAX_CONTEXT
+                || s.HISTORY_WINDOW_BLOCK_SIZE
+                || CONFIG.DEFAULT.HISTORY_WINDOW_MAX_CONTEXT
+                || 25;
+            historyWindowMaxContextInput.value = Math.max(minContextValue, parseInt(maxContextValue, 10) || minContextValue);
         }
         this.syncHistoryWindowStrategyUI();
 
@@ -9493,14 +9517,90 @@ const App = {
         this.clearWorldInfoEditor();
     },
 
-    // 绑定当前书的角色
-    async bindCurrentBookToChar(charId) {
+    // 兼容旧版单角色绑定；新版弹窗统一读写 characterIds。
+    getWorldInfoBookScopeIds(book) {
+        if (!book) return [];
+        if (Array.isArray(book.characterIds)) {
+            return book.characterIds.filter(Boolean);
+        }
+        return book.characterId ? [book.characterId] : [];
+    },
+
+    // 绑定当前书的角色范围：空数组代表全局，非空数组代表多角色生效。
+    async bindCurrentBookToChars(charIds) {
         const book = STATE.worldInfoBooks.find(b => b.id === STATE.currentBookId);
         if (book) {
-            book.characterId = charId;
+            const cleanIds = Array.isArray(charIds) ? [...new Set(charIds.filter(Boolean))] : [];
+            book.characterIds = cleanIds;
+            book.characterId = cleanIds[0] || '';
             await Storage.saveWorldInfo();
-            // 不需刷新列表，因为内容没变
+            UI.updateCurrentBookSettingsUI();
         }
+    },
+
+    openWorldbookScopeModal() {
+        const modal = document.getElementById('modal-worldbook-scope');
+        const globalCheckbox = document.getElementById('wi-scope-global-checkbox');
+        const charContainer = document.getElementById('wi-scope-char-list');
+        const book = STATE.worldInfoBooks.find(b => b.id === STATE.currentBookId);
+        if (!modal || !globalCheckbox || !charContainer || !book) return;
+
+        const scopeIds = this.getWorldInfoBookScopeIds(book);
+        globalCheckbox.checked = scopeIds.length === 0;
+        charContainer.innerHTML = '';
+
+        if (STATE.contacts.length === 0) {
+            charContainer.innerHTML = '<p class="no-data-hint">暂无联系人</p>';
+        } else {
+            STATE.contacts.forEach(contact => {
+                const label = document.createElement('label');
+                label.className = 'worldbook-scope-checkbox-item';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = contact.id;
+                checkbox.checked = scopeIds.includes(contact.id);
+                checkbox.addEventListener('change', () => {
+                    if (checkbox.checked) globalCheckbox.checked = false;
+                    const anyChecked = !!charContainer.querySelector('input[type="checkbox"]:checked');
+                    if (!anyChecked) globalCheckbox.checked = true;
+                });
+
+                const name = document.createElement('span');
+                name.className = 'worldbook-scope-char-name';
+                name.textContent = contact.name;
+
+                label.appendChild(checkbox);
+                label.appendChild(name);
+                charContainer.appendChild(label);
+            });
+        }
+
+        globalCheckbox.onchange = () => {
+            if (!globalCheckbox.checked) {
+                const anyChecked = !!charContainer.querySelector('input[type="checkbox"]:checked');
+                if (!anyChecked) globalCheckbox.checked = true;
+                return;
+            }
+            charContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+                cb.checked = false;
+            });
+        };
+
+        modal.classList.remove('hidden');
+    },
+
+    async saveWorldbookScopeModal() {
+        const modal = document.getElementById('modal-worldbook-scope');
+        const globalCheckbox = document.getElementById('wi-scope-global-checkbox');
+        const charContainer = document.getElementById('wi-scope-char-list');
+        if (!modal || !globalCheckbox || !charContainer) return;
+
+        const selectedIds = globalCheckbox.checked
+            ? []
+            : Array.from(charContainer.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+        await this.bindCurrentBookToChars(selectedIds);
+        modal.classList.add('hidden');
     },
     
     loadWorldInfoEntry(uid) {
@@ -9632,6 +9732,7 @@ const App = {
                 id: 'book_' + Date.now(),
                 name: name,
                 characterId: '', // 默认全局
+                characterIds: [], // 空数组代表全局；旧字段 characterId 留作兼容
                 entries: []
             };
             STATE.worldInfoBooks.push(newBook);
@@ -9720,12 +9821,18 @@ const App = {
         const tempInput = document.getElementById('custom-temperature');
         const contextLimitInput = document.getElementById('custom-context-limit');
         const historyWindowStrategySelect = document.getElementById('history-window-strategy');
-        const historyWindowBlockSizeInput = document.getElementById('history-window-block-size');
-        const historyWindowExtraBlocksInput = document.getElementById('history-window-extra-blocks');
+        const historyWindowMaxContextInput = document.getElementById('history-window-max-context');
         const dynamicContextModeSelect = document.getElementById('dynamic-context-insert-mode');
         const requestBodyInput = document.getElementById('custom-request-body-json');
 
         // 1. 构造新预设对象
+        const minContextValue = contextLimitInput && contextLimitInput.value
+            ? parseInt(contextLimitInput.value, 10)
+            : (CONFIG.DEFAULT.CONTEXT_LIMIT || 5);
+        const rawMaxContextValue = historyWindowMaxContextInput && historyWindowMaxContextInput.value
+            ? parseInt(historyWindowMaxContextInput.value, 10)
+            : (CONFIG.DEFAULT.HISTORY_WINDOW_MAX_CONTEXT || 25);
+
         const preset = {
             name: name,
             url: UI.els.settingUrl.value.trim(),
@@ -9734,10 +9841,9 @@ const App = {
 
             max_tokens: maxTokensInput && maxTokensInput.value ? parseInt(maxTokensInput.value, 10) : 32700,
             temperature: tempInput && tempInput.value ? parseFloat(tempInput.value) : 1.1,
-            context_limit: contextLimitInput && contextLimitInput.value ? parseInt(contextLimitInput.value, 10) : 30,
+            context_limit: minContextValue,
             history_window_strategy: historyWindowStrategySelect ? historyWindowStrategySelect.value : 'cache_friendly',
-            history_window_block_size: historyWindowBlockSizeInput && historyWindowBlockSizeInput.value ? parseInt(historyWindowBlockSizeInput.value, 10) : 20,
-            history_window_extra_blocks: historyWindowExtraBlocksInput && historyWindowExtraBlocksInput.value ? parseInt(historyWindowExtraBlocksInput.value, 10) : 1,
+            history_window_max_context: Math.max(minContextValue, rawMaxContextValue),
             dynamic_context_insert_mode: dynamicContextModeSelect ? dynamicContextModeSelect.value : (CONFIG.DEFAULT.DYNAMIC_CONTEXT_INSERT_MODE || 'auto'),
 
             // ★★★ 新增：API 总预设里保存当前请求体附加参数 ★★★
@@ -9809,8 +9915,7 @@ const App = {
             const tempInput = document.getElementById('custom-temperature');
             const contextLimitInput = document.getElementById('custom-context-limit');
             const historyWindowStrategySelect = document.getElementById('history-window-strategy');
-            const historyWindowBlockSizeInput = document.getElementById('history-window-block-size');
-            const historyWindowExtraBlocksInput = document.getElementById('history-window-extra-blocks');
+            const historyWindowMaxContextInput = document.getElementById('history-window-max-context');
             const dynamicContextModeSelect = document.getElementById('dynamic-context-insert-mode');
             const requestBodyInput = document.getElementById('custom-request-body-json');
 
@@ -9823,19 +9928,20 @@ const App = {
             }
 
             if (contextLimitInput) {
-                contextLimitInput.value = preset.context_limit || 30;
+                contextLimitInput.value = preset.context_limit || CONFIG.DEFAULT.CONTEXT_LIMIT || 5;
             }
 
             if (historyWindowStrategySelect) {
                 historyWindowStrategySelect.value = preset.history_window_strategy || 'cache_friendly';
             }
 
-            if (historyWindowBlockSizeInput) {
-                historyWindowBlockSizeInput.value = preset.history_window_block_size || 20;
-            }
-
-            if (historyWindowExtraBlocksInput) {
-                historyWindowExtraBlocksInput.value = preset.history_window_extra_blocks ?? 1;
+            if (historyWindowMaxContextInput) {
+                const minContextValue = parseInt(contextLimitInput?.value, 10) || CONFIG.DEFAULT.CONTEXT_LIMIT || 5;
+                const maxContextValue = preset.history_window_max_context
+                    || preset.history_window_block_size
+                    || CONFIG.DEFAULT.HISTORY_WINDOW_MAX_CONTEXT
+                    || 25;
+                historyWindowMaxContextInput.value = Math.max(minContextValue, parseInt(maxContextValue, 10) || minContextValue);
             }
             this.syncHistoryWindowStrategyUI();
 
@@ -9862,8 +9968,7 @@ const App = {
                 temperature: preset.temperature,
                 context_limit: preset.context_limit,
                 history_window_strategy: preset.history_window_strategy || 'cache_friendly',
-                history_window_block_size: preset.history_window_block_size || 20,
-                history_window_extra_blocks: preset.history_window_extra_blocks ?? 1,
+                history_window_max_context: preset.history_window_max_context || preset.history_window_block_size || CONFIG.DEFAULT.HISTORY_WINDOW_MAX_CONTEXT || 25,
                 dynamic_context_insert_mode: preset.dynamic_context_insert_mode || CONFIG.DEFAULT.DYNAMIC_CONTEXT_INSERT_MODE || 'auto',
                 extra_body_json: preset.extra_body_json || ''
             });
@@ -9980,8 +10085,7 @@ const App = {
         const tempInput = document.getElementById('custom-temperature');
         const contextLimitInput = document.getElementById('custom-context-limit');
         const historyWindowStrategySelect = document.getElementById('history-window-strategy');
-        const historyWindowBlockSizeInput = document.getElementById('history-window-block-size');
-        const historyWindowExtraBlocksInput = document.getElementById('history-window-extra-blocks');
+        const historyWindowMaxContextInput = document.getElementById('history-window-max-context');
         const dynamicContextModeSelect = document.getElementById('dynamic-context-insert-mode');
 
         // 解析数值，如果为空或非法，则回退到默认值
@@ -9997,7 +10101,7 @@ const App = {
 
         if (contextLimitInput) {
             const val = parseInt(contextLimitInput.value, 10);
-            s.CONTEXT_LIMIT = (!isNaN(val) && val > 0) ? val : 30;
+            s.CONTEXT_LIMIT = (!isNaN(val) && val > 0) ? val : (CONFIG.DEFAULT.CONTEXT_LIMIT || 5);
         }
 
         if (historyWindowStrategySelect) {
@@ -10006,14 +10110,12 @@ const App = {
                 : 'cache_friendly';
         }
 
-        if (historyWindowBlockSizeInput) {
-            const val = parseInt(historyWindowBlockSizeInput.value, 10);
-            s.HISTORY_WINDOW_BLOCK_SIZE = (!isNaN(val) && val > 0) ? val : 20;
-        }
-
-        if (historyWindowExtraBlocksInput) {
-            const val = parseInt(historyWindowExtraBlocksInput.value, 10);
-            s.HISTORY_WINDOW_EXTRA_BLOCKS = (!isNaN(val) && val >= 0) ? val : 1;
+        if (historyWindowMaxContextInput) {
+            const val = parseInt(historyWindowMaxContextInput.value, 10);
+            s.HISTORY_WINDOW_MAX_CONTEXT = (!isNaN(val) && val > 0) ? val : (CONFIG.DEFAULT.HISTORY_WINDOW_MAX_CONTEXT || 25);
+            if (s.HISTORY_WINDOW_MAX_CONTEXT < s.CONTEXT_LIMIT) {
+                s.HISTORY_WINDOW_MAX_CONTEXT = s.CONTEXT_LIMIT;
+            }
         }
 
         if (dynamicContextModeSelect) {
@@ -11840,8 +11942,21 @@ const App = {
         const wiBookSel = document.getElementById('wi-book-select');
         if(wiBookSel) wiBookSel.onchange = (e) => this.switchWorldInfoBook(e.target.value);
         
-        const wiBookCharSel = document.getElementById('wi-book-char-select');
-        if(wiBookCharSel) wiBookCharSel.onchange = (e) => this.bindCurrentBookToChar(e.target.value);
+        const wiBookScopeBtn = document.getElementById('wi-book-scope-btn');
+        if(wiBookScopeBtn) wiBookScopeBtn.onclick = () => this.openWorldbookScopeModal();
+
+        const wiScopeSave = document.getElementById('wi-scope-save-btn');
+        if(wiScopeSave) wiScopeSave.onclick = () => this.saveWorldbookScopeModal();
+
+        const wiScopeCancel = document.getElementById('wi-scope-cancel-btn');
+        if(wiScopeCancel) wiScopeCancel.onclick = () => document.getElementById('modal-worldbook-scope')?.classList.add('hidden');
+
+        const wiScopeModal = document.getElementById('modal-worldbook-scope');
+        if(wiScopeModal) {
+            wiScopeModal.addEventListener('click', (e) => {
+                if (e.target === wiScopeModal) wiScopeModal.classList.add('hidden');
+            });
+        }
 
         const wiNewBook = document.getElementById('wi-new-book-btn');
         if(wiNewBook) wiNewBook.onclick = () => this.createNewBook();
@@ -12158,7 +12273,8 @@ const App = {
                             <div>本轮背景：${escapeLogValue(debug.dynamic_context_hash)}（${escapeLogValue(debug.dynamic_context_chars)} 字）</div>
                             <div>当前用户：${escapeLogValue(debug.original_user_hash)} / 最终 user：${escapeLogValue(debug.final_user_hash)}</div>
                             <div>插入方式：${escapeLogValue(debug.insert_mode)}</div>
-                            <div>窗口块：${escapeLogValue(historyWindow.startBlock ?? '未记录')} → ${escapeLogValue(historyWindow.latestBlock ?? '未记录')}</div>
+                            <div>窗口范围：${escapeLogValue(historyWindow.startSeq ?? '未记录')} → ${escapeLogValue(historyWindow.latestSeq ?? '未记录')}</div>
+                            <div>上下文窗口：${escapeLogValue(historyWindow.minContext ?? '未记录')} / ${escapeLogValue(historyWindow.maxContext ?? '未记录')}</div>
                             <div>附加请求体：${escapeLogValue(debug.extra_body_hash)}</div>
                             <div>常驻世界书：${escapeLogValue(constantNames)}</div>
                             <div>本轮世界书：${escapeLogValue(triggeredNames)}</div>

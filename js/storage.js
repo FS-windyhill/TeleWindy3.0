@@ -229,6 +229,7 @@ const Storage = {
                             id: 'book_default_' + Date.now(),
                             name: '默认世界书 (旧数据迁移)',
                             characterId: '', 
+                            characterIds: [],
                             entries: oldEntries
                         };
                         STATE.worldInfoBooks.push(defaultBook);
@@ -247,6 +248,7 @@ const Storage = {
                 id: 'book_' + Date.now(),
                 name: '新建世界书',
                 characterId: '',
+                characterIds: [],
                 entries: []
             });
         }

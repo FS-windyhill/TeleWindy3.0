@@ -51,6 +51,7 @@ const WorldInfoEngine = {
                 id: 'book_' + Date.now() + Math.random().toString(36).substr(2, 5),
                 name: bookName,
                 characterId: '', 
+                characterIds: [],
                 entries: newEntries
             };
 
@@ -104,8 +105,12 @@ const WorldInfoEngine = {
         const triggeredEntries = [];
 
         STATE.worldInfoBooks.forEach(book => {
-            const isGlobalBook = !book.characterId || book.characterId === "";
-            const isBoundBook = book.characterId === currentContactId;
+            // 新版世界书允许一本书绑定多个角色；旧数据只有 characterId，这里继续兼容。
+            const scopeIds = Array.isArray(book.characterIds)
+                ? book.characterIds.filter(Boolean)
+                : (book.characterId ? [book.characterId] : []);
+            const isGlobalBook = scopeIds.length === 0;
+            const isBoundBook = scopeIds.includes(currentContactId);
             if (!isGlobalBook && !isBoundBook) return;
 
             book.entries.forEach(entry => {

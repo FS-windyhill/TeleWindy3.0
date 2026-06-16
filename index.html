@@ -799,13 +799,13 @@
                     <!-- 2. 本书设定：放在书选择后面，先确定这本书对谁生效 -->
                     <div class="wi-section-card">
                         <h4 class="wi-section-title">本书设定 <span class="sub-text">(对整本书生效)</span></h4>
-                        <label class="wi-input-row">
-                            <span>生效范围:</span>
-                            <select id="wi-book-char-select" class="wi-select setting-input">
-                                <option value="">全局 (对所有角色生效)</option>
-                                <!-- JS会填充角色 -->
-                            </select>
-                        </label>
+                        <div class="wi-input-row wi-scope-row">
+                            <div class="wi-scope-control-line">
+                                <span>生效范围:</span>
+                                <button type="button" id="wi-book-scope-btn" class="wi-btn secondary wi-scope-btn">选择生效范围</button>
+                            </div>
+                            <div id="wi-book-scope-summary" class="wi-scope-summary-box">全局生效</div>
+                        </div>
                     </div>
 
                     <!-- 3. 下方主体：条目列表 + 条目编辑 -->
@@ -861,6 +861,27 @@
             </main>
         </div>
         <!-- ★★★★★ 世界书独立页面 END ★★★★★ -->
+
+        <!-- ★★★★★ 世界书生效范围弹窗 START：多选角色，空选择代表全局 ★★★★★ -->
+        <div id="modal-worldbook-scope" class="modal-overlay worldbook-scope-bg hidden">
+            <div class="worldbook-scope-modal glass-panel">
+                <h3 class="worldbook-scope-title">选择生效范围</h3>
+                <div class="worldbook-scope-scroll">
+                    <label class="worldbook-scope-global">
+                        <input type="checkbox" id="wi-scope-global-checkbox">
+                        <span class="worldbook-scope-char-name">全局生效</span>
+                    </label>
+                    <div id="wi-scope-char-list" class="worldbook-scope-checkbox-group">
+                        <!-- JS 动态渲染角色复选框 -->
+                    </div>
+                </div>
+                <div class="modal-buttons fixed-footer worldbook-scope-actions">
+                    <button type="button" id="wi-scope-cancel-btn" class="cancel-btn">取消</button>
+                    <button type="button" id="wi-scope-save-btn" class="save-btn">保存</button>
+                </div>
+            </div>
+        </div>
+        <!-- ★★★★★ 世界书生效范围弹窗 END ★★★★★ -->
 
         <!-- ================= 3. 心迹主界面 (默认隐藏) ================= -->
         <!-- ★★★★★ 世界感知页面 START：天气感知 + 星期和节日 + 保存取消 ★★★★★ -->
@@ -1688,13 +1709,6 @@
                         <!-- ★★★ 修改为：模型参数设置 ★★★ -->
                         <div class="main-option param-card">
 
-                                <!-- ★★★ 1. 新增：上下文条数输入框 ★★★ -->
-                            <div class="param-item">
-                                <label class="api-label" for="custom-context-limit">上下文条数</label>
-                                <input type="number" id="custom-context-limit" class="setting-input" 
-                                    placeholder="默认: 30" step="1" min="1" max="100">
-                            </div>
-
                             <!-- 第一个参数行 -->
                              
                            <div class="param-item">
@@ -1744,19 +1758,19 @@
                                 </label>
 
                                 <div id="history-window-cache-controls" class="cache-optimization-grid">
-                                    <label class="cache-optimization-row" for="history-window-block-size">
-                                        <span>每块消息数</span>
-                                        <input type="number" id="history-window-block-size" class="setting-input" min="1" max="100" step="1" placeholder="默认: 20">
+                                    <label class="cache-optimization-row" for="custom-context-limit">
+                                        <span>最短上下文</span>
+                                        <input type="number" id="custom-context-limit" class="setting-input" min="1" max="100" step="1" placeholder="默认: 5">
                                     </label>
 
-                                    <label class="cache-optimization-row" for="history-window-extra-blocks">
-                                        <span>最多额外保留块数</span>
-                                        <input type="number" id="history-window-extra-blocks" class="setting-input" min="0" max="10" step="1" placeholder="默认: 1">
+                                    <label id="history-window-max-context-row" class="cache-optimization-row" for="history-window-max-context">
+                                        <span>最长上下文</span>
+                                        <input type="number" id="history-window-max-context" class="setting-input" min="1" max="200" step="1" placeholder="默认: 25">
                                     </label>
                                 </div>
 
                                 <div class="request-body-tip">
-                                    缓存友好会按原始历史分块移动窗口，减少每轮滑动导致的缓存失效；严格模式会只发送最近的上下文条数。
+                                    缓存友好会从最短上下文开始逐轮增长，到最长上下文后换新起点；严格模式会只发送最近的最短上下文条数。
                                 </div>
 
                             </div>

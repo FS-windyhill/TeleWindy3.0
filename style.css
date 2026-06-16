@@ -3516,6 +3516,9 @@ h3#modal-title.bianjixiaoxi{
     color: #333;
 }
 
+
+
+
 #edit-msg-textarea {
     width: 93%; 
     height: 150px; 
@@ -5940,7 +5943,29 @@ body.custom-mode .character-memory-pin-btn.active {
     color: #ffc247;
 }
 
+body.custom-mode .wi-scope-summary-box {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(245,245,245,0.3);
+    color: #cdcdcdc8;
+}
 
+body.custom-mode .worldbook-scope-scroll {
+    background: rgba(20, 20, 20, 0.75);
+}
+
+body.custom-mode .worldbook-scope-char-name {
+    color: #efefef;
+    font-size: 15px;
+}
+
+
+body.custom-mode .settings-title,
+body.custom-mode .section-title, 
+body.custom-mode .settings-section-title,
+body.custom-mode h2,
+body.custom-mode h3 {
+    color: #e0e0e0 !important;
+}
 
 /* 【【【[[[】】】*/
 
@@ -8376,6 +8401,172 @@ body.dark-mode .world-sense-cache-empty {
 #view-worldbook {
     min-height: 0;
 }
+
+/* ★★★★★ 世界书：生效范围弹窗 START ★★★★★ */
+.wi-scope-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+}
+
+.wi-scope-btn {
+    width: 100%;
+    justify-content: center;
+}
+
+.wi-scope-control-line {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
+}
+
+.wi-scope-summary-box {
+    width: 100%;
+    margin-top: 4px;
+    margin-bottom: 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    background: rgba(0, 0, 0, 0.05);
+    color: #666;
+    font-size: 0.8em;
+    line-height: 1.5;
+    box-sizing: border-box;
+}
+
+body.dark-mode .wi-scope-summary-box {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(245,245,245,0.3);
+    color: #cdcdcdc8;
+}
+
+.worldbook-scope-modal {
+    display: flex;
+    flex-direction: column;
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    padding: 20px 20px 24px;
+}
+
+.worldbook-scope-title {
+    flex-shrink: 0;
+    text-align: center;
+    margin: 0 0 12px;
+    color: #fff;
+}
+
+.worldbook-scope-scroll {
+    flex: 1;
+    overflow-y: auto;
+    border-radius: 8px;
+    padding: 20px 15px;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.05);
+    margin-bottom: 16px;
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+body.dark-mode .worldbook-scope-scroll {
+    background: rgba(20, 20, 20, 0.75);
+}
+
+.worldbook-scope-global {
+    display: flex !important;
+    align-items: center !important;
+    min-height: 25px;
+    margin-bottom: 14px;
+    padding: 12px 15px;
+    cursor: pointer;
+    user-select: none;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    background: rgba(0, 0, 0, 0.05);
+
+}
+
+.worldbook-scope-checkbox-group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 15px;
+    padding: 15px;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.worldbook-scope-checkbox-item {
+    display: flex !important;
+    align-items: center !important;
+    min-width: 0;
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.2s;
+}
+
+.worldbook-scope-checkbox-item:hover {
+    transform: translateY(-1px);
+}
+
+.worldbook-scope-char-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #333;
+    font-size: 0.95rem;
+    line-height: 1;
+}
+
+body.dark-mode .worldbook-scope-char-name {
+    color: #efefef;
+    font-size: 15px;
+}
+
+.worldbook-scope-global input[type="checkbox"],
+.worldbook-scope-checkbox-item input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    position: relative;
+    margin: 0 10px 0 0;
+    cursor: pointer;
+    border: 1px solid #888;
+    border-radius: 5px;
+    background: rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
+}
+
+.worldbook-scope-global input[type="checkbox"]:checked,
+.worldbook-scope-checkbox-item input[type="checkbox"]:checked {
+    background-color: var(--primary-btn-text, #876eff);
+    border-color: var(--primary-btn-text, #876eff);
+}
+
+.worldbook-scope-global input[type="checkbox"]:checked::after,
+.worldbook-scope-checkbox-item input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+    background-size: 70%;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+.worldbook-scope-actions {
+    justify-content: flex-end;
+}
+/* ★★★★★ 世界书：生效范围弹窗 END ★★★★★ */
 
 .todo-page {
     flex: 1;
