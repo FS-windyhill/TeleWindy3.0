@@ -2558,6 +2558,48 @@ body.dark-mode #view-worldbook .wi-edit-area {
 }
 
 
+
+button#wi-scope-save-btn.save-btn {
+  
+    background: var(--primary-btn-color);
+    color: var(--primary-btn-text);
+    border: 0.7px solid var(--primary-btn-text);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);  
+}
+
+
+
+button#wi-scope-cancel-btn.cancel-btn {
+    border: 0.7px solid var(--btn-border-color);
+    background: var(--btn-color);
+    color: #333;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);   
+}
+
+
+
+body.dark-mode .button#wi-scope-save-btn.save-btn {
+  
+    background: var(--primary-btn-color);
+    color: var(--primary-btn-text);
+    border: 0.7px solid var(--primary-btn-text);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);  
+}
+
+
+
+body.dark-mode .button#wi-scope-cancel-btn.cancel-btn {
+    border: 0.7px solid var(--btn-border-color);
+    background: var(--btn-color);
+    color: #333;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);   
+}
+
+
 /* ============= 移动端适配 (Responsive Design) ============= */
 
 @media (max-width: 768px) {
@@ -5950,7 +5992,7 @@ body.custom-mode .wi-scope-summary-box {
 }
 
 body.custom-mode .worldbook-scope-scroll {
-    background: rgba(20, 20, 20, 0.75);
+    background: rgba(20, 20, 20, 0.5);
 }
 
 body.custom-mode .worldbook-scope-char-name {
@@ -5966,6 +6008,34 @@ body.custom-mode h2,
 body.custom-mode h3 {
     color: #e0e0e0 !important;
 }
+
+body.custom-mode .worldbook-scope-global,
+body.custom-mode .worldbook-scope-checkbox-group {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(245, 245, 245, 0.3);
+
+}
+
+
+body.custom-mode .button#wi-scope-save-btn.save-btn {
+  
+    background: var(--primary-btn-color);
+    color: var(--primary-btn-text);
+    border: 0.7px solid var(--primary-btn-text);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);  
+}
+
+
+
+body.custom-mode .button#wi-scope-cancel-btn.cancel-btn {
+    border: 0.7px solid var(--btn-border-color);
+    background: var(--btn-color);
+    color: #333;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);   
+}
+
 
 /* 【【【[[[】】】*/
 
@@ -8472,7 +8542,7 @@ body.dark-mode .wi-scope-summary-box {
 }
 
 body.dark-mode .worldbook-scope-scroll {
-    background: rgba(20, 20, 20, 0.75);
+    background: rgba(20, 20, 20, 0.5);
 }
 
 .worldbook-scope-global {
@@ -8488,6 +8558,14 @@ body.dark-mode .worldbook-scope-scroll {
     background: rgba(0, 0, 0, 0.05);
 
 }
+
+body.dark-mode .worldbook-scope-global,
+body.dark-mode .worldbook-scope-checkbox-group {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(245, 245, 245, 0.3);
+
+}
+
 
 .worldbook-scope-checkbox-group {
     display: grid;
