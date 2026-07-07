@@ -2744,7 +2744,7 @@ body.dark-mode {
     --text-color: #ffffff; 
     --message-bg-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.92), 100%) var(--theme-color-l) / 0.6);
     --message-bg-ai: #3030309e;
-    --message-border-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.9), 100%) clamp(0%, calc(var(--theme-color-l) * 1.1), 100%) / 0.9);
+    --message-border-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.9), 100%) clamp(0%, calc(var(--theme-color-l) * 1.1), 100%) / 0.8);
     --message-border-ai: rgba(160, 160, 160, 0.3);
     
     --btn-color: #3a3a3a80;          /* 按钮深色背景 */
@@ -5135,8 +5135,10 @@ body.custom-mode .app-footer {
 body.custom-mode #task-input {
     border: 1px solid #9d9d9dcc; /* 稍微加深一点 */
     color: #ffffff;
-    background: rgba(60, 60, 60, 0.25); /* 深色半透明背景 */
+    background: rgba(60, 60, 60, 0.25) !important /* 深色半透明背景 */
 }
+
+
 body.custom-mode #task-input:focus {
     border: 2px solid #9d9d9d;
     background: rgba(0, 0, 0, 0.25);
