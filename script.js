@@ -3301,8 +3301,8 @@ const UI = {
                 group.id = `msg-bubble-${historyIndex}`;
             }
 
-            // 优先渲染思考气泡
-            if (thoughtContent) {
+            // 优先渲染思考气泡；外观开关只控制 UI，不改历史里的 <think> 原文
+            if (thoughtContent && STATE.settings.HIDE_THOUGHT_PROCESS !== true) {
                  const formattedThought = parseCustomMarkdown(thoughtContent);
                  const thoughtBubble = this.createSingleBubble(
                      formattedThought, sender, contact.avatar, msgTime, historyIndex, false, 'thought', null, true
@@ -3544,7 +3544,7 @@ const UI = {
         // ============================================
         // ★★★ 新增：优先渲染“思考折叠面板”气泡 ★★★
         // ============================================
-        if (thoughtContent) {
+        if (thoughtContent && STATE.settings.HIDE_THOUGHT_PROCESS !== true) {
             // 解析里面可能的 Markdown，传入 isThought = true 参数
             const htmlContent = parseCustomMarkdown(thoughtContent);
             const thoughtBubble = this.createSingleBubble(
@@ -9455,6 +9455,12 @@ const App = {
         if (document.getElementById('gist-token')) {
             document.getElementById('gist-token').value = s.GIST_TOKEN || ''; 
         }
+
+        // ★★★ 回显思考链显示开关：默认展示，只有勾选后才隐藏气泡 ★★★
+        const hideThoughtToggle = document.getElementById('hide-thought-process-toggle');
+        if (hideThoughtToggle) {
+            hideThoughtToggle.checked = s.HIDE_THOUGHT_PROCESS === true;
+        }
         
         // 壁纸回显
         const previewImg = document.getElementById('wallpaper-preview-img');
@@ -10175,6 +10181,12 @@ const App = {
             s.FONT_SIZE = parseInt(slider.value, 10);
         }
 
+        // ★★★ 保存思考链显示开关：只影响前端展示，不影响模型输出和上下文清洗 ★★★
+        const hideThoughtToggle = document.getElementById('hide-thought-process-toggle');
+        if (hideThoughtToggle) {
+            s.HIDE_THOUGHT_PROCESS = hideThoughtToggle.checked === true;
+        }
+
         // 保存视觉设置
         if (UI.els.settingVisionUrl) s.VISION_URL = UI.els.settingVisionUrl.value.trim();
         if (UI.els.settingVisionKey) s.VISION_KEY = UI.els.settingVisionKey.value.trim();
@@ -10184,6 +10196,13 @@ const App = {
         // 保存并应用
         await Storage.saveSettings();
         UI.applyAppearance(); 
+
+        // ★★★ 刷新当前聊天，让思考链显示开关保存后立刻生效 ★★★
+        const currentContact = STATE.contacts.find(c => c.id === STATE.currentContactId);
+        if (currentContact && this.isViewingContactChat(currentContact.id)) {
+            UI.renderChatHistory(currentContact, false, true);
+        }
+
         UI.els.mainModal.classList.add('hidden');
     },
 

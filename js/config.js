@@ -73,6 +73,7 @@ const CONFIG = {
         THEME_COLOR_S: 100,
         THEME_COLOR_L: 72,
         FONT_SIZE: 16,
+        HIDE_THOUGHT_PROCESS: false,
         API_PRESETS: [],
         VISION_PRESETS: [],
         SYSTEM_PROMPT_PRESETS: [],
