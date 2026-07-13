@@ -104,6 +104,32 @@ const CloudSync = {
         return bytes.buffer;
     },
 
+    async _compressBackupBytes(bytes) {
+        // ★ 压缩放在加密前：云端只看到 AES-GCM 密文，不会看到明文压缩包。
+        if (typeof CompressionStream !== 'function') {
+            return { bytes, compression: 'none' };
+        }
+
+        try {
+            const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
+            const buffer = await new Response(stream).arrayBuffer();
+            return { bytes: new Uint8Array(buffer), compression: 'gzip' };
+        } catch (e) {
+            console.warn('[CloudSync] gzip compress failed, fallback to plain encrypted backup:', e);
+            return { bytes, compression: 'none' };
+        }
+    },
+
+    async _decompressBackupBytes(bytes, compression) {
+        if (!compression || compression === 'none') return bytes;
+        if (compression !== 'gzip') throw new Error('加密备份压缩格式不受支持');
+        if (typeof DecompressionStream !== 'function') throw new Error('当前浏览器不支持解压这份云备份');
+
+        const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+        const buffer = await new Response(stream).arrayBuffer();
+        return new Uint8Array(buffer);
+    },
+
     async _deriveBackupKey(passphrase, saltBuffer) {
         const cryptoApi = this._getCrypto();
         if (!cryptoApi) throw new Error('当前浏览器不支持安全加密，无法加密云备份');
@@ -249,8 +275,9 @@ const CloudSync = {
         const salt = cryptoApi.getRandomValues(new Uint8Array(16));
         const iv = cryptoApi.getRandomValues(new Uint8Array(12));
         const key = await this._deriveBackupKey(passphrase, salt.buffer);
-        const plaintext = new TextEncoder().encode(JSON.stringify(payload.data));
-        const ciphertext = await cryptoApi.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
+        const sourceBytes = new TextEncoder().encode(JSON.stringify(payload.data));
+        const packed = await this._compressBackupBytes(sourceBytes);
+        const ciphertext = await cryptoApi.subtle.encrypt({ name: 'AES-GCM', iv }, key, packed.bytes);
 
         return {
             backup_at: payload.backup_at,
@@ -258,8 +285,11 @@ const CloudSync = {
             encrypted: true,
             crypto: {
                 scheme: 'PBKDF2-SHA256-AES-GCM',
-                version: 1,
+                version: 2,
                 iterations: 250000,
+                compression: packed.compression,
+                source_bytes: sourceBytes.length,
+                compressed_bytes: packed.bytes.length,
                 salt: this._bufferToBase64(salt.buffer),
                 iv: this._bufferToBase64(iv.buffer),
                 ciphertext: this._bufferToBase64(ciphertext)
@@ -281,13 +311,17 @@ const CloudSync = {
 
         try {
             const plaintext = await this._getCrypto().subtle.decrypt({ name: 'AES-GCM', iv }, key, ciphertext);
-            const data = JSON.parse(new TextDecoder().decode(plaintext));
+            const unpacked = await this._decompressBackupBytes(new Uint8Array(plaintext), json.crypto.compression || 'none');
+            const data = JSON.parse(new TextDecoder().decode(unpacked));
             return {
                 backup_at: json.backup_at,
                 app: 'TeleWindy',
                 data
             };
         } catch (e) {
+            if (e.message && (e.message.includes('解压') || e.message.includes('压缩格式'))) {
+                throw e;
+            }
             throw new Error('同步主密码错误，或备份内容已损坏');
         }
     },
@@ -385,6 +419,17 @@ const CloudSync = {
         if (size < 1024) return `${size} B`;
         if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
         return `${(size / 1024 / 1024).toFixed(2)} MB`;
+    },
+
+    _formatBackupUploadStatus(payload, payloadText) {
+        const uploadSize = this._formatBackupSize(new Blob([payloadText]).size);
+        const cryptoInfo = payload?.crypto || {};
+        if (cryptoInfo.compression === 'gzip' && cryptoInfo.source_bytes && cryptoInfo.compressed_bytes) {
+            const sourceSize = this._formatBackupSize(cryptoInfo.source_bytes);
+            const packedSize = this._formatBackupSize(cryptoInfo.compressed_bytes);
+            return `${uploadSize}（原始 ${sourceSize}，压缩后 ${packedSize}）`;
+        }
+        return uploadSize;
     },
 
     // --- 逻辑补充：混淆工具 (防GitHub扫描) ---
@@ -548,7 +593,7 @@ const CloudSync = {
             const payload = await this._preparePayload();
             this._validateBackupBeforeUpload(payload);
             const payloadText = JSON.stringify(payload);
-            const payloadSize = this._formatBackupSize(new Blob([payloadText]).size);
+            const payloadSize = this._formatBackupUploadStatus(payload, payloadText);
             this.showStatus(`正在上传到私有云... 备份体积 ${payloadSize}`);
 
             const res = await fetch(url, {
@@ -592,7 +637,7 @@ const CloudSync = {
             const contentData = await this._preparePayload();
             this._validateBackupBeforeUpload(contentData);
             const contentText = JSON.stringify(contentData);
-            this.showStatus(`正在上传到 GitHub... 备份体积 ${this._formatBackupSize(new Blob([contentText]).size)}`);
+            this.showStatus(`正在上传到 GitHub... 备份体积 ${this._formatBackupUploadStatus(contentData, contentText)}`);
 
             const payload = {
                 description: "TeleWindy Backup", 
