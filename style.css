@@ -4758,7 +4758,7 @@ body.custom-mode .moment-content {
 }
 
 body.custom-mode .moment-comments {
-    background: #555;
+    background: #4c4c4c;
     color: #f3f3f3;
 }
 
@@ -4781,8 +4781,10 @@ body.custom-mode #moments-scroll-area {
 
 
 body.custom-mode .moment-card { 
-    background: #454545;
+
+    background: #3f3f3f;
     color: #ffffff;
+    border: 1px solid #656565;
 }
 
 
@@ -6882,8 +6884,9 @@ body.dark-mode #moments-scroll-area {
 
 body.dark-mode .moment-card { 
 
-    background: #454545;
+    background: #3f3f3f;
     color: #ffffff;
+    border: 1px solid #656565;
 }
 
 
@@ -6949,7 +6952,7 @@ button#btn-c-action-delete.momment-btn{
 
 
 body.dark-mode .moment-comments {
-    background: #555;
+    background: #4c4c4c;
     color: #f3f3f3;
 }
 
