@@ -152,7 +152,7 @@
 //   - CHAT_PAGE_SIZE: 聊天记录分页加载数量
 //   - MOMENTS_PAGE_SIZE: 心迹分页加载数量
 //   - GIST_ID_KEY: localStorage 中保存 Gist ID 的键名
-//   - MOMENTS_INJECT_COUNT: AI 在聊天中感知新心迹的次数
+//   - MOMENTS_INJECT_COUNT: AI 在聊天中感知新心迹的聊天轮次
 //   - DEFAULT: 应用默认设置
 //     - API_URL: 默认文本模型 API 地址
 //     - MODEL: 默认文本模型名称
@@ -8834,6 +8834,7 @@ const App = {
         let userText = UI.els.input.value.trim();
         const timestamp = formatTimestamp();
         let agentUserMessage = null;
+        let currentMomentTurnId = null;
         
         // ★ 判断是否有待发送的图片 (只有非 Reroll 时才处理新图)
         const hasPendingImage = (STATE.pendingImage && !isReroll);
@@ -8871,6 +8872,11 @@ const App = {
             const lastUserMsg = [...contact.history].reverse().find(m => m.role === 'user');
             if (!lastUserMsg) return;
             agentUserMessage = lastUserMsg;
+            // 心迹按“用户消息轮次”消费；重 roll 复用同一个 turnId，不再额外扣次数。
+            if (!lastUserMsg.momentInjectionTurnId) {
+                lastUserMsg.momentInjectionTurnId = `moment_turn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            }
+            currentMomentTurnId = lastUserMsg.momentInjectionTurnId;
             // Reroll 复用历史记录里的文本
             userText = lastUserMsg.content;
             
@@ -8990,10 +8996,12 @@ const App = {
 
             // 5. 存入历史记录 (Step 3 - Storage)
             // 构造新消息对象
+            const momentInjectionTurnId = `moment_turn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
             const newUserMsg = { 
                 role: 'user', 
                 content: `[${timestamp}] ${userText}`, // 注意：content 里不含描述，描述是后台用的
                 timestamp: timestamp,
+                momentInjectionTurnId: momentInjectionTurnId,
                 // ★ 存图和描述
                 images: currentImageBase64 ? [currentImageBase64] : null,
                 image_description: imageDescription || null
@@ -9014,6 +9022,7 @@ const App = {
             
             contact.history.push(newUserMsg);
             agentUserMessage = newUserMsg;
+            currentMomentTurnId = momentInjectionTurnId;
         }
 
         // 保存一次（包含刚刚优化的图片数据）
@@ -9202,9 +9211,9 @@ const App = {
             // 注意：如果你把函数放在 App 对象下，记得用 this.getMomentsContextForChat
             // 如果是定义在外部，直接用
             if (typeof this.getMomentsContextForChat === 'function') {
-                momentsUpdateInfo = this.getMomentsContextForChat(contact.id);
+                momentsUpdateInfo = this.getMomentsContextForChat(contact.id, currentMomentTurnId);
             } else if (typeof App !== 'undefined' && typeof App.getMomentsContextForChat === 'function') {
-                momentsUpdateInfo = App.getMomentsContextForChat(contact.id);
+                momentsUpdateInfo = App.getMomentsContextForChat(contact.id, currentMomentTurnId);
             }
 
             if (momentsUpdateInfo && momentsUpdateInfo.prompt) {
@@ -9429,15 +9438,25 @@ const App = {
                 }
             }
 
-            // ★★★ 【核心修改】AI回复成功后，扣除心迹通知次数 ★★★
+            // ★★★ 【核心修改】AI回复成功后，按聊天轮次扣除心迹通知 ★★★
             if (momentsUpdateInfo && momentsUpdateInfo.momentIds) {
+                const consumedTurnId = momentsUpdateInfo.turnId || currentMomentTurnId;
                 let anyChanged = false;
                 momentsUpdateInfo.momentIds.forEach(mid => {
                     const m = STATE.moments.find(x => x.id === mid);
-                    if (m && m.chatInjectionStatus && m.chatInjectionStatus[contact.id] > 0) {
-                        m.chatInjectionStatus[contact.id]--; // 扣除一次
+                    if (!m || !m.chatInjectionStatus || !consumedTurnId) return;
+
+                    if (!m.chatInjectionActiveTurn || typeof m.chatInjectionActiveTurn !== 'object' || Array.isArray(m.chatInjectionActiveTurn)) {
+                        m.chatInjectionActiveTurn = {};
+                    }
+                    if (m.chatInjectionActiveTurn[contact.id] === consumedTurnId) return;
+
+                    const remainingTurns = Number(m.chatInjectionStatus[contact.id]) || 0;
+                    if (remainingTurns > 0) {
+                        m.chatInjectionStatus[contact.id] = remainingTurns - 1;
+                        m.chatInjectionActiveTurn[contact.id] = consumedTurnId;
                         anyChanged = true;
-                        console.log(`[Chat] 心迹 ${mid} 对角色 ${contact.name} 的剩余通知次数: ${m.chatInjectionStatus[contact.id]}`);
+                        console.log(`[Chat] 心迹 ${mid} 对角色 ${contact.name} 的剩余通知轮次: ${m.chatInjectionStatus[contact.id]}`);
                     }
                 });
                 // 如果数据变了，记得保存心迹数据库
@@ -11327,7 +11346,9 @@ const App = {
             timestamp: Date.now(),
             comments: [],
             // ★★★ 新增字段：用于记录聊天时的注入状态 ★★★
-            chatInjectionStatus: injectionStatus 
+            chatInjectionStatus: injectionStatus,
+            // 记录每个角色已经消费过的用户消息轮次，避免重 roll 重复扣轮次。
+            chatInjectionActiveTurn: {} 
         };
 
         // 4. 保存数据
@@ -11924,11 +11945,15 @@ const App = {
     // ===========================================
     // ★★★ 新增：【聊天中】生成心迹上下文 Prompt ★★★
     // ===========================================
-    getMomentsContextForChat(contactId) {
-        // 1. 找到该角色“未读完”的心迹 (计数器 > 0)
-        // 我们按时间倒序找，为了不占用太多token，建议限制数量（比如只取最近的3条）
+    getMomentsContextForChat(contactId, currentTurnId = null) {
+        // 1. 找到该角色“本轮该看”的心迹：剩余轮次 > 0，或已经绑定到当前用户消息轮次。
+        // 重 roll 会复用同一个 currentTurnId，所以不会因为反复生成而提前耗尽。
         const relevantMoments = STATE.moments
-            .filter(m => m.chatInjectionStatus && m.chatInjectionStatus[contactId] > 0)
+            .filter(m => {
+                const remainingTurns = Number(m.chatInjectionStatus?.[contactId]) || 0;
+                const activeTurnId = m.chatInjectionActiveTurn?.[contactId] || null;
+                return remainingTurns > 0 || (currentTurnId && activeTurnId === currentTurnId);
+            })
             .sort((a, b) => b.timestamp - a.timestamp) // 倒序，最新的在前
             .slice(0, 3); // 限制只处理最近3条，避免token爆炸
 
@@ -11987,7 +12012,8 @@ const App = {
 
         return { 
             prompt: contextText, 
-            momentIds: idsToUpdate 
+            momentIds: idsToUpdate,
+            turnId: currentTurnId 
         };
     },
 

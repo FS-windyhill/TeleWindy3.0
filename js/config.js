@@ -11,7 +11,7 @@
 //   - COUNTDOWN_DAYS_KEY: 探索页倒数日 / 正数日列表 key
 //   - CHARACTER_SCHEDULES_KEY: 探索页角色日程 key
 //   - CHARACTER_MEMORIES_KEY: 探索页角色记忆 key
-//   - MOMENTS_INJECT_COUNT: 心迹在聊天里提示 AI 的次数
+//   - MOMENTS_INJECT_COUNT: 心迹在聊天里提示 AI 的聊天轮次
 //   - DEFAULT: 所有设置项的默认值
 //     - TODO_PLAN_INJECT_ENABLED: TO DO 计划是否注入 AI system prompt
 //     - COUNTDOWN_INJECT_ENABLED: 倒数日 / 正数日是否注入 AI system prompt
@@ -41,7 +41,7 @@ const CONFIG = {
     MOMENTS_PAGE_SIZE: 15, // 心迹分页数
     GIST_ID_KEY: 'telewindy-gist-id',
 
-    MOMENTS_INJECT_COUNT: 5, // AI在聊天中感知新心迹的次数
+    MOMENTS_INJECT_COUNT: 1, // AI在聊天中感知新心迹的聊天轮次
 
     DEFAULT: {
         API_URL: 'https://api.siliconflow.cn/v1/chat/completions',
