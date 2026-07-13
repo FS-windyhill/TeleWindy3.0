@@ -149,7 +149,7 @@ body.dark-mode .chat-header-avatar {
     align-items: center;
     gap: 5px;
     max-width: 100%;
-    overflow: hidden;
+    overflow: visible;
     text-overflow: ellipsis;
     white-space: nowrap;
     line-height: 1.15;
