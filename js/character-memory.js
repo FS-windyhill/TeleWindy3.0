@@ -14,7 +14,7 @@
 //   - collectMessagesForDate(contact, dateKey): 提取某天的可总结聊天
 //   - formatMessagesForPrompt(contact, messages): 整理给 AI 的带时间聊天记录
 //   - extractJson(rawText): 从 AI 返回里抽出 JSON
-//   - normalizeMemoryText(text, maxLength): 清理并截短文本
+//   - normalizeMemoryText(text): 清理记忆文本，不做字数硬截断
 //   - parseAiMemory(rawText): 解析并校验 AI 记忆
 //   - buildGenerationMessages(contact, dateKey): 生成请求 AI 总结记忆的 messages
 //   - getInjectRecords(memory, now): 读取最近 N 天 + 手动长期记住的可注入记录
@@ -26,8 +26,6 @@ const CharacterMemory = {
     maxRetry: 2,
     defaultInjectDays: 3,
     maxMemoryCount: 5,
-    maxMemoryLength: 30,
-    maxCommentLength: 20,
 
     pad(num) {
         return String(num).padStart(2, '0');
@@ -139,11 +137,29 @@ const CharacterMemory = {
         return '--:--';
     },
 
-    cleanMessageContent(msg) {
+    getVisibleMessageContentForMemory(msg) {
         let content = String(msg?.content || '').replace(/^\[\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\]\s*/, '').trim();
         if (msg?.role === 'assistant') {
+            // ★★★ 和聊天请求保持一致：AI 引用块在 UI 里会被拆成气泡，记忆归纳也按同样的气泡边界过滤。
+            content = content.replace(/(^|\n)>\s*/g, '\n\n');
             content = content.replace(/<(?:think|thinking|thought)>[\s\S]*?<\/(?:think|thinking|thought)>/gi, '').trim();
         }
+
+        const hiddenIndices = Array.isArray(msg?.hiddenIndices) ? msg.hiddenIndices : [];
+        if (hiddenIndices.length > 0) {
+            // ★★★ 分段隐藏只影响对应气泡；整条隐藏仍然在 collectMessagesForDate 里统一拦截。
+            const paragraphs = content.split(/\n\s*\n/).filter(part => part.trim());
+            content = paragraphs
+                .filter((_, index) => !hiddenIndices.includes(index))
+                .join('\n\n')
+                .trim();
+        }
+
+        return content;
+    },
+
+    cleanMessageContent(msg) {
+        const content = this.getVisibleMessageContentForMemory(msg);
         return content.replace(/\s+/g, ' ').slice(0, 900);
     },
 
@@ -187,8 +203,8 @@ const CharacterMemory = {
         }
     },
 
-    normalizeMemoryText(text, maxLength) {
-        return String(text || '').replace(/\s+/g, ' ').trim().slice(0, maxLength);
+    normalizeMemoryText(text) {
+        return String(text || '').replace(/\s+/g, ' ').trim();
     },
 
     parseAiMemory(rawText) {
@@ -197,8 +213,7 @@ const CharacterMemory = {
         const memories = rawMemories
             .map((item, index) => {
                 const text = this.normalizeMemoryText(
-                    typeof item === 'string' ? item : (item?.text || item?.memory || ''),
-                    this.maxMemoryLength
+                    typeof item === 'string' ? item : (item?.text || item?.memory || '')
                 );
                 if (!text) return null;
                 return {
@@ -211,7 +226,7 @@ const CharacterMemory = {
             .filter(Boolean)
             .slice(0, this.maxMemoryCount);
 
-        const comment = this.normalizeMemoryText(data.comment || data.note || data.message || '', this.maxCommentLength);
+        const comment = this.normalizeMemoryText(data.comment || data.note || data.message || '');
         if (!memories.length && !comment) throw new Error('AI 没有返回有效记忆');
         return { memories, comment };
     },

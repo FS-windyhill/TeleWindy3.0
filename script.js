@@ -7631,7 +7631,7 @@ const App = {
         const record = CharacterMemory.getRecord(memory, editing?.dateKey);
         const item = record?.memories?.find(entry => entry.id === editing?.itemId);
         const textInput = document.getElementById('character-memory-item-text');
-        const text = textInput ? textInput.value.trim().slice(0, CharacterMemory.maxMemoryLength) : '';
+        const text = textInput ? textInput.value.trim() : '';
         if (!item) return;
         if (!text) {
             alert('写点记忆内容吧');
