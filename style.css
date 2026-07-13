@@ -6046,6 +6046,21 @@ body.custom-mode .appearance-switch-cell {
 
 
 
+body.custom-mode .character-memory-tabs {
+    background: rgb(118 118 118 / 15%);
+    border: 1px solid rgb(197 197 197 / 75%);
+}
+
+body.custom-mode .character-memory-tabs::before {
+    background: rgb(30 30 30 / 40%);
+    border: 1px solid rgba(245, 245, 245, 0.5);
+}
+
+body.custom-mode .character-memory-tab.active {
+    background: transparent;
+    border-color: transparent;
+    color: #ffffff;
+}
 /* 【【【[[[】】】*/
 
 
@@ -9428,6 +9443,78 @@ body.dark-mode .character-memory-contact-status {
     color: #aaa;
 }
 
+.character-memory-tabs {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px;
+    margin: 3px 0 10px;
+    border-radius: 999px;
+    background: rgb(255 255 255 / 15%);
+    border: 1px solid rgb(245 245 245 / 75%);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    overflow: hidden;
+}
+
+/* Character memory view tabs reuse the countdown sliding pill motion with independent class names. */
+.character-memory-tabs::before {
+    content: "";
+    position: absolute;
+    z-index: 0;
+    top: 4px;
+    bottom: 4px;
+    left: 4px;
+    width: calc((100% - 12px) / 2);
+    border-radius: 999px;
+    background: rgb(230 230 230 / 70%);
+    border: 1px solid rgb(255 255 255);
+    box-sizing: border-box;
+    transition: transform 0.22s ease, opacity 0.18s ease;
+}
+
+.character-memory-tabs.is-injected::before {
+    transform: translateX(calc(100% + 4px));
+}
+
+.character-memory-tab {
+    position: relative;
+    z-index: 1;
+    border: 0;
+    border-radius: 999px;
+    min-height: 34px;
+    font-size: 0.9rem;
+    line-height: 1.2;
+    background: transparent;
+    color: #aeaeae;
+    cursor: pointer;
+    transition: color 0.18s ease;
+}
+
+.character-memory-tab.active {
+    background: transparent;
+    border-color: transparent;
+    color: #252525;
+}
+
+body.dark-mode .character-memory-tabs {
+    background: rgb(118 118 118 / 15%);
+    border: 1px solid rgb(197 197 197 / 75%);
+}
+
+body.dark-mode .character-memory-tabs::before {
+    background: rgb(30 30 30 / 40%);
+    border: 1px solid rgba(245, 245, 245, 0.5);
+}
+
+body.dark-mode .character-memory-tab.active {
+    background: transparent;
+    border-color: transparent;
+    color: #ffffff;
+}
 .character-memory-setting-pill {
     display: flex;
     flex-direction: column;

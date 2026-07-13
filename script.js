@@ -696,6 +696,7 @@ const STATE = {
     scheduleLastDateKey: '',
     scheduleDateTimer: null,
     currentMemoryContactId: null,
+    characterMemoryViewMode: 'all',
     editingMemoryItem: null,
     memoryQueueRunning: false,
     memoryLastDateKey: '',
@@ -7348,47 +7349,36 @@ const App = {
         const contact = STATE.contacts.find(item => item.id === contactId);
         if (!contact) return;
         STATE.currentMemoryContactId = contactId;
+        STATE.characterMemoryViewMode = 'all';
         UI.switchView('character-memory-detail');
     },
 
-    renderCharacterMemoryDetail() {
-        const contact = STATE.contacts.find(item => item.id === STATE.currentMemoryContactId);
-        const title = document.getElementById('character-memory-detail-title');
-        const status = document.getElementById('character-memory-status');
-        const input = document.getElementById('character-memory-inject-days');
-        const list = document.getElementById('character-memory-detail-list');
-        const empty = document.getElementById('character-memory-detail-empty');
-        if (!list) return;
+    setCharacterMemoryViewMode(mode) {
+        STATE.characterMemoryViewMode = mode === 'injected' ? 'injected' : 'all';
+        this.renderCharacterMemoryDetail();
+    },
 
-        if (!contact) {
-            if (title) title.textContent = '角色记忆';
-            list.innerHTML = '';
-            if (empty) empty.style.display = 'block';
-            return;
+    getCharacterMemoryDetailRecords(memory) {
+        const mode = STATE.characterMemoryViewMode === 'injected' ? 'injected' : 'all';
+        if (mode === 'injected') {
+            // ★★★ 注入视图直接复用真实注入规则，避免 UI 展示和上下文注入出现两套口径。
+            return CharacterMemory.getInjectRecords(memory, new Date())
+                .filter(record => record && Array.isArray(record.memories) && record.memories.length)
+                .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
         }
 
-        const memory = CharacterMemory.ensureMemory(contact.id);
-        if (title) title.textContent = contact.name || '角色记忆';
-        if (input) input.value = Math.max(1, Number.parseInt(memory.injectDays, 10) || CharacterMemory.defaultInjectDays);
-        if (status) {
-            const records = (memory.records || []).filter(record => record && (record.memories?.length || record.error));
-            status.textContent = `${this.getCharacterMemoryStatusText(memory)} · 共 ${records.length} 天`;
-            status.className = `character-memory-status${memory.isGenerating ? ' pending' : ''}${records.some(record => record.error) ? ' failure' : ''}`;
-        }
-
-        list.innerHTML = '';
-        const records = (memory.records || [])
+        return (memory.records || [])
             .filter(record => record && (record.memories?.length || record.comment || record.error))
             .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
-        if (empty) empty.style.display = records.length ? 'none' : 'block';
+    },
 
-        records.forEach(record => {
-            const card = document.createElement('div');
-            card.className = 'character-memory-card';
-            card.dataset.dateKey = record.dateKey;
-            const items = (record.memories || []).map(item => {
-                const alwaysInject = item && typeof item === 'object' && item.alwaysInject === true;
-                return `
+    createCharacterMemoryCard(record) {
+        const card = document.createElement('div');
+        card.className = 'character-memory-card';
+        card.dataset.dateKey = record.dateKey;
+        const items = (record.memories || []).map(item => {
+            const alwaysInject = item && typeof item === 'object' && item.alwaysInject === true;
+            return `
                 <div class="character-memory-item" data-id="${this.escapeHtml(item.id)}">
                     <div class="character-memory-text">${this.escapeHtml(item.text || '')}</div>
                     <button type="button" class="character-memory-icon-btn character-memory-pin-btn${alwaysInject ? ' active' : ''}" data-action="toggle-memory-pin" title="${alwaysInject ? '取消长期记住' : '长期记住'}" aria-pressed="${alwaysInject ? 'true' : 'false'}">
@@ -7405,14 +7395,14 @@ const App = {
                     </button>
                 </div>
             `;
-            }).join('');
-            const comment = record.comment
-                ? `<div class="character-memory-comment">${this.escapeHtml(record.comment)}</div>`
-                : '';
-            const error = record.error
-                ? `<div class="character-memory-comment">生成失败：${this.escapeHtml(record.error)}</div>`
-                : '';
-            card.innerHTML = `
+        }).join('');
+        const comment = record.comment
+            ? `<div class="character-memory-comment">${this.escapeHtml(record.comment)}</div>`
+            : '';
+        const error = record.error
+            ? `<div class="character-memory-comment">生成失败：${this.escapeHtml(record.error)}</div>`
+            : '';
+        card.innerHTML = `
                 <div class="character-memory-card-head">
                     <div class="character-memory-date">${this.escapeHtml(record.dateKey)}</div>
                     <button type="button" class="character-memory-icon-btn" data-action="reroll-memory-day" title="重新总结这天的记忆">
@@ -7428,7 +7418,57 @@ const App = {
                 ${comment}
                 ${error}
             `;
-            list.appendChild(card);
+        return card;
+    },
+
+    renderCharacterMemoryDetail() {
+        const contact = STATE.contacts.find(item => item.id === STATE.currentMemoryContactId);
+        const title = document.getElementById('character-memory-detail-title');
+        const status = document.getElementById('character-memory-status');
+        const input = document.getElementById('character-memory-inject-days');
+        const list = document.getElementById('character-memory-detail-list');
+        const empty = document.getElementById('character-memory-detail-empty');
+        const mode = STATE.characterMemoryViewMode === 'injected' ? 'injected' : 'all';
+        const tabs = document.querySelector('.character-memory-tabs');
+        if (!list) return;
+
+        tabs?.classList.toggle('is-injected', mode === 'injected');
+        document.querySelectorAll('.character-memory-tab').forEach(btn => {
+            const active = btn.dataset.mode === mode;
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+
+        if (!contact) {
+            if (title) title.textContent = '角色记忆';
+            list.innerHTML = '';
+            if (empty) {
+                empty.textContent = '开启记忆后，会在这里显示每日总结。';
+                empty.style.display = 'block';
+            }
+            return;
+        }
+
+        const memory = CharacterMemory.ensureMemory(contact.id);
+        if (title) title.textContent = contact.name || '角色记忆';
+        if (input) input.value = Math.max(1, Number.parseInt(memory.injectDays, 10) || CharacterMemory.defaultInjectDays);
+        const allRecords = (memory.records || []).filter(record => record && (record.memories?.length || record.error));
+        if (status) {
+            status.textContent = `${this.getCharacterMemoryStatusText(memory)} · 共 ${allRecords.length} 天`;
+            status.className = `character-memory-status${memory.isGenerating ? ' pending' : ''}${allRecords.some(record => record.error) ? ' failure' : ''}`;
+        }
+
+        list.innerHTML = '';
+        const records = this.getCharacterMemoryDetailRecords(memory);
+        if (empty) {
+            empty.textContent = mode === 'injected'
+                ? '当前没有会注入上下文的记忆。'
+                : '开启记忆后，会在这里显示每日总结。';
+            empty.style.display = records.length ? 'none' : 'block';
+        }
+
+        records.forEach(record => {
+            list.appendChild(this.createCharacterMemoryCard(record));
         });
     },
 
@@ -13186,6 +13226,10 @@ const App = {
             const actionEl = event.target.closest('[data-action="edit-schedule-entry"]');
             const itemEl = event.target.closest('.character-schedule-entry');
             if (actionEl && itemEl?.dataset.id) this.openScheduleEntryModal(itemEl.dataset.id);
+        });
+
+        document.querySelectorAll('.character-memory-tab').forEach(btn => {
+            btn.addEventListener('click', () => this.setCharacterMemoryViewMode(btn.dataset.mode));
         });
 
         document.getElementById('character-memory-detail-list')?.addEventListener('click', (event) => {
