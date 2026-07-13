@@ -1275,17 +1275,25 @@
         <!-- 页面 2：聊天窗口 (隐藏) -->
         <!-- ======================= -->
         <div id="view-chat" class="page-view"> 
-            <header class="app-header">
+            <header class="app-header chat-header">
                 <!-- 左上角返回按钮 -->
                 <button id="back-btn" class="header-icon-btn left" title="返回列表">
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="15 18 9 12 15 6"></polyline>
                     </svg>
                 </button>
-                
-                <h1 id="chat-title">角色名</h1>
-                <!-- 状态文本 -->
-                <p id="typing-status">在线</p>
+                <!-- 聊天页专用联系人信息：只在这里左对齐，不影响其它页面的通用 Header -->
+                <div class="chat-header-profile">
+                    <img id="chat-header-avatar" class="chat-header-avatar" src="./assets/images/char.jpg" alt="角色头像">
+                    <div class="chat-header-meta">
+                        <h1 id="chat-title">角色名</h1>
+                        <!-- 状态文本 -->
+                        <p id="typing-status" class="presence-status presence-online">
+                            <span class="presence-dot" aria-hidden="true"></span>
+                            <span class="presence-text">在线</span>
+                        </p>
+                    </div>
+                </div>
 
                 <!-- 右上角设置按钮 (原来的清空按钮改成了这个，或者并在设置里) -->
                 <button id="chat-settings-btn" class="header-icon-btn right" title="设置/清空">

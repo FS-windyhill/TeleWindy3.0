@@ -2058,6 +2058,7 @@ const UI = {
         contactContainer: document.getElementById('contact-list-container'),
         chatMsgs: document.getElementById('chat-messages'),
         chatTitle: document.getElementById('chat-title'),
+        chatAvatar: document.getElementById('chat-header-avatar'),
         status: document.getElementById('typing-status'),
         input: document.getElementById('task-input'),
         sendBtn: document.getElementById('send-button'),
@@ -2115,6 +2116,11 @@ const UI = {
     // ★★★ 新增：用于标记是否允许自动滚动的状态 ★★★
     autoScrollEnabled: true, 
 
+    // ★★★ 聊天 Header 在线状态：先写成常量，后面要做成设置项也只改这里 ★★★
+    presenceTicker: null,
+    presenceAwayAfterMs: 30 * 60 * 1000,
+    presenceOfflineAfterMs: 6 * 60 * 60 * 1000,
+
     init() {
         this.renderContacts(); // 先渲染联系人
         CloudSync.init();      // 云同步初始化
@@ -2160,6 +2166,7 @@ const UI = {
 
         // 最后应用所有外观（包括刚才读出来的字体、主题、壁纸）
         this.applyAppearance();
+        this.startPresenceTicker();
     },
 
     // 主题色默认值：对应原来的 rgb(135, 110, 255)，避免老用户第一次打开时颜色突变。
@@ -3210,7 +3217,7 @@ const UI = {
         }
 
         chatMsgs.innerHTML = '';
-        this.els.chatTitle.innerText = contact.name;
+        this.updateChatHeader(contact);
 
         const totalMsgs = contact.history.length;
         
@@ -3478,6 +3485,96 @@ const UI = {
         container.scrollTop = container.scrollHeight;
     },
 
+    // ★★★ 聊天 Header 在线状态：统一管理头像、绿点和“离开/离线”文案 ★★★
+    getChatHeaderAvatarSrc(contact) {
+        const avatar = String(contact?.avatar || '').trim();
+        if (/^(data:image\/|https?:\/\/|blob:|\.\/assets\/|assets\/)/i.test(avatar)) return avatar;
+        return './assets/images/char.jpg';
+    },
+
+    parseChatTimestampMs(value) {
+        if (Number.isFinite(value)) return value;
+        const raw = String(value || '').trim();
+        const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/);
+        if (!match) return 0;
+        const [, yyyy, MM, dd, HH, mm] = match;
+        const time = new Date(Number(yyyy), Number(MM) - 1, Number(dd), Number(HH), Number(mm)).getTime();
+        return Number.isFinite(time) ? time : 0;
+    },
+
+    getContactLastInteractionMs(contact) {
+        const saved = Number(contact?.presenceLastActiveAt || 0);
+        if (Number.isFinite(saved) && saved > 0) return saved;
+
+        const history = Array.isArray(contact?.history) ? contact.history : [];
+        for (let i = history.length - 1; i >= 0; i--) {
+            const msg = history[i];
+            const time = this.parseChatTimestampMs(msg?.timestamp || msg?.createdAt || msg?.updatedAt);
+            if (time) return time;
+        }
+        return 0;
+    },
+
+    touchContactPresence(contact) {
+        if (!contact) return;
+        contact.presenceLastActiveAt = Date.now();
+        this.refreshChatPresence(contact.id);
+    },
+
+    getContactPresence(contact, isTyping = false) {
+        if (isTyping) return { key: 'typing', text: '对方正在输入' };
+
+        const lastActiveAt = this.getContactLastInteractionMs(contact);
+        if (!lastActiveAt) return { key: 'offline', text: '离线' };
+
+        const inactiveMs = Math.max(0, Date.now() - lastActiveAt);
+        if (inactiveMs >= this.presenceOfflineAfterMs) return { key: 'offline', text: '离线' };
+        if (inactiveMs >= this.presenceAwayAfterMs) return { key: 'away', text: '离开' };
+        return { key: 'online', text: '在线' };
+    },
+
+    renderContactPresence(contact, isTyping = false) {
+        if (!this.els.status) return;
+        const presence = this.getContactPresence(contact, isTyping);
+        const textEl = this.els.status.querySelector('.presence-text');
+
+        this.els.status.className = `presence-status presence-${presence.key}${presence.key === 'typing' ? ' typing' : ''}`;
+        if (textEl) {
+            textEl.innerText = presence.text;
+        } else {
+            this.els.status.innerText = presence.text;
+        }
+    },
+
+    updateChatHeader(contact) {
+        if (!contact) return;
+        if (this.els.chatTitle) this.els.chatTitle.innerText = contact.name || '角色名';
+        if (this.els.chatAvatar) {
+            const fallback = './assets/images/char.jpg';
+            const avatarSrc = this.getChatHeaderAvatarSrc(contact);
+            this.els.chatAvatar.onerror = () => {
+                if (this.els.chatAvatar && !this.els.chatAvatar.src.endsWith('/assets/images/char.jpg')) {
+                    this.els.chatAvatar.src = fallback;
+                }
+            };
+            if (this.els.chatAvatar.getAttribute('src') !== avatarSrc) {
+                this.els.chatAvatar.src = avatarSrc;
+            }
+        }
+        this.renderContactPresence(contact, STATE.typingContactId === contact.id);
+    },
+
+    refreshChatPresence(contactId = STATE.currentContactId) {
+        if (!contactId || contactId !== STATE.currentContactId) return;
+        const contact = STATE.contacts.find(c => c.id === contactId);
+        if (contact) this.renderContactPresence(contact, STATE.typingContactId === contact.id);
+    },
+
+    startPresenceTicker() {
+        if (this.presenceTicker) return;
+        // 每分钟轻量刷新一次，打开聊天页不操作时也能从“在线”自然变成“离开/离线”。
+        this.presenceTicker = setInterval(() => this.refreshChatPresence(), 60 * 1000);
+    },
     // UI渲染：对方正在输入
     setLoading(isLoading, contactId) { // ★★★ 参数 contactId 依然是必需的
         // 1. 更新全局状态，让程序知道“谁”在输入
@@ -3486,16 +3583,8 @@ const UI = {
         // 2. 关键检查：只有当这个状态更新是针对“当前打开的”聊天窗口时，才刷新UI
         if (contactId === STATE.currentContactId) {
             this.els.sendBtn.disabled = isLoading;
-
-            if (isLoading) {
-                // ★★★ 恢复您原来的文本
-                this.els.status.innerText = '对方正在输入'; 
-                this.els.status.classList.add('typing');
-            } else {
-                // ★★★ 恢复您原来的文本
-                this.els.status.innerText = '在线';
-                this.els.status.classList.remove('typing');
-            }
+            const contact = STATE.contacts.find(c => c.id === contactId);
+            this.renderContactPresence(contact, isLoading);
         }
     },
 
@@ -3960,6 +4049,9 @@ const App = {
                             }
                         }
                         // ★★★★★ Post Agent：后台恢复后补跑 END ★★★★★
+
+                        // ★★★ Presence：后台补回来的回复也刷新最后互动时间 ★★★
+                        UI.touchContactPresence(contact);
 
                         if (this.isViewingContactChat(contact.id)) {
                             UI.renderChatHistory(contact);
@@ -8767,6 +8859,9 @@ const App = {
             STATE.visibleMsgCount = Math.max(CONFIG.CHAT_PAGE_SIZE, STATE.visibleMsgCount || 15);
             UI.renderChatHistory(contact);
         }
+        // ★★★ Presence：用户主动发消息/重生成时，立刻把角色状态拉回在线 ★★★
+        UI.touchContactPresence(contact);
+
         // =================================================================
 
         // =================================================================
@@ -9320,6 +9415,9 @@ const App = {
                 newAiMessageIndex = contact.history.findIndex(msg => msg.asyncJobId === asyncJobId);
             }
             // ★★★★★ 后台回复接收：双链路去重 END ★★★★★
+
+            // ★★★ Presence：AI 回复入库后也算一次互动，保持顶部状态新鲜 ★★★
+            UI.touchContactPresence(contact);
 
             const assistantMessage = contact.history[newAiMessageIndex] || null;
             if (assistantMessage && assistantMessage.role === 'assistant') {
@@ -14403,6 +14501,7 @@ const App = {
                 avatar, 
                 prompt, 
                 history: [],
+                presenceLastActiveAt: Date.now(),
                 linkedPresetName: linkedPresetName,
                 linkedSystemPromptPresetName: linkedSystemPromptPresetName
             });
@@ -14414,11 +14513,8 @@ const App = {
         
         // 如果当前正好在聊这个角色，刷新一下界面
         if (STATE.currentContactId === this.editingId) {
-            document.getElementById('chat-title').innerText = name;
-            // 如果你想刷新聊天界面的头像，可以加这一句：
-            // document.querySelector('.chat-header-avatar').src = avatar; 
-            
             const c = STATE.contacts.find(x => x.id === this.editingId);
+            UI.updateChatHeader(c);
             UI.renderChatHistory(c);
         }
 

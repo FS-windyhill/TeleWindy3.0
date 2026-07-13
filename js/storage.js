@@ -196,7 +196,8 @@ const Storage = {
                 name: '小真蛸',
                 avatar: '😊',
                 prompt: '你是一个温柔可爱的助手小真蛸，说话请带上颜文字。',
-                history: []
+                history: [],
+                presenceLastActiveAt: Date.now()
             });
         }
 

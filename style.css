@@ -97,6 +97,103 @@ body {
     font-size: 0.8em;
     color: #666;
 }
+/* ★★★ 聊天页 Header 联系人模式：只影响 #view-chat，普通页面继续保持居中标题 ★★★ */
+.chat-header {
+    text-align: left;
+}
+
+.chat-header-profile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    height: 40px;
+    margin-left: 42px;
+    margin-right: 42px;
+}
+
+.chat-header-avatar {
+    width: 35px;
+    height: 35px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: rgba(255, 255, 255, 0.72);
+    border: 3px solid rgba(0, 0, 0, 0.25);
+
+}
+
+body.dark-mode .chat-header-avatar {
+    border: 3px solid rgba(255, 255, 255, 0.3);
+
+}
+
+.chat-header-meta {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.chat-header #chat-title {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+    line-height: 1.15;
+}
+
+.chat-header #typing-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.15;
+}
+
+.presence-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: #8e8e93;
+    box-shadow: 0 0 0 2px rgba(142, 142, 147, 0.12);
+}
+
+.presence-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.presence-online .presence-dot,
+.presence-typing .presence-dot {
+    background: #34c759;
+    box-shadow: 0 0 0 2px rgba(52, 199, 89, 0.16);
+}
+
+.presence-away .presence-dot {
+    background: #ffcc00;
+    box-shadow: 0 0 0 2px rgba(255, 204, 0, 0.18);
+}
+
+.presence-offline .presence-dot {
+    background: #9ca3af;
+    box-shadow: 0 0 0 2px rgba(156, 163, 175, 0.14);
+}
+
+.presence-typing .presence-dot {
+    animation: presencePulse 1.4s ease-in-out infinite;
+}
+
+@keyframes presencePulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(0.72); opacity: 0.65; }
+}
 
 
 #clear-button:hover {
@@ -588,8 +685,8 @@ body {
     
     /* --- 外观 --- */
     font-size: 0;             /* 【技巧】字体设为0，消除幽灵空白节点 */
-    background: rgba(236, 236, 236, 0.57);
-    border: 1px solid rgba(113, 113, 113, 0.5);
+    /* background: rgba(236, 236, 236, 0.57);
+    border: 1px solid rgba(113, 113, 113, 0.5); */
     color: #818181;
     
     /* --- iOS 修复 --- */
@@ -607,8 +704,8 @@ body {
    ========================================= */
 .header-icon-btn .icon {
     /* --- 尺寸：偶数 (配合父级28px) --- */
-    width: 16px; 
-    height: 16px;
+    width: 20px; 
+    height: 20px;
     
     /* --- 核心：去除基线偏移 --- */
     display: block; 
@@ -2837,8 +2934,8 @@ body.dark-mode #reroll-footer-btn {
 body.dark-mode .header-icon-btn.right,
 body.dark-mode .header-icon-btn.left {
     color: #dedede;
-    border: 1px solid #ffffff50;
-    background: rgba(255, 255, 255, 0.2);
+    /* border: 1px solid #ffffff50;
+    background: rgba(255, 255, 255, 0.2); */
 }
 
 /* 通讯录列表 */
@@ -4659,9 +4756,8 @@ body.custom-mode .moment-content {
 }
 
 body.custom-mode .moment-comments {
-    background: #55555555;
-    color: #e8e8e8;
-    border: 1px solid #5c5c5ccf;
+    background: #555;
+    color: #f3f3f3;
 }
 
 
@@ -4683,8 +4779,8 @@ body.custom-mode #moments-scroll-area {
 
 
 body.custom-mode .moment-card { 
+    background: #454545;
     color: #ffffff;
-    border-bottom: 1px solid #555;
 }
 
 
@@ -5114,15 +5210,10 @@ body.custom-mode .edit-box {
 
 body.custom-mode .header-icon-btn.right, body.custom-mode .header-icon-btn.left {
     color: #dedede;
-    border: 1px solid #ffffff50;
-    background: rgba(255, 255, 255, 0.2);
+    /* border: 1px solid #ffffff50;
+    background: rgba(255, 255, 255, 0.2); */
 }
 
-body.custom-mode .header-icon-btn.right, body.custom-mode .header-icon-btn.left {
-    color: #dedede;
-    border: 1px solid #ffffff50;
-    background: rgba(255, 255, 255, 0.2);
-}
 
 
 /* Footer */
@@ -6061,6 +6152,13 @@ body.custom-mode .character-memory-tab.active {
     border-color: transparent;
     color: #ffffff;
 }
+
+body.custom-mode .chat-header-avatar {
+    border: 3px solid rgba(255, 255, 255, 0.3);
+
+}
+
+
 /* 【【【[[[】】】*/
 
 
@@ -6760,27 +6858,30 @@ body.dark-mode #moments-scroll-area {
 /* 心迹卡片流 */
 /* 心迹卡片流 */
 .moment-card { 
-    padding: 20px 10px; 
+    padding: 15px 15px;
     
     /* ★ 核心改动：增加外边距，让它变成独立卡片，两边留白 ★ */
-    margin: 0 16px 0px 16px; /* 上边距0，左右留白16px，下边距24px分隔下一个卡片 */
-
-    border-bottom: 1px solid #ccc;             /* 去掉以前的底部横线分隔 */
-
+    margin: 0 20px 15px 20px;/* 上边距0，左右留白16px，下边距24px分隔下一个卡片 */
+  
+    border-radius: 7px;
+    border: none;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
 
     display: flex; 
     flex-direction: column; 
-    /* background: #ffffff; */
+    background: #ffffff;
     color: #333;
     transition: transform 0.2s ease, box-shadow 0.2s ease; /* 增加一点丝滑的过渡动画 */
+
+
 }
 
 
 
 body.dark-mode .moment-card { 
 
+    background: #454545;
     color: #ffffff;
-    border-bottom: 1px solid #555;
 }
 
 
@@ -6831,13 +6932,12 @@ body.dark-mode .moment-content {
 /* 评论区优化 */
 .moment-comments {
     position: relative;
-    background: #efefef;
+    background: #f2f3f5;
     padding: 12px 15px;
-    border-radius: 5px;
+    border-radius: 8px;
     margin-top: 5px;
     font-size: 0.95rem;
     color: #333;
-    border: 1px solid #dcdcdc;
 }
 
 button#btn-c-action-delete.momment-btn{
@@ -6847,9 +6947,8 @@ button#btn-c-action-delete.momment-btn{
 
 
 body.dark-mode .moment-comments {
-    background: #55555555;
-    color: #e8e8e8;
-    border: 1px solid #5c5c5ccf;
+    background: #555;
+    color: #f3f3f3;
 }
 
 .comment-item { 
