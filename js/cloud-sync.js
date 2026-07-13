@@ -619,12 +619,19 @@ const CloudSync = {
     async _fetchFromCustom(password) {
         const url = this.els.urlInput.value.trim();
         this.showStatus('正在从私有云拉取...');
+        const startedAt = Date.now();
         const res = await fetch(url, {
             method: 'GET',
             headers: { 'Authorization': `Bearer ${password}` }
         });
         if (!res.ok) throw new Error('拉取失败');
-        return await res.json();
+
+        // ★ 恢复卡住时先分清是下载慢，还是下载完以后手机解析大 JSON 慢。
+        const text = await res.text();
+        const sizeText = this._formatBackupSize(new Blob([text]).size);
+        const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
+        this.showStatus(`私有云已下载 ${sizeText}，耗时 ${seconds}s，正在解析...`);
+        return JSON.parse(text);
     },
 
     // 3. Gist 上传
