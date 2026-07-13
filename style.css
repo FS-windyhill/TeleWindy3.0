@@ -563,6 +563,8 @@ body.dark-mode .chat-header-avatar {
     flex-direction: column;
     height: 100%;
     width: 100%;
+    /* ★ 聊天页是盖在其它页面上的，自己铺底才能避免透出记忆/探索等旧页面。 */
+    background: var(--app-wallpaper-image, url('assets/images/wallpaper.jpg')) center/cover no-repeat fixed, var(--background-color);
     
 }
 

@@ -111,6 +111,7 @@
 //     - showTodoTopNotice(message, options): 弹出默认跳转到 TO DO 的顶部通知
 //     - isViewingContactChat(contactId): 判断用户是否真的正在查看某个角色聊天窗口
 //     - markContactIncomingMessage(contact, options): 统一处理非当前窗口 AI 新消息的红点和顶部通知
+//     - showMomentReplyNotice(charId, options): 心迹收到新 AI 回复时弹顶部通知，当前就在心迹页则静默
 //     - showTopNotice(message, options): 通用顶部通知栈，支持多条并发、按钮和上划关闭
 //     - isDynamicContextSystemRoleError(error): 判断错误是否像多 system / system role 兼容问题
 //     - getDynamicContextWarnKey(contact, requestSettings): 生成兼容提示的会话内去重 key
@@ -2227,6 +2228,8 @@ const UI = {
 
         // --- 1. 处理壁纸 ---
         document.body.style.backgroundImage = `url('${WALLPAPER}')`;
+        // ★ 聊天页自己也要铺同一张壁纸，避免透明时透出下面残留的记忆/探索页面。
+        document.documentElement.style.setProperty('--app-wallpaper-image', document.body.style.backgroundImage);
         // 如果是默认壁纸且不是夜间/自定义模式，给个浅灰背景
         if (WALLPAPER === CONFIG.DEFAULT.WALLPAPER && THEME === 'light') {
             document.body.style.backgroundColor = '#f2f2f2';
@@ -3981,6 +3984,9 @@ const App = {
                             API.forgetPendingJob(pending.jobId);
                             if (applied) await Storage.saveMoments();
                             this.renderMomentsUI();
+                            if (applied && pending.context.type !== 'regenerate_comment') {
+                                this.showMomentReplyNotice(pending.context.charId);
+                            }
                             console.info('[AsyncBackend] resume saved moment result', {
                                 jobId: API.asyncJobLogId(pending.jobId),
                                 type: pending.context.type || '',
@@ -4974,6 +4980,25 @@ const App = {
             type: 'incoming-message',
             timeout: options.timeout || 6500,
             onClick: () => this.enterChat(contact.id)
+        });
+    },
+
+    isViewingMomentsPage() {
+        const viewMoments = document.getElementById('view-moments');
+        // ★ currentMainView 会保留“从哪个主入口进来”，所以心迹页用实际显示状态判断。
+        return !!viewMoments && getComputedStyle(viewMoments).display !== 'none';
+    },
+
+    showMomentReplyNotice(charId, options = {}) {
+        // ★ 用户正在心迹列表里看回复时不打扰；历史加载也不会走这个入口。
+        if (options.notice === false || this.isViewingMomentsPage()) return;
+
+        const contact = STATE.contacts.find(c => c.id === charId);
+        const name = contact?.name || options.name || '有人';
+        this.showTopNotice(`${name}回复了你的心迹`, {
+            type: 'moment-reply',
+            timeout: options.timeout || 6500,
+            targetView: 'moments'
         });
     },
     // ★★★★★ 顶部通知：AI 新消息红点 + 横幅入口 END ★★★★★
@@ -11483,6 +11508,7 @@ const App = {
                     };
                     if (asyncJobId) comment.asyncJobId = asyncJobId;
                     targetMoment.comments.push(comment);
+                    this.showMomentReplyNotice(char.id);
                 }
 
                 // 2.4 保存并刷新
@@ -11929,6 +11955,7 @@ const App = {
                 };
                 if (asyncJobId) comment.asyncJobId = asyncJobId;
                 targetMoment.comments.push(comment);
+                this.showMomentReplyNotice(targetChar.id);
             }
             this.saveAndRenderMoments();
         } catch (e) {
