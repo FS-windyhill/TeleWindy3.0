@@ -379,6 +379,14 @@ const CloudSync = {
         return true;
     },
 
+    _formatBackupSize(byteLength) {
+        // ★ 上传前把备份体积露出来，方便判断是不是“大包同步”把私有云链路顶断。
+        const size = Number(byteLength) || 0;
+        if (size < 1024) return `${size} B`;
+        if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+        return `${(size / 1024 / 1024).toFixed(2)} MB`;
+    },
+
     // --- 逻辑补充：混淆工具 (防GitHub扫描) ---
     _maskToken(token) {
         if (!token) return token;
@@ -539,6 +547,9 @@ const CloudSync = {
         try {
             const payload = await this._preparePayload();
             this._validateBackupBeforeUpload(payload);
+            const payloadText = JSON.stringify(payload);
+            const payloadSize = this._formatBackupSize(new Blob([payloadText]).size);
+            this.showStatus(`正在上传到私有云... 备份体积 ${payloadSize}`);
 
             const res = await fetch(url, {
                 method: 'POST',
@@ -546,7 +557,7 @@ const CloudSync = {
                     'Authorization': `Bearer ${password}`, 
                     'Content-Type': 'application/json' 
                 },
-                body: JSON.stringify(payload)
+                body: payloadText
             });
 
             if (res.ok) {
@@ -580,12 +591,14 @@ const CloudSync = {
         try {
             const contentData = await this._preparePayload();
             this._validateBackupBeforeUpload(contentData);
+            const contentText = JSON.stringify(contentData);
+            this.showStatus(`正在上传到 GitHub... 备份体积 ${this._formatBackupSize(new Blob([contentText]).size)}`);
 
             const payload = {
                 description: "TeleWindy Backup", 
                 files: { 
                     "telewindy-backup.json": { 
-                        content: JSON.stringify(contentData) 
+                        content: contentText
                     } 
                 }
             };
@@ -597,13 +610,14 @@ const CloudSync = {
                 method = 'PATCH';
             }
 
+            const gistPayloadText = JSON.stringify(payload);
             const res = await fetch(url, {
                 method: method,
                 headers: { 
                     Authorization: `token ${token}`, 
                     'Content-Type': 'application/json' 
                 },
-                body: JSON.stringify(payload)
+                body: gistPayloadText
             });
 
             if (res.ok) {
