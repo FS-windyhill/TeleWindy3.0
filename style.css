@@ -6,7 +6,7 @@
     --message-bg-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.97), 100%) var(--theme-color-l) / 0.55);
     --message-bg-ai: #ffffffaa;
     /* --message-border-user: #e1fdb99e; */
-    --message-border-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.9), 100%) clamp(0%, calc(var(--theme-color-l) * 1.25), 100%) / 0.88);
+    --message-border-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.9), 100%) clamp(0%, calc(var(--theme-color-l) * 1.3), 100%) / 0.88);
     --message-border-ai: #fff;    
     --border-radius: 15px;
     --box-shadow: 0 3px 3px rgba(0,0,0,0.08);
@@ -2844,7 +2844,7 @@ body.dark-mode {
     --text-color: #ffffff; 
     --message-bg-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.92), 100%) var(--theme-color-l) / 0.6);
     --message-bg-ai: #3030309e;
-    --message-border-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.9), 100%) clamp(0%, calc(var(--theme-color-l) * 1.25), 100%) / 0.88);
+    --message-border-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.88), 100%) clamp(0%, calc(var(--theme-color-l) * 1.3), 100%) / 0.88);
     --message-border-ai: rgba(160, 160, 160, 0.25);
     
     --btn-color: #3a3a3a80;          /* 按钮深色背景 */
