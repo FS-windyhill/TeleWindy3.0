@@ -510,7 +510,7 @@ body.dark-mode .chat-header-avatar {
 .typing {
     font-style: normal !important;
 }
-.typing::after {
+.typing .presence-text::after {
     content: '';
     animation: ellipsis 1.5s infinite;
 }
@@ -531,7 +531,7 @@ body.dark-mode .chat-header-avatar {
     to { opacity: 1; transform: translateY(0); }
 }
 
-.typing::after {
+.typing .presence-text::after {
     content: '';
     animation: ellipsis 1.5s infinite;
 }
