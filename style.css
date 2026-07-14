@@ -4737,7 +4737,7 @@ body.custom-mode .explore-list li {
 
 
     background: rgba(50, 50, 50, 0.5);
-    border: 1px solid rgba(245, 245, 245, 0.5);
+    border: 1px solid rgba(245, 245, 245, 0.3);
     transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
 
 
@@ -5994,7 +5994,7 @@ body.custom-mode .app-top-notice-action {
 body.custom-mode .character-memory-contact,
 body.custom-mode .character-memory-card {
     background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(245, 245, 245, 0.5);
+    border: 1px solid rgba(245, 245, 245, 0.3);
 }
 
 body.custom-mode .character-memory-avatar {
@@ -6012,7 +6012,7 @@ body.custom-mode .character-memory-contact-status {
 
 body.custom-mode .character-memory-item {
     background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(245, 245, 245, 0.3);
+    border: 1px solid rgba(245, 245, 245, 0.2);
 }
 
 body.custom-mode .character-memory-text {
@@ -6037,7 +6037,7 @@ body.custom-mode .character-memory-icon-btn.danger {
 
 body.custom-mode .character-memory-setting-pill {
     background: rgba(0, 0, 0, 0.25);
-    border-color: rgba(245, 245, 245, 0.45);
+    border-color: rgba(245, 245, 245, 0.3);
     color: #d5d5d5;
 }
 
@@ -6715,7 +6715,7 @@ body.dark-mode .tab-btn.active { color: #dedede;  }
 body.dark-mode .explore-list li {
 
     background: rgba(50, 50,50, 0.5);
-    border: 1px solid rgba(245, 245, 245, 0.5);
+    border: 1px solid rgba(245, 245, 245, 0.3);
     transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
@@ -9449,7 +9449,7 @@ body.dark-mode .character-schedule-api-select {
 body.dark-mode .character-memory-contact,
 body.dark-mode .character-memory-card {
     background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(245, 245, 245, 0.5);
+    border: 1px solid rgba(245, 245, 245, 0.3);
 }
 
 .character-memory-avatar {
@@ -9741,7 +9741,7 @@ body.dark-mode .character-memory-tab.active {
 
 body.dark-mode .character-memory-item {
     background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(245, 245, 245, 0.3);
+    border: 1px solid rgba(245, 245, 245, 0.2);
 }
 
 .character-memory-text {
@@ -9854,7 +9854,7 @@ body.dark-mode .character-memory-icon-btn.danger {
 
 body.dark-mode .character-memory-setting-pill {
     background: rgba(0, 0, 0, 0.25);
-    border-color: rgba(245, 245, 245, 0.45);
+    border-color: rgba(245, 245, 245, 0.3);
     color: #d5d5d5;
 }
 
