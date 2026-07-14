@@ -119,7 +119,7 @@ body {
     object-fit: cover;
     flex-shrink: 0;
     background: rgba(255, 255, 255, 0.72);
-    border: 3px solid rgba(255, 255, 255, 0.25);
+    border: 3px solid rgb(218, 218, 218);
 
 }
 
