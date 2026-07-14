@@ -427,6 +427,7 @@ body.dark-mode .chat-header-avatar {
 .message-wrapper.ai .message-bubble {
     background: var(--message-bg-ai);
     border: 1.2px solid var(--message-border-ai);
+    color: #222;
     padding: 7px 10px 7px 10px;        /* 原来12-18 → 9-14 */
     /* border-top-left-radius: 3px; */
     /* margin-left: 3px; */
@@ -7409,7 +7410,7 @@ body.dark-mode button#btn-save-m-settings.save-btn{
 details.thought-process {
     border: 1px solid rgb(255 255 255 / 50%);
     border-radius: 8px;
-    background-color: rgb(255 255 255 / 25%);
+    background-color: rgb(255 255 255 / 55%);
     overflow: hidden;
     transition: all 0.3s ease;
 }
