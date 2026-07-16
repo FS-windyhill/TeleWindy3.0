@@ -5814,7 +5814,7 @@ const App = {
                 </div>
                 <label class="agent-menu-switch" title="启用/关闭 TODO 管理">
                     <input type="checkbox" id="agent-todo-manager-toggle" ${enabled ? 'checked' : ''}>
-                    <span class="agent-switch-slider"></span>
+                    <span class="app-switch-slider agent-switch-slider"></span>
                 </label>
             </div>
         `;
@@ -7908,7 +7908,7 @@ const App = {
                 </div>
                 <label class="todo-menu-switch character-schedule-switch" title="启用/关闭角色日程">
                     <input type="checkbox" ${schedule.enabled ? 'checked' : ''}>
-                    <span class="todo-switch-slider"></span>
+                    <span class="app-switch-slider todo-switch-slider"></span>
                 </label>
                 <span class="arrow">
                     <svg width="1.5em" height="1.5em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
