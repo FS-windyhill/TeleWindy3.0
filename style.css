@@ -10,7 +10,7 @@
     --message-border-ai: #fff;    
     --border-radius: 15px;
     --box-shadow: 0 3px 3px rgba(0,0,0,0.08);
-    --primary-btn-color: rgba(241, 241, 255, 0.75);
+    --primary-btn-color: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.1);
     /* --primary-btn-text: rgb(255, 116, 192); */
     --theme-color-h: 250;
     --theme-color-s: 100%;
@@ -3687,7 +3687,7 @@ h3#modal-title.bianjixiaoxi{
 }
 
 .edit-buttons .primary { 
-    background: var(--primary-btn-color);
+    background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.1);
     color: var(--primary-btn-text);
     border: 0.7px solid var(--primary-btn-text);
     min-width: 120px;
@@ -6164,6 +6164,37 @@ body.custom-mode .chat-header-avatar {
 }
 
 
+body.custom-mode button#character-schedule-entry-cancel-btn.cancel-btn {
+    background: var(--btn-color);
+    color: #ffffff;
+    border: 0.7px solid #a9a9a9;
+}
+
+
+
+body.custom-mode button#character-schedule-entry-save-btn.primary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border: 2px solid var(--primary-btn-text) !important;
+}
+
+
+body.custom-mode button#character-memory-item-cancel-btn.cancel-btn {
+    background: var(--btn-color);
+    color: #ffffff;
+    border: 0.7px solid #a9a9a9;
+}
+
+
+
+body.custom-mode button#character-memory-item-save-btn.primary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border: 2px solid var(--primary-btn-text) !important;
+}
+
+
+
 /* 【【【[[[】】】*/
 
 
@@ -7340,7 +7371,7 @@ button#btn-close-m-settings.cancel-btn{
 }
 
 button#btn-save-m-settings.save-btn{
-    background: var(--primary-btn-color);
+    background: var(--btn-color);
     color: var(--primary-btn-text);
     border: 0.7px solid var(--primary-btn-text);
 
@@ -11461,3 +11492,78 @@ body.dark-mode button#save-system-prompt-preset-btn.icon-btn {
 }
 
 /* ★★★★★ system prompt预设结束★★★★★ */
+
+/* =============记忆等等确认取消按钮==================== */
+
+button#character-memory-item-cancel-btn.cancel-btn {
+    background: var(--btn-color);
+    color: #333;
+    border: 0.7px solid #a9a9a9;
+    min-width: 120px;
+    padding: 11px 16px;
+    border-radius: 6px;
+}
+
+
+
+button#character-memory-item-save-btn.primary {
+    background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.1);
+    color: var(--primary-btn-text);
+    border: 0.7px solid var(--primary-btn-text);
+    min-width: 120px;
+    padding: 11px 16px;
+    border-radius: 6px;
+}
+
+
+
+button#character-schedule-entry-save-btn.primary {
+    background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.1);
+    color: var(--primary-btn-text);
+    border: 0.7px solid var(--primary-btn-text);
+    min-width: 120px;
+    padding: 11px 16px;
+    border-radius: 6px;
+}
+
+button#character-schedule-entry-cancel-btn.cancel-btn {
+    background: var(--btn-color);
+    color: #333;
+    border: 0.7px solid #a9a9a9;
+    min-width: 120px;
+    padding: 11px 16px;
+    border-radius: 6px;
+}
+
+
+body.dark-mode button#character-schedule-entry-cancel-btn.cancel-btn {
+    background: var(--btn-color);
+    color: #ffffff;
+    border: 0.7px solid #a9a9a9;
+}
+
+
+
+body.dark-mode button#character-schedule-entry-save-btn.primary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border: 2px solid var(--primary-btn-text) !important;
+}
+
+
+body.dark-mode button#character-memory-item-cancel-btn.cancel-btn {
+    background: var(--btn-color);
+    color: #ffffff;
+    border: 0.7px solid #a9a9a9;
+}
+
+
+
+body.dark-mode button#character-memory-item-save-btn.primary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border: 2px solid var(--primary-btn-text) !important;
+}
+
+
+/* =============记忆等等确认取消按钮End==================== */
