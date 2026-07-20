@@ -44,8 +44,8 @@ const CONFIG = {
     MOMENTS_INJECT_COUNT: 1, // AI在聊天中感知新心迹的聊天轮次
 
     DEFAULT: {
-        API_URL: 'https://api.siliconflow.cn/v1/chat/completions',
-        MODEL: 'deepseek-ai/DeepSeek-V3.2',
+        API_URL: 'https://api.deepseek.com/v1/chat/completions',
+        MODEL: 'deepseek-v4-flash',
         API_KEY: '', 
         ASYNC_BACKEND_ENABLED: true,
         ASYNC_BACKEND_URL: '',
