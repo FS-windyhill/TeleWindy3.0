@@ -47,7 +47,7 @@ const CONFIG = {
         API_URL: 'https://api.deepseek.com/v1/chat/completions',
         MODEL: 'deepseek-v4-flash',
         API_KEY: '', 
-        ASYNC_BACKEND_ENABLED: true,
+        ASYNC_BACKEND_ENABLED: false,
         ASYNC_BACKEND_URL: '',
         ASYNC_BACKEND_TOKEN: '',
         ASYNC_BACKEND_KEY_MODE: 'client_key',
