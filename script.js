@@ -10477,12 +10477,14 @@ const App = {
             let timestampPart = ''; // 用于暂存时间戳头
             let cleanContent = originalContent;
 
-            const match = originalContent.match(timestampRegex);
-            if (match) {
-                timestampPart = match[0]; // 比如 "[Dec.14 16:39] "
-                cleanContent = originalContent.replace(timestampRegex, ''); // 去掉时间戳
+            // ★★★ 只有用户消息的时间戳是系统静默加的；AI 自己输出的开头时间戳要允许用户编辑删除。★★★
+            if (msgData.role === 'user') {
+                const match = originalContent.match(timestampRegex);
+                if (match) {
+                    timestampPart = match[0]; // 比如 "[Dec.14 16:39] "
+                    cleanContent = originalContent.replace(timestampRegex, ''); // 去掉用户消息的系统时间戳
+                }
             }
-
             // 传入干净的文本给弹窗
             UI.showEditModal(cleanContent, (newText) => {
                 // 如果文本有变化
