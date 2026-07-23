@@ -4728,6 +4728,115 @@ const App = {
     getReturnView(pageName, fallback = 'desktop') {
         return (STATE.returnViewByPage && STATE.returnViewByPage[pageName]) || fallback;
     },
+    getActiveSwipeBackView() {
+        const appContainer = document.getElementById('app-container');
+        if (appContainer?.classList.contains('in-chat-mode')) return 'chat';
+
+        const viewMap = [
+            ['explore', 'view-explore'],
+            ['todo-plan', 'view-todo-plan'],
+            ['countdown', 'view-countdown'],
+            ['character-schedule', 'view-character-schedule'],
+            ['character-schedule-detail', 'view-character-schedule-detail'],
+            ['character-memory', 'view-character-memory'],
+            ['character-memory-detail', 'view-character-memory-detail'],
+            ['agent', 'view-agent'],
+            ['async-backend', 'view-async-backend'],
+            ['worldbook', 'view-worldbook'],
+            ['world-sense', 'view-world-sense'],
+            ['moments', 'view-moments']
+        ];
+
+        const activePair = viewMap.find(([, id]) => {
+            const view = document.getElementById(id);
+            return view && getComputedStyle(view).display !== 'none';
+        });
+        return activePair ? activePair[0] : null;
+    },
+
+    isEdgeSwipeBackIgnoredTarget(target) {
+        // ★ 左边缘返回只做页面级操作：输入、按钮、弹窗、横向滚动区先全部让路，避免误触。
+        if (!target || target === document) return true;
+        if (target.closest('input, textarea, select, button, a, label, [contenteditable="true"], [role="button"]')) return true;
+        if (target.closest('.modal:not(.hidden), .menu, .contact-menu, .message-actions-menu')) return true;
+        const hasVisibleModal = Array.from(document.querySelectorAll('.modal:not(.hidden), #modal-overlay:not(.hidden)')).some(el => {
+            const style = getComputedStyle(el);
+            return style.display !== 'none' && style.visibility !== 'hidden' && el.getClientRects().length > 0;
+        });
+        if (hasVisibleModal) return true;
+
+        let node = target;
+        while (node && node !== document.body) {
+            const style = getComputedStyle(node);
+            const canScrollX = /(auto|scroll)/.test(style.overflowX) && node.scrollWidth > node.clientWidth + 2;
+            if (canScrollX) return true;
+            node = node.parentElement;
+        }
+        return false;
+    },
+
+    handleEdgeSwipeBack() {
+        const activeView = this.getActiveSwipeBackView();
+        const backButtonMap = {
+            chat: 'back-btn',
+            explore: 'explore-back-btn',
+            'todo-plan': 'todo-plan-back-btn',
+            countdown: 'countdown-back-btn',
+            'character-schedule': 'character-schedule-back-btn',
+            'character-schedule-detail': 'character-schedule-detail-back-btn',
+            'character-memory': 'character-memory-back-btn',
+            'character-memory-detail': 'character-memory-detail-back-btn',
+            agent: 'agent-back-btn',
+            'async-backend': 'async-backend-back-btn',
+            worldbook: 'worldbook-back-btn',
+            'world-sense': 'world-sense-back-btn',
+            moments: 'moments-back-btn'
+        };
+        const backBtn = document.getElementById(backButtonMap[activeView]);
+        if (!backBtn) return false;
+
+        backBtn.click();
+        return true;
+    },
+
+    bindEdgeSwipeBack() {
+        if (this.edgeSwipeBackBound) return;
+        this.edgeSwipeBackBound = true;
+
+        let startX = 0;
+        let startY = 0;
+        let tracking = false;
+        const EDGE_START = 56;
+        const MIN_DISTANCE = 85;
+        const MAX_VERTICAL = 65;
+
+        // ★ 手机式左边缘右滑返回 START
+        // 第一版先不做跟手动效，只在手势成立时触发现有左上角返回按钮。
+        document.addEventListener('touchstart', (event) => {
+            if (event.touches.length !== 1) {
+                tracking = false;
+                return;
+            }
+
+            const touch = event.touches[0];
+            startX = touch.clientX;
+            startY = touch.clientY;
+            tracking = startX <= EDGE_START && !this.isEdgeSwipeBackIgnoredTarget(event.target);
+        }, { passive: true });
+
+        document.addEventListener('touchend', (event) => {
+            if (!tracking) return;
+            tracking = false;
+
+            const touch = event.changedTouches[0];
+            const deltaX = touch.clientX - startX;
+            const deltaY = touch.clientY - startY;
+            if (deltaX < MIN_DISTANCE || Math.abs(deltaY) > MAX_VERTICAL) return;
+
+            this.handleEdgeSwipeBack();
+        }, { passive: true });
+        // ★ 手机式左边缘右滑返回 END
+    },
     // ★★★★★ 桌面 END：页面渲染与小组件交互 ★★★★★
 
     // ★★★★★ 世界感知 START：页面设置层 ★★★★★
@@ -12893,6 +13002,8 @@ const App = {
                 console.error("找不到 switchView 函数！请检查它的名字或位置。");
             }
         };
+
+        this.bindEdgeSwipeBack?.();
 
         // ================= 1. 底部导航栏切换 =================
         document.getElementById('tab-desktop')?.addEventListener('click', () => {
