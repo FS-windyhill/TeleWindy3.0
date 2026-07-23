@@ -137,14 +137,16 @@ const CharacterSchedule = {
     },
 
     getRecentHistoryText(contact, count = 10) {
-        // ★ 最近聊天只是生成日程的“轻微参考”，这里主动截短，避免把整段历史塞爆。
-        const rows = (contact.history || [])
-            .filter(msg => msg && msg.role !== 'system' && !msg.isHidden && msg.content)
-            .slice(-count)
-            .map(msg => {
-                const role = msg.role === 'assistant' ? contact.name : '用户';
-                return `${role}: ${String(msg.content).replace(/\s+/g, ' ').slice(0, 260)}`;
-            });
+        // ★★★ 日程生成的最近聊天参考也走统一 AI 可见历史，隐藏内容不会进入生成日程的 API。★★★
+        const rows = HistoryVisibility.collectVisibleMessages(contact, {
+            limit: count,
+            preserveTimestamp: false,
+            includeImageDescription: false,
+            maxChars: 260
+        }).map(msg => {
+            const role = msg.role === 'assistant' ? contact.name : '用户';
+            return `${role}: ${msg.content}`;
+        });
         return rows.length ? rows.join('\n') : '暂无最近聊天记录。';
     },
 

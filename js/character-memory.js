@@ -138,24 +138,12 @@ const CharacterMemory = {
     },
 
     getVisibleMessageContentForMemory(msg) {
-        let content = String(msg?.content || '').replace(/^\[\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\]\s*/, '').trim();
-        if (msg?.role === 'assistant') {
-            // ★★★ 和聊天请求保持一致：AI 引用块在 UI 里会被拆成气泡，记忆归纳也按同样的气泡边界过滤。
-            content = content.replace(/(^|\n)>\s*/g, '\n\n');
-            content = content.replace(/<(?:think|thinking|thought)>[\s\S]*?<\/(?:think|thinking|thought)>/gi, '').trim();
-        }
-
-        const hiddenIndices = Array.isArray(msg?.hiddenIndices) ? msg.hiddenIndices : [];
-        if (hiddenIndices.length > 0) {
-            // ★★★ 分段隐藏只影响对应气泡；整条隐藏仍然在 collectMessagesForDate 里统一拦截。
-            const paragraphs = content.split(/\n\s*\n/).filter(part => part.trim());
-            content = paragraphs
-                .filter((_, index) => !hiddenIndices.includes(index))
-                .join('\n\n')
-                .trim();
-        }
-
-        return content;
+        // ★★★ 记忆归纳也走统一 AI 可见历史，避免和聊天/心迹的隐藏口径分叉。★★★
+        const visible = HistoryVisibility.buildVisibleMessage(msg, {
+            preserveTimestamp: false,
+            includeImageDescription: true
+        });
+        return visible ? visible.content : '';
     },
 
     cleanMessageContent(msg) {
@@ -165,7 +153,7 @@ const CharacterMemory = {
 
     collectMessagesForDate(contact, dateKey) {
         return (contact?.history || [])
-            .filter(msg => msg && msg.role !== 'system' && !msg.isHidden && msg.content)
+            .filter(msg => msg && msg.role !== 'system' && msg.content)
             .filter(msg => this.parseMessageDateKey(msg) === dateKey)
             .map(msg => ({
                 role: msg.role,

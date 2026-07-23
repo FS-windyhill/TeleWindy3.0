@@ -8663,9 +8663,12 @@ const App = {
                 const isOldAsyncFailBubble = msg?.asyncJobId && String(msg.content || '').startsWith('(发送失败:');
                 return msg.role !== 'system' && msg.isTransientError !== true && !isOldAsyncFailBubble;
             });
-
+        const isAiVisibleRecord = (record) => !!HistoryVisibility.buildVisibleMessage(record.msg, {
+            preserveTimestamp: true,
+            includeImageDescription: true
+        });
         if (strategy === 'strict_recent') {
-            const visibleRecords = eligibleRecords.filter(record => record.msg?.isHidden !== true);
+            const visibleRecords = eligibleRecords.filter(isAiVisibleRecord);
             const selected = visibleRecords.slice(-minLimit);
             return {
                 records: selected,
@@ -8681,7 +8684,7 @@ const App = {
             };
         }
 
-        const visibleRecords = eligibleRecords.filter(record => record.msg?.isHidden !== true);
+        const visibleRecords = eligibleRecords.filter(isAiVisibleRecord);
         const latestSeq = visibleRecords.reduce((max, record) => {
             const seq = Number.isInteger(record.msg?.cacheSeq) ? record.msg.cacheSeq : -1;
             return Math.max(max, seq);
@@ -9181,68 +9184,13 @@ const App = {
             await Storage.saveContacts();
         }
 
-        // 预处理 History (你的分段隐藏逻辑 + 我的图片描述注入)
+        // 预处理 History：统一走 AI 可见历史清洗，避免聊天、心迹、记忆各写一套隐藏规则。
         const recentHistory = historyWindow.records
             .map(record => record.msg)
-            .map(msg => {
-                let content = msg.content || '';
-
-                // ============================================
-                // ★★★ 核心修改：发给 AI 前，抹除它以前的思考记录，节约 Token 防带偏
-                // ============================================
-                if (msg.role === 'assistant') {
-                    content = content.replace(/<(?:think|thinking|thought)>[\s\S]*?<\/(?:think|thinking|thought)>/gi, '').trim();
-                }
-
-
-
-
-                
-                // --- A. 分段隐藏处理 (保持你原有的逻辑) ---
-                if (msg.hiddenIndices && msg.hiddenIndices.length > 0) {
-                    const timestampRegex = /^\[(?:[A-Z][a-z]{2}\.\d{1,2}|\d{4}-\d{2}-\d{2})\s\d{2}:\d{2}\]\s/;
-                    let timestampPart = '';
-                    if (msg.role === 'user') {
-                        const match = content.match(timestampRegex);
-                        if (match) {
-                            timestampPart = match[0];
-                            content = content.replace(timestampRegex, '');
-                        }
-                    }
-                    let paragraphs = content.split(/\n\s*\n/);
-                    let keptParagraphs = paragraphs.filter((_, index) => !msg.hiddenIndices.includes(index));
-                    if (keptParagraphs.length === 0) return null; // 全部被隐藏
-                    content = keptParagraphs.join('\n\n');
-                    if (msg.role === 'user') content = timestampPart + content;
-                }
-
-                // --- B. ★★★ 核心缝合：注入图片描述 ★★★ ---
-                // --- B. ★★★ 核心缝合：注入图片描述 (修复隐藏逻辑) ★★★ ---
-                if (msg.image_description) {
-                    // 1. 计算图片的索引 (必须和 render/delete 逻辑一致)
-                    // 图片的索引总是等于“文本段落的数量”
-                    // 注意：这里的 content 必须是尚未被 slice/filter 过的原始文本切分出的数量
-                    // 为了保险，我们重新根据原始 full content 切分一次来算总数
-                    let rawContent = msg.content || '';
-                    if (msg.role === 'user') rawContent = rawContent.replace(/^\[(?:[A-Z][a-z]{2}\.\d{1,2}|\d{4}-\d{2}-\d{2})\s\d{2}:\d{2}\]\s/, '');
-                    if (msg.role === 'assistant') rawContent = rawContent.replace(/(^|\n)>\s*/g, '\n\n');
-                    
-                    const rawParagraphs = rawContent.split(/\n\s*\n/).filter(p => p.trim());
-                    const imagePartIndex = rawParagraphs.length;
-
-                    // 2. 检查这个索引是否在隐藏名单里
-                    const isImageHidden = msg.hiddenIndices && msg.hiddenIndices.includes(imagePartIndex);
-
-                    // 3. 只有当图片【没有】被隐藏时，才注入描述
-                    if (!isImageHidden) {
-                        content += `\n\n[System Info: 对方发送了一张图片，图片内容描述: ${msg.image_description}]`;
-                    } else {
-                        console.log("图片已隐藏，跳过注入描述");
-                    }
-                }
-
-                return { role: msg.role, content: content };
-            })
+            .map(msg => HistoryVisibility.buildVisibleMessage(msg, {
+                preserveTimestamp: true,
+                includeImageDescription: true
+            }))
             .filter(m => m !== null);
         historyWindow.log.sentCount = recentHistory.length;
         requestSettings.HISTORY_WINDOW_LOG = historyWindow.log;
@@ -11535,18 +11483,15 @@ const App = {
         for (const char of validCommentators) {
 
             // 2.1 构造 Prompt
-            let historyContext = "无";
-            if (char.history && char.history.length > 0) {
-                // 1. 先不管三七二十一，把历史记录原样拼起来
-                historyContext = char.history.slice(-5).map(h => {
-                    const roleName = (h.role === 'user' || h.sender === 'user') ? '用户' : '你';
-                    return `${roleName}: ${h.content}`;
-                }).join('\n');
-
-                // 2. ★★★ 终极绝杀：对拼接好的整段历史记录进行全局正则清洗 ★★★
-                historyContext = historyContext.replace(/<(?:think|thinking|thought)[^>]*>[\s\S]*?(?:<\/(?:think|thinking|thought)>|$)/gi, '');
-            
-            }
+            // ★★★ 心迹评论也走统一 AI 可见历史：隐藏消息会顺延补足最近 5 条。★★★
+            const visibleHistoryForMoment = HistoryVisibility.collectVisibleMessages(char, {
+                limit: 5,
+                preserveTimestamp: true,
+                includeImageDescription: true
+            });
+            let historyContext = visibleHistoryForMoment.length
+                ? HistoryVisibility.formatForRoleLines(char, visibleHistoryForMoment, { assistantName: '你', userName: '用户' })
+                : "无";
 
             // ★★★ 新增：扫描世界书（将动态内容作为触发文本传入） ★★★
             const worldInfoPrompt = WorldInfoEngine.scan(targetMoment.text, [], char.id, char.name);
@@ -11824,16 +11769,15 @@ const App = {
 
             if (threadContext.trim() === "") {
 
-                let historyContext = "无";
-                if (targetChar.history && targetChar.history.length > 0) {
-                    historyContext = targetChar.history.slice(-5).map(h => {
-                        const roleName = (h.role === 'user' || h.sender === 'user') ? '用户' : '你';
-                        return `${roleName}: ${h.content}`;
-                    }).join('\n');
-                    
-                    // ★★★ 直接清洗整段文本 ★★★
-                    historyContext = historyContext.replace(/<(?:think|thinking|thought)[^>]*>[\s\S]*?(?:<\/(?:think|thinking|thought)>|$)/gi, '');
-                }
+                // ★★★ 重生成评论同样走统一 AI 可见历史，避免隐藏内容在再生成时漏出。★★★
+                const visibleHistoryForMoment = HistoryVisibility.collectVisibleMessages(targetChar, {
+                    limit: 5,
+                    preserveTimestamp: true,
+                    includeImageDescription: true
+                });
+                let historyContext = visibleHistoryForMoment.length
+                    ? HistoryVisibility.formatForRoleLines(targetChar, visibleHistoryForMoment, { assistantName: '你', userName: '用户' })
+                    : "无";
 
                 promptText = `【系统设定】\n${targetChar.prompt}\n${wiSection}\n【历史参考】\n${historyContext}\n【当前情境】\n用户发布了一条动态：“${momentData.text}”\n【任务要求】\n请根据系统设定，以社交平台上的互动方式，对用户的这条动态进行评论。请按照社交软件上的语言习惯，简短回复，50字以下。不需要括号描述任何环境、动作，直接输出你要说的内容即可。`;
             } else {
