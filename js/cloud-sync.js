@@ -14,6 +14,10 @@
 //   - _validateBackupBeforeUpload(): 上传前检查明文/密文备份结构，避免空备份覆盖云端
 const CloudSync = {
     rememberPassphraseKey: 'TW_SYNC_BACKUP_PASSPHRASE_V1',
+    gistSingleFileName: 'telewindy-backup.json',
+    gistManifestFileName: 'telewindy-backup-manifest.json',
+    gistChunkFilePrefix: 'telewindy-backup-part-',
+    gistChunkSize: 4 * 1024 * 1024,
 
     els: {
         provider: document.getElementById('sync-provider'),
@@ -23,6 +27,7 @@ const CloudSync = {
         status: document.getElementById('gist-status'),
         groupUrl: document.getElementById('group-custom-url'),
         groupGistId: document.getElementById('group-gist-id'),
+        groupGistTutorial: document.getElementById('group-gist-tutorial'),
         authLabel: document.getElementById('auth-label'),
         forgetPassphraseBtn: document.getElementById('sync-forget-passphrase'),
         passphraseModal: document.getElementById('sync-passphrase-modal'),
@@ -40,7 +45,7 @@ const CloudSync = {
 
     init() {
         // 恢复上次的选择
-        const savedMode = localStorage.getItem('SYNC_MODE') || 'custom';
+        const savedMode = localStorage.getItem('SYNC_MODE') || 'gist';
         if(this.els.provider) this.els.provider.value = savedMode;
 
         const savedUrl = localStorage.getItem('SYNC_CUSTOM_URL');
@@ -61,15 +66,26 @@ const CloudSync = {
 
         if (mode === 'custom') {
             this.els.groupUrl.style.display = 'flex';
+            if (this.els.groupGistTutorial) this.els.groupGistTutorial.style.display = 'none';
             this.els.groupGistId.style.display = 'none';
             this.els.authLabel.textContent = '服务器访问密码 (Secret Key)';
         } else {
             this.els.groupUrl.style.display = 'none';
+            if (this.els.groupGistTutorial) this.els.groupGistTutorial.style.display = 'block';
             this.els.groupGistId.style.display = 'flex';
             this.els.authLabel.textContent = 'GitHub Token';
         }
     },
 
+    openGistTutorial() {
+        document.getElementById('gist-tutorial-modal')?.classList.remove('hidden');
+    },
+
+    closeGistTutorial(event = null) {
+        // 允许点击遮罩关闭；按钮调用时没有 event，也直接关闭。
+        if (event && event.target !== event.currentTarget) return;
+        document.getElementById('gist-tutorial-modal')?.classList.add('hidden');
+    },
     showStatus(msg, isError = false) {
         if(!this.els.status) return;
         this.els.status.textContent = msg;
@@ -634,6 +650,102 @@ const CloudSync = {
         return JSON.parse(text);
     },
 
+    _readGistFileContent(file, token = '') {
+        // Gist API 大文件会 truncated；分片恢复和旧版单文件恢复统一从这里兜底读取 raw_url。
+        if (!file) throw new Error('Gist 备份文件不存在');
+        if (file.truncated && file.raw_url) {
+            return fetch(file.raw_url).then(res => {
+                if (!res.ok) throw new Error('读取 Gist 原始文件失败');
+                return res.text();
+            });
+        }
+        return Promise.resolve(file.content || '');
+    },
+
+    _isTeleWindyGistBackupFile(fileName) {
+        return fileName === this.gistSingleFileName
+            || fileName === this.gistManifestFileName
+            || fileName.startsWith(this.gistChunkFilePrefix);
+    },
+
+    _buildGistBackupFiles(contentText, currentFiles = {}) {
+        const files = {};
+        const contentSize = new Blob([contentText]).size;
+        const currentNames = Object.keys(currentFiles || {});
+
+        // 小备份继续用老格式，避免普通用户的 Gist 里突然多出一堆分片文件。
+        if (contentSize <= this.gistChunkSize) {
+            files[this.gistSingleFileName] = { content: contentText };
+            currentNames
+                .filter(name => name === this.gistManifestFileName || name.startsWith(this.gistChunkFilePrefix))
+                .forEach(name => { files[name] = null; });
+            return { files, chunked: false, chunkCount: 1 };
+        }
+
+        const chunks = [];
+        for (let i = 0; i < contentText.length; i += this.gistChunkSize) {
+            chunks.push(contentText.slice(i, i + this.gistChunkSize));
+        }
+
+        const chunkFileNames = chunks.map((_, index) => {
+            return `${this.gistChunkFilePrefix}${String(index + 1).padStart(3, '0')}.txt`;
+        });
+        const manifest = {
+            app: 'TeleWindy',
+            format: 'chunked-gist-backup',
+            version: 1,
+            created_at: new Date().toISOString(),
+            total_size: contentSize,
+            total_length: contentText.length,
+            chunk_size: this.gistChunkSize,
+            files: chunkFileNames
+        };
+
+        files[this.gistManifestFileName] = { content: JSON.stringify(manifest, null, 2) };
+        chunks.forEach((chunk, index) => {
+            files[chunkFileNames[index]] = { content: chunk };
+        });
+
+        // 新分片上传时删除旧单文件和多余旧分片，防止恢复读到过期残片。
+        currentNames
+            .filter(name => this._isTeleWindyGistBackupFile(name) && !chunkFileNames.includes(name) && name !== this.gistManifestFileName)
+            .forEach(name => { files[name] = null; });
+
+        return { files, chunked: true, chunkCount: chunks.length };
+    },
+
+    async _fetchGist(token, gistId) {
+        const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+            headers: { Authorization: `token ${token}` }
+        });
+        if (!res.ok) throw new Error('Gist 未找到');
+        return await res.json();
+    },
+
+    async _parseChunkedGistBackup(gist, token) {
+        const manifestText = await this._readGistFileContent(gist.files[this.gistManifestFileName], token);
+        const manifest = JSON.parse(manifestText);
+        if (manifest.app !== 'TeleWindy' || manifest.format !== 'chunked-gist-backup' || !Array.isArray(manifest.files)) {
+            throw new Error('Gist 分片备份清单格式不正确');
+        }
+
+        const parts = [];
+        for (const fileName of manifest.files) {
+            const partFile = gist.files[fileName];
+            if (!partFile) throw new Error(`Gist 备份分片缺失：${fileName}`);
+            parts.push(await this._readGistFileContent(partFile, token));
+        }
+
+        const contentText = parts.join('');
+        const contentSize = new Blob([contentText]).size;
+        if (manifest.total_length && contentText.length !== manifest.total_length) {
+            throw new Error('Gist 分片长度校验失败');
+        }
+        if (manifest.total_size && contentSize !== manifest.total_size) {
+            throw new Error('Gist 分片体积校验失败');
+        }
+        return JSON.parse(contentText);
+    },
     // 3. Gist 上传
     async _uploadToGist() {
         const token = this.getAuth();
@@ -641,18 +753,17 @@ const CloudSync = {
         this.showStatus('正在连接 GitHub...');
 
         try {
+            const currentGist = gistId ? await this._fetchGist(token, gistId) : null;
             const contentData = await this._preparePayload();
             this._validateBackupBeforeUpload(contentData);
             const contentText = JSON.stringify(contentData);
-            this.showStatus(`正在上传到 GitHub... 备份体积 ${this._formatBackupUploadStatus(contentData, contentText)}`);
+            const gistFiles = this._buildGistBackupFiles(contentText, currentGist?.files || {});
+            const chunkText = gistFiles.chunked ? `，分片 ${gistFiles.chunkCount} 个` : '';
+            this.showStatus(`正在上传到 GitHub... 备份体积 ${this._formatBackupUploadStatus(contentData, contentText)}${chunkText}`);
 
             const payload = {
                 description: "TeleWindy Backup", 
-                files: { 
-                    "telewindy-backup.json": { 
-                        content: contentText
-                    } 
-                }
+                files: gistFiles.files
             };
 
             let url = 'https://api.github.com/gists';
@@ -678,7 +789,7 @@ const CloudSync = {
                     this.els.gistIdInput.value = json.id;
                     localStorage.setItem(CONFIG.GIST_ID_KEY, json.id);
                 }
-                this.showStatus('GitHub 同步成功！' + new Date().toLocaleTimeString());
+                this.showStatus(`GitHub 同步成功！${chunkText} ` + new Date().toLocaleTimeString());
             } else {
                 throw new Error('Gist 请求失败');
             }
@@ -686,24 +797,21 @@ const CloudSync = {
             this.showStatus(e.message, true);
         }
     },
-
     // 4. Gist 下载
     async _fetchFromGist(token) {
         const gistId = this.els.gistIdInput.value.trim();
         if (!gistId) throw new Error('需填写 Gist ID');
         
         this.showStatus('正在从 GitHub 拉取...');
-        const res = await fetch(`https://api.github.com/gists/${gistId}`, { 
-            headers: { Authorization: `token ${token}` }
-        });
-        if (!res.ok) throw new Error('Gist 未找到');
+        const json = await this._fetchGist(token, gistId);
 
-        const json = await res.json();
-        const file = json.files['telewindy-backup.json'];
-        
-        let content = file.content;
-        if (file.truncated) content = await (await fetch(file.raw_url)).text();
-        
+        if (json.files[this.gistManifestFileName]) {
+            this.showStatus('正在拼合 GitHub 分片备份...');
+            return await this._parseChunkedGistBackup(json, token);
+        }
+
+        const file = json.files[this.gistSingleFileName];
+        const content = await this._readGistFileContent(file, token);
         return JSON.parse(content);
     }
 };

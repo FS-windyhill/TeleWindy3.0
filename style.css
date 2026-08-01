@@ -2086,7 +2086,7 @@ button#gist-find{
 .sync-passphrase-primary {
     background: rgba(255, 255, 255, 0.62);
     color: #555;
-    border: 1px solid var(--primary-btn-text) !important;
+    border: 2px solid var(--primary-btn-text) !important;
 }
 
 body.dark-mode .sync-passphrase-primary {
@@ -4189,7 +4189,7 @@ body.dark-mode .sb-battery-icon::after {
     width: 100%;
     border-collapse: collapse; /* 合并边框，让线条变细 */
     margin: 8px 0;
-    font-size: 0.9em;
+    font-size: 0.9rem;
 }
 
 /* 2. 给表头和单元格加上边框 */
@@ -6193,6 +6193,10 @@ body.custom-mode button#character-memory-item-save-btn.primary {
     border: 2px solid var(--primary-btn-text) !important;
 }
 
+body.custom-mode .gist-tutorial-box {
+    background: rgba(35, 35, 35, 0.72);
+    border-color: rgba(255, 255, 255, 0.12);
+}
 
 
 /* 【【【[[[】】】*/
@@ -7476,7 +7480,7 @@ details[open].thought-process summary::before {
 /* 思考内容的具体文字样式 */
 details.thought-process .thought-content {
     padding: 8px 12px;
-    font-size: 0.9em;
+    font-size: 0.9rem;
     color: #505050; /* 弱化颜色 */
     font-style: italic; /* 斜体表现内心戏 */
     border-top: 1px dashed rgb(0 0 0 / 35%);
@@ -7527,8 +7531,9 @@ body.dark-mode details.thought-process {
     color: gray;
     margin-bottom: 4px;
 }
+
 .search-result-text {
-    font-size: 0.9em;
+    font-size: 0.9rem;
     color: var(--text-color);
     display: -webkit-box;
     -webkit-line-clamp: 2; /* 最多显示两行 */
@@ -11567,3 +11572,59 @@ body.dark-mode button#character-memory-item-save-btn.primary {
 
 
 /* =============记忆等等确认取消按钮End==================== */
+
+/* Gist 教程按钮：只在 Gist 模式显示，放在 Gist ID 上方给第一次使用的人看。 */
+.gist-tutorial-group {
+    margin-bottom: 12px;
+}
+
+.gist-tutorial-btn {
+    width: 100%;
+    min-width: 0;
+    flex: 0 0 auto;
+}
+
+#gist-tutorial-modal {
+    z-index: 10050;
+}
+
+.gist-tutorial-box {
+    width: min(86vw, 560px);
+    max-height: min(82vh, 720px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 22px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.68);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    box-shadow: 0 14px 38px rgba(0, 0, 0, 0.16);
+    border: 2px solid rgba(255, 255, 255, 0.58);
+}
+
+.gist-tutorial-list {
+    margin: 16px 0 0;
+    padding-left: 22px;
+    overflow: auto;
+    font-size: 0.86rem;
+    line-height: 1.65;
+    color: var(--text-color, #1a1a1a);
+}
+
+.gist-tutorial-list li {
+    margin-bottom: 8px;
+}
+
+.gist-tutorial-actions {
+    margin-top: 14px;
+}
+
+.gist-tutorial-actions button {
+    flex: 1 1 100%;
+}
+
+body.dark-mode .gist-tutorial-box {
+    background: rgba(35, 35, 35, 0.72);
+    border-color: rgba(255, 255, 255, 0.12);
+}

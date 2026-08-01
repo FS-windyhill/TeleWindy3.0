@@ -1435,7 +1435,7 @@
 
                 <!-- 角色专属模型选择 -->
                 <div class="input-group">
-                    <label>专属模型 (API 预设)</label>
+                    <label>对话模型 (来自设置-API预设)</label>
                     <select id="edit-char-preset" class="setting-input">
                         <option value="">-- 跟随全局默认设置 --</option>
                     </select>
@@ -2014,7 +2014,12 @@
                                 placeholder="例如: https://sync.your-url.com/api/data">
                         </div>
 
-                        <!-- 3. Gist ID (Gist模式显示，自定义模式隐藏) -->
+                        <!-- 3. Gist 教程入口 (Gist模式显示，自定义模式隐藏) -->
+                        <div class="input-group gist-tutorial-group" id="group-gist-tutorial" style="display:none;">
+                            <button type="button" class="gist-btn gist-tutorial-btn" onclick="CloudSync.openGistTutorial()">
+                                查看Gist云备份教程
+                            </button>
+                        </div>
                         <div class="input-group" id="group-gist-id" style="display:none;">
                             <label class="input-label">Gist ID</label>
                             <!-- Flex 布局：左边输入框，右边查找按钮 -->
@@ -2241,6 +2246,37 @@
         </div>
     </div>
 
+    <!-- ================= 10. GitHub Gist 教程 Modal ================= -->
+    <div id="gist-tutorial-modal" class="modal-overlay hidden" onclick="CloudSync.closeGistTutorial(event)">
+        <div class="gist-tutorial-box glass-panel" onclick="event.stopPropagation()">
+            <!-- Gist 教程只服务云同步，不复用主设置弹窗，避免小白来回找不到关闭入口。 -->
+            <div class="sync-passphrase-header">
+                <h3>GitHub Gist 备份教程</h3>
+                <p>第一次使用时，按下面步骤创建一个只拥有 gist 权限的 GitHub Token。</p>
+            </div>
+
+            <ol class="gist-tutorial-list">
+                <li>进入网页 github.com</li>
+                <li>注册登录</li>
+                <li>右上角点击自己头像</li>
+                <li>Settings</li>
+                <li>【电脑版】看左边列表，拉到最下面，点 Developer settings / 【手机版】点击 Public profile 上方的 Menu，拉到最下面，点 Developer settings</li>
+                <li>点 Personal access tokens</li>
+                <li>Tokens(classic)</li>
+                <li>点击 Generate new token</li>
+                <li>选择 Generate new token(classic)</li>
+                <li>填写三个地方：【① Note - 为这个 token 起名】【② Expiration - 选 No expiration】【③ 一堆复选框中，找到一个 gist - Create gist 的复选框，勾起来】</li>
+                <li>拉到最下面，选择 Generate token</li>
+                <li>复制 ghp 带头的 token（请妥善保存，它只会展示一次）</li>
+                <li>粘贴进 TeleWindy</li>
+                <li>直接点“上传云备份”，输入加密密码，即可备份</li>
+            </ol>
+
+            <div class="sync-passphrase-actions gist-tutorial-actions">
+                <button type="button" class="sync-passphrase-primary" onclick="CloudSync.closeGistTutorial()">知道了</button>
+            </div>
+        </div>
+    </div>
 
     <!-- ========================================== -->
     <!-- 新增：多选操作栏 (Action Bar)               -->
