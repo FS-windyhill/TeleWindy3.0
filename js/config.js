@@ -41,7 +41,7 @@ const CONFIG = {
     MOMENTS_PAGE_SIZE: 15, // 心迹分页数
     GIST_ID_KEY: 'telewindy-gist-id',
 
-    MOMENTS_INJECT_COUNT: 1, // AI在聊天中感知新心迹的聊天轮次
+    MOMENTS_INJECT_COUNT: 2, // AI在聊天中感知新心迹的聊天轮次/心迹注入
 
     DEFAULT: {
         API_URL: 'https://api.deepseek.com/v1/chat/completions',

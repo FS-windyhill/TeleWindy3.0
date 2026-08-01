@@ -11417,7 +11417,7 @@ const App = {
         
         // 2. 给每个能看到的人，设置初始计数为 2，可以看到两条2条
         allowedIds.forEach(cid => {
-            injectionStatus[cid] = CONFIG.MOMENTS_INJECT_COUNT; 
+            injectionStatus[cid] = CONFIG.MOMENTS_INJECT_COUNT;  // AI在聊天中感知新心迹的聊天轮次/心迹注入 在config.js里
         });
 
 
