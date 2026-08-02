@@ -2224,6 +2224,7 @@ const UI = {
         const THEME = settings.THEME || CONFIG.DEFAULT.THEME; 
         const FONT_SIZE = settings.FONT_SIZE || CONFIG.DEFAULT.FONT_SIZE;
         const CUSTOM_CSS = settings.CUSTOM_CSS || CONFIG.DEFAULT.CUSTOM_CSS; // 新增
+        const CUSTOM_BASE_THEME = settings.CUSTOM_BASE_THEME || CONFIG.DEFAULT.CUSTOM_BASE_THEME || 'dark';
         const THEME_COLOR = this.getThemeColorSettings(settings);
 
         // --- 1. 处理壁纸 ---
@@ -2231,7 +2232,7 @@ const UI = {
         // ★ 聊天页自己也要铺同一张壁纸，避免透明时透出下面残留的记忆/探索页面。
         document.documentElement.style.setProperty('--app-wallpaper-image', document.body.style.backgroundImage);
         // 如果是默认壁纸且不是夜间/自定义模式，给个浅灰背景
-        if (WALLPAPER === CONFIG.DEFAULT.WALLPAPER && THEME === 'light') {
+        if (WALLPAPER === CONFIG.DEFAULT.WALLPAPER && (THEME === 'light' || (THEME === 'custom' && CUSTOM_BASE_THEME === 'light'))) {
             document.body.style.backgroundColor = '#f2f2f2';
         } else {
             document.body.style.backgroundColor = ''; 
@@ -2249,7 +2250,7 @@ const UI = {
         const body = document.body;
         
         // 清理旧类名
-        body.classList.remove('light-mode', 'dark-mode', 'custom-mode');
+        body.classList.remove('light-mode', 'dark-mode', 'custom-mode', 'custom-light', 'custom-dark');
 
         // 获取或创建用于注入 CSS 的 style 标签
         let customStyleTag = document.getElementById('user-custom-css');
@@ -2265,6 +2266,8 @@ const UI = {
         // 判断主题逻辑
         if (THEME === 'custom') {
             body.classList.add('custom-mode');
+            // 自定义模式拆成浅/暗底座：浅色复用无前缀默认样式，暗色继续复用原 custom 暗色覆盖。
+            body.classList.add(CUSTOM_BASE_THEME === 'light' ? 'custom-light' : 'custom-dark');
             customStyleTag.textContent = App.prefixUserCss(CUSTOM_CSS);// 注入用户 CSS
             if (cssPanel) cssPanel.classList.remove('hidden'); // 显示面板
             
@@ -2291,6 +2294,10 @@ const UI = {
         if(this.els.themeDark) this.els.themeDark.checked = (THEME === 'dark');
         const themeCustomBtn = document.getElementById('theme-custom');
         if(themeCustomBtn) themeCustomBtn.checked = (THEME === 'custom');
+        const customBaseDark = document.getElementById('custom-base-dark');
+        const customBaseLight = document.getElementById('custom-base-light');
+        if(customBaseDark) customBaseDark.checked = (CUSTOM_BASE_THEME !== 'light');
+        if(customBaseLight) customBaseLight.checked = (CUSTOM_BASE_THEME === 'light');
     },
 
     // 2. 新增：渲染预设下拉框
@@ -10398,6 +10405,10 @@ const App = {
             s.THEME = 'light';
         }
 
+        // 保存自定义模式底座：默认暗色，保持老用户原来的 custom 观感。
+        const checkedCustomBase = document.querySelector('input[name="custom-base-theme"]:checked');
+        s.CUSTOM_BASE_THEME = checkedCustomBase && checkedCustomBase.value === 'light' ? 'light' : 'dark';
+
         // 保存自定义 CSS
         const cssInput = document.getElementById('custom-css-input');
         if (cssInput) {
@@ -12790,7 +12801,18 @@ const App = {
             });
         });
 
-        // (2) 监听 CSS 输入框 (实时预览)
+        // (2) 监听自定义模式底座切换：只切 body 类名，不影响用户输入的 CSS。
+        const customBaseRadios = document.querySelectorAll('input[name="custom-base-theme"]');
+        customBaseRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                STATE.settings.CUSTOM_BASE_THEME = e.target.value === 'light' ? 'light' : 'dark';
+                // 选项本身只在自定义面板里，直接重应用外观才能像日间/夜间一样实时预览。
+                UI.applyAppearance();
+                Storage.saveSettings();
+            });
+        });
+
+        // (3) 监听 CSS 输入框 (实时预览)
         const cssInput = document.getElementById('custom-css-input');
         if (cssInput) {
             cssInput.addEventListener('input', (e) => {
@@ -12809,7 +12831,7 @@ const App = {
             });
         }
 
-        // (3) 监听主题色 HSL 滑条：实时写 CSS 变量，失焦时再保存，避免拖动时频繁写库。
+        // (4) 监听主题色 HSL 滑条：实时写 CSS 变量，失焦时再保存，避免拖动时频繁写库。
         const themeColorSliders = [
             document.getElementById('theme-color-h'),
             document.getElementById('theme-color-s'),

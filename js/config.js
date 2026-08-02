@@ -69,6 +69,7 @@ const CONFIG = {
         USER_AVATAR: 'assets/images/user.jpg',
         GIST_TOKEN: '',
         THEME: 'light',
+        CUSTOM_BASE_THEME: 'dark',
         THEME_COLOR_H: 250,
         THEME_COLOR_S: 100,
         THEME_COLOR_L: 72,

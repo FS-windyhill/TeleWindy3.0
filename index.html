@@ -1575,6 +1575,18 @@
                         <!-- 新增：自定义CSS控制面板 (默认隐藏，JS控制显示) -->
                         <div id="custom-css-panel" class="main-options hidden">
                             
+                            <!-- 自定义模式底色：暗色保持旧版效果，浅色直接使用无前缀的默认亮色底座 -->
+                            <div class="panel-row custom-base-theme-row">
+                                <label class="custom-base-option">
+                                    <span>暗色底座</span>
+                                    <input type="radio" name="custom-base-theme" id="custom-base-dark" value="dark">
+                                </label>
+                                <label class="custom-base-option">
+                                    <span>浅色底座</span>
+                                    <input type="radio" name="custom-base-theme" id="custom-base-light" value="light">
+                                </label>
+                            </div>
+                            
                             <!-- 第1行：预设下拉框 -->
                             <div class="panel-row">
                                 <select id="css-preset-select" class="setting-input">
