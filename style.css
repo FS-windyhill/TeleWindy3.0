@@ -2101,41 +2101,41 @@ body.dark-mode .sync-forget-passphrase-btn {
 }
 
 body.dark-mode .sync-passphrase-box,
-body.custom-mode.custom-dark .sync-passphrase-box {
+body.custom-dark .sync-passphrase-box {
     background: rgba(20, 20, 20, 0.6);
     border-color: rgba(255, 255, 255, 0.18);
 }
 
 body.dark-mode .sync-passphrase-header h3,
-body.custom-mode.custom-dark .sync-passphrase-header h3,
+body.custom-dark .sync-passphrase-header h3,
 body.dark-mode .sync-passphrase-remember-text,
-body.custom-mode.custom-dark .sync-passphrase-remember-text {
+body.custom-dark .sync-passphrase-remember-text {
     color: #fff;
 }
 
 body.dark-mode .sync-passphrase-header p,
-body.custom-mode.custom-dark .sync-passphrase-header p,
+body.custom-dark .sync-passphrase-header p,
 body.dark-mode .sync-passphrase-field,
-body.custom-mode.custom-dark .sync-passphrase-field {
+body.custom-dark .sync-passphrase-field {
     color: rgba(255, 255, 255, 0.72);
 }
 
 body.dark-mode .sync-passphrase-field input,
-body.custom-mode.custom-dark .sync-passphrase-field input {
+body.custom-dark .sync-passphrase-field input {
     background: rgba(30, 30, 30, 0.5);
     color: #fff;
     border-color: rgba(255, 255, 255, 0.16);
 }
 
 body.dark-mode .sync-passphrase-secondary,
-body.custom-mode.custom-dark .sync-passphrase-secondary {
+body.custom-dark .sync-passphrase-secondary {
     background: rgba(255, 255, 255, 0.12);
     color: #fff;
     border-color: rgba(255, 255, 255, 0.18);
 }
 
 body.dark-mode .sync-passphrase-warning,
-body.custom-mode.custom-dark .sync-passphrase-warning {
+body.custom-dark .sync-passphrase-warning {
     background: rgba(116, 80, 22, 0.34);
     color: #ffd891;
 }
@@ -2170,6 +2170,14 @@ div#group-custom-url.input-group{
     margin: 0 0 12px 0;
     color: #ffffff;
     font-weight: 600;
+}
+
+body.dark-mode .settings-title, 
+body.dark-mode .section-title, 
+body.dark-mode .settings-section-title, 
+body.dark-mode h2, 
+body.dark-mode h3 {
+    color: #e0e0e0;
 }
 
 .settings-container {
@@ -4612,7 +4620,7 @@ body.dark-mode #custom-css-panel {
 }
 
 body.dark-mode .custom-base-option,
-body.custom-mode.custom-dark .custom-base-option {
+body.custom-dark .custom-base-option {
     background: rgba(255, 255, 255, 0.08);
     color: #ddd;
 }
@@ -4637,7 +4645,7 @@ textarea.setting-input.code-editor {
    Custom Mode Base (干净模式 - 基础重置)
    ============================================================ */
 
-body.custom-mode.custom-dark {
+body.custom-dark {
     --primary-color: #505050;
     --background-color: #2b2b2b; /* 增加一个深色底色，防止壁纸加载前刺眼 */
     
@@ -4658,7 +4666,7 @@ body.custom-mode.custom-dark {
 
 
 /* 1. 气泡本体重置 */
-body.custom-mode.custom-dark .message-wrapper .message-bubble {
+body.custom-dark .message-wrapper .message-bubble {
     box-shadow: none;        /* 去掉阴影 */
     border: none;            /* 去掉原有边框 */
     backdrop-filter: none;   /* 去掉毛玻璃 */
@@ -4674,8 +4682,8 @@ body.custom-mode.custom-dark .message-wrapper .message-bubble {
    否则你的自定义 CSS 很难覆盖它。
    我们只把它们的边框和背景去掉，让它们“隐身”即可。
 */
-body.custom-mode.custom-dark .message-wrapper .message-bubble::before,
-body.custom-mode.custom-dark .message-wrapper .message-bubble::after {
+body.custom-dark .message-wrapper .message-bubble::before,
+body.custom-dark .message-wrapper .message-bubble::after {
     border: none;            /* 去掉原本的小三角边框 */
     background: none;        /* 去掉背景 */
     width: auto;             /* 重置尺寸 */
@@ -4684,12 +4692,12 @@ body.custom-mode.custom-dark .message-wrapper .message-bubble::after {
 }
 
 /* 3. 时间戳隐藏 (按需保留) */
-body.custom-mode.custom-dark .msg-time {
+body.custom-dark .msg-time {
     content: none; 
 }
 
 /* 3. 弹窗背景 (按需保留) */
-body.custom-mode.custom-dark .modal-overlay {
+body.custom-dark .modal-overlay {
     background: rgba(75, 75, 75, 0.15);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -4697,7 +4705,7 @@ body.custom-mode.custom-dark .modal-overlay {
 }
 
 
-body.custom-mode.custom-dark .modal-overlay.moments-bg {
+body.custom-dark .modal-overlay.moments-bg {
     background: rgba(0, 0, 0, 0.25);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -4707,38 +4715,38 @@ body.custom-mode.custom-dark .modal-overlay.moments-bg {
 
 
 /* --- AI (Char) 左侧布局 --- */
-body.custom-mode.custom-dark .message-wrapper.ai {
+body.custom-dark .message-wrapper.ai {
     flex-direction: row;      /* 顺序：头像 -> 气泡 */
     justify-content: flex-start;
 }
 
 /* --- User (用户) 右侧布局 --- */
-body.custom-mode.custom-dark .message-wrapper.user {
+body.custom-dark .message-wrapper.user {
     flex-direction: row-reverse; /* 关键：反转顺序变成 气泡 -> 头像 */
     justify-content: flex-start; /* 视觉上的右对齐 */
 }
 
 
-body.custom-mode.custom-dark .moment-top {
+body.custom-dark .moment-top {
     color: #b0b0b0;
 
 }
 
 
 
-body.custom-mode.custom-dark button#modal-cancel {
+body.custom-dark button#modal-cancel {
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
 }
 
-body.custom-mode.custom-dark #modal-cancel {
+body.custom-dark #modal-cancel {
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
 }
 
-body.custom-mode.custom-dark button#main-cancel {
+body.custom-dark button#main-cancel {
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
@@ -4748,25 +4756,25 @@ body.custom-mode.custom-dark button#main-cancel {
 
 }
 
-body.custom-mode.custom-dark #main-cancel {
+body.custom-dark #main-cancel {
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
 }
 
 
-body.custom-mode.custom-dark .tab-bar {
+body.custom-dark .tab-bar {
     border-top: 1px solid rgba(126, 126, 126, 0.7);
     background: rgba(57, 57, 57, 0.5);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(10px) saturate(180%);
 }
 
-body.custom-mode.custom-dark .tab-btn { color: #888; font-weight: 500; transition: color 0.3s; }
-body.custom-mode.custom-dark .tab-btn.active { color: #dedede;  }
+body.custom-dark .tab-btn { color: #888; font-weight: 500; transition: color 0.3s; }
+body.custom-dark .tab-btn.active { color: #dedede;  }
 
 
-body.custom-mode.custom-dark .explore-list li {
+body.custom-dark .explore-list li {
 
 
     background: rgba(50, 50, 50, 0.5);
@@ -4778,43 +4786,43 @@ body.custom-mode.custom-dark .explore-list li {
 
 
 
-body.custom-mode.custom-dark .explore-list li .icon { font-size: 24px; margin-right: 0.9rem; filter: drop-shadow(0 2px 4px rgba(255, 255, 255, 0.1)); }
-body.custom-mode.custom-dark .explore-list li .text { flex-grow: 1; font-size: 1rem; font-weight: 600; color: #ffffff; }
-body.custom-mode.custom-dark .explore-list li .arrow { color: #aaa; font-size: 0.9rem; font-weight: bold; }
+body.custom-dark .explore-list li .icon { font-size: 24px; margin-right: 0.9rem; filter: drop-shadow(0 2px 4px rgba(255, 255, 255, 0.1)); }
+body.custom-dark .explore-list li .text { flex-grow: 1; font-size: 1rem; font-weight: 600; color: #ffffff; }
+body.custom-dark .explore-list li .arrow { color: #aaa; font-size: 0.9rem; font-weight: bold; }
 
 
 
-body.custom-mode.custom-dark .moment-content { 
+body.custom-dark .moment-content { 
     margin-bottom: 12px; 
     line-height: 1.6; 
     font-size: 1rem;
     color: #ffffff;
 }
 
-body.custom-mode.custom-dark .moment-comments {
+body.custom-dark .moment-comments {
     background: #4c4c4c;
     color: #f3f3f3;
 }
 
 
-body.custom-mode.custom-dark .comment-name { 
+body.custom-dark .comment-name { 
     color: #9dbcff; /* 微信经典文字蓝 */
     font-weight: 600; 
     cursor: pointer; 
 }
 
-body.custom-mode.custom-dark .comment-sender-name:hover {
+body.custom-dark .comment-sender-name:hover {
     color: #d9e6ff;
     text-decoration: underline; /* 鼠标悬浮时显示下划线 */
 }
 
 
-body.custom-mode.custom-dark #moments-scroll-area {
+body.custom-dark #moments-scroll-area {
     background: #353535; /* 稍微带点灰度的背景，让白色内容卡片凸显 */
 }
 
 
-body.custom-mode.custom-dark .moment-card { 
+body.custom-dark .moment-card { 
 
     background: #3f3f3f;
     color: #ffffff;
@@ -4822,7 +4830,7 @@ body.custom-mode.custom-dark .moment-card {
 }
 
 
-body.custom-mode.custom-dark button#btn-close-m-settings.cancel-btn{
+body.custom-dark button#btn-close-m-settings.cancel-btn{
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
@@ -4832,7 +4840,7 @@ body.custom-mode.custom-dark button#btn-close-m-settings.cancel-btn{
 }
 
 
-body.custom-mode.custom-dark button#btn-save-m-settings.save-btn{
+body.custom-dark button#btn-save-m-settings.save-btn{
     background: var(--btn-color);
     color: #ffffff;
     border: 2px solid var(--primary-btn-text);
@@ -4842,34 +4850,34 @@ body.custom-mode.custom-dark button#btn-save-m-settings.save-btn{
 }
 
 
-body.custom-mode.custom-dark .m-modal-scroll-container{
+body.custom-dark .m-modal-scroll-container{
     background: rgba(20, 20, 20, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 }
 
 /* 文字样式 */
-body.custom-mode.custom-dark .checkbox-item .char-name {
+body.custom-dark .checkbox-item .char-name {
     font-size: 15px;
     color: #efefef;
     line-height: 1; /* 消除文字行高导致的偏位 */
 }
 
-body.custom-mode.custom-dark #m-setting-api-preset {
+body.custom-dark #m-setting-api-preset {
     background: rgba(68, 68, 68, 0.8);
     border: 1px solid #9f9f9f;
     border-radius: 8px;
     color: #fff;
 }
 
-body.custom-mode.custom-dark button#btn-close-m-write.cancel-btn{
+body.custom-dark button#btn-close-m-write.cancel-btn{
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
 }
 
 /* 底部弹出面板容器 */
-body.custom-mode.custom-dark .action-sheet {
+body.custom-dark .action-sheet {
     /* 核心质感：高级毛玻璃效果 */
     background: rgba(100, 100, 100, 0.6); 
     backdrop-filter: blur(20px) saturate(180%);
@@ -4878,7 +4886,7 @@ body.custom-mode.custom-dark .action-sheet {
 }
 
 /* 菜单项按钮 */
-body.custom-mode.custom-dark .momment-btn {
+body.custom-dark .momment-btn {
 
     color: #fff;
     cursor: pointer;
@@ -4890,19 +4898,19 @@ body.custom-mode.custom-dark .momment-btn {
 
 
 /* 危险操作（删除）- 醒目且优雅的红色 */
-body.custom-mode.custom-dark .momment-btn.danger {
+body.custom-dark .momment-btn.danger {
     color: #ff5a50; 
     font-weight: 500;
 }
 
 /* 取消按钮 - 加粗加深，明确退出意图 */
-body.custom-mode.custom-dark .momment-btn.cancel {
+body.custom-dark .momment-btn.cancel {
     font-weight: 600;
     color: #92b5ff; /* 微信经典蓝灰，或者可以直接用 #333 */
 }
 
 /* 视觉隔离带：用于将"取消"和上方功能区隔开 */
-body.custom-mode.custom-dark .action-divider {
+body.custom-dark .action-divider {
     height: 8px; /* 加宽隔离带 */
     background: rgba(0, 0, 0, 0.1); /* 非常浅的灰色 */
     width: 100%;
@@ -4915,72 +4923,69 @@ body.custom-mode.custom-dark .action-divider {
 
 
 /* ===================== 联系人和聊天、 初版页面 ================*/
-body.custom-mode.custom-dark .app-header {
+body.custom-dark .app-header {
     background: rgba(50, 50, 50, 0.8);
     border-bottom: 1px solid rgba(126, 126, 126, 0.7);
 }
 
-body.custom-mode.custom-dark .app-header h1 {
+body.custom-dark .app-header h1 {
     color: rgba(255, 255, 255, 0.9);
 }
 
 /* 联系人页面滚动条 */
-body.custom-mode.custom-dark #contact-list-container {
+body.custom-dark #contact-list-container {
     scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
 
 }
 
-body.custom-mode.custom-dark .modal.glass-panel, body.custom-mode.custom-dark #contact-list-wrapper {
+body.custom-dark .modal.glass-panel, body.custom-dark #contact-list-wrapper {
     background: rgb(39 39 39 / 60%);
     /* border: 1px solid rgba(255, 255, 255, 0.3); */
 }
 
-body.custom-mode.custom-dark .settings-title, body.custom-mode.custom-dark .section-title, body.custom-mode.custom-dark .settings-section-title, body.custom-mode.custom-dark h2, body.custom-mode.custom-dark h3 {
-    color: #e0e0e0;
-}
 
-body.custom-mode.custom-dark .contact-info p {
+body.custom-dark .contact-info p {
     color: #cdcdcdc8;
 }
 
-body.custom-mode.custom-dark .modal-scroll-container {
+body.custom-dark .modal-scroll-container {
     background: rgba(20, 20, 20, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 }
 
-body.custom-mode.custom-dark button.small-btn {
+body.custom-dark button.small-btn {
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
     cursor: pointer;
 }
 
-body.custom-mode.custom-dark .input-group input, body.custom-mode.custom-dark .input-group textarea {
+body.custom-dark .input-group input, body.custom-dark .input-group textarea {
     background: rgba(30, 30, 30, 0.5);
     border-color: #9f9f9f;
     color: #fff;
 }
 
-body.custom-mode.custom-dark .setting-input, body.custom-mode.custom-dark #gist-id-input {
+body.custom-dark .setting-input, body.custom-dark #gist-id-input {
     background: rgba(30, 30, 30, 0.5);
     border-color: #9f9f9f;
     color: #fff;
 }
 
-body.custom-mode.custom-dark textarea {
+body.custom-dark textarea {
     background: rgba(30, 30, 30, 0.5);
     border-color: #9f9f9f;
     color: #fff;
 }
 
-body.custom-mode.custom-dark button#modal-save {
+body.custom-dark button#modal-save {
     color: rgb(255, 255, 255);
     background: var(--btn-color);
     border: 2px solid var(--primary-btn-text);
 }
 
-body.custom-mode.custom-dark .settings-content {
+body.custom-dark .settings-content {
     flex: 1;
     overflow-y: auto;
     background: rgba(20, 20, 20, 0.75);
@@ -4989,24 +4994,24 @@ body.custom-mode.custom-dark .settings-content {
 }
 
 @media (max-width: 640px) {
-    body.custom-mode.custom-dark .settings-content {
+    body.custom-dark .settings-content {
         background: rgba(20, 20, 20, 0.75);
         backdrop-filter: blur(8px);
         -webkit-backdrop-filter: blur(8px);
     }
 }
 
-body.custom-mode.custom-dark .main-option {
+body.custom-dark .main-option {
     background: rgba(255, 255, 255, 0.08);
     color: #ddd;
 }
 
-body.custom-mode.custom-dark .settings-title, body.custom-mode.custom-dark .section-title, body.custom-mode.custom-dark .settings-section-title, body.custom-mode.custom-dark h2, body.custom-mode.custom-dark h3 {
+body.custom-dark .settings-title, body.custom-dark .section-title, body.custom-dark .settings-section-title, body.custom-dark h2, body.custom-dark h3 {
     color: #e0e0e0 ;
 }
 
 @media (max-width: 640px) {
-    body.custom-mode.custom-dark .tab-item {
+    body.custom-dark .tab-item {
         color: #a0a0a0;
         /* background-color: #222222; */
 
@@ -5014,59 +5019,59 @@ body.custom-mode.custom-dark .settings-title, body.custom-mode.custom-dark .sect
 }
 
 @media (max-width: 640px) {
-    body.custom-mode.custom-dark .tab-item.active {
+    body.custom-dark .tab-item.active {
         background: rgba(20, 20, 20, 0.7);
         color: #ffffff ;
 
     }
 }
 
-body.custom-mode.custom-dark .tab-item.active {
+body.custom-dark .tab-item.active {
     background: rgba(20, 20, 20, 0.7);
     color: #fefefe;
 }
 
 /* 悬停也有一点反馈 */
-body.custom-mode.custom-dark .tab-item:hover:not(.active) {
+body.custom-dark .tab-item:hover:not(.active) {
     background: rgba(255,255,255,0.03);
     color: #fefefe;
 }
 
 
-body.custom-mode.custom-dark .tab-item {
+body.custom-dark .tab-item {
     color: #a0a0a0;
     /* background-color: #222222; */
     transition: all 0.25s ease;
 }
 
-body.custom-mode.custom-dark .settings-sidebar {
+body.custom-dark .settings-sidebar {
     background: rgba(31, 31, 31, 0.5);
 }
 
-body.custom-mode.custom-dark .api-label, body.custom-mode.custom-dark .input-label, body.custom-mode.custom-dark .input-group label {
+body.custom-dark .api-label, body.custom-dark .input-label, body.custom-dark .input-group label {
     color: #b0b0b0;
 }
 
-body.custom-mode.custom-dark .api-btn.primary {
+body.custom-dark .api-btn.primary {
     background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.1);
     border: 1px solid var(--primary-btn-text);
     color: #ffffff;
 }
 
-body.custom-mode.custom-dark .api-btn {
+body.custom-dark .api-btn {
 
     background: #3a3a3a;
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
 }
 
-body.custom-mode.custom-dark #vision-model-name {
+body.custom-dark #vision-model-name {
     background: #2b2b2b;
     border-color: #444;
     color: #fff;
 }
 
-body.custom-mode.custom-dark button#save-vision-preset-btn.icon-btn {
+body.custom-dark button#save-vision-preset-btn.icon-btn {
     background: rgba(255, 255, 255, 0.1);
     color: #ffffff;
     border: 2px solid var(--primary-btn-text);
@@ -5075,7 +5080,7 @@ body.custom-mode.custom-dark button#save-vision-preset-btn.icon-btn {
 
 
 
-body.custom-mode.custom-dark button#del-vision-preset-btn.icon-btn.danger {
+body.custom-dark button#del-vision-preset-btn.icon-btn.danger {
     background: rgba(255, 33, 33, 0.5);
     color: #ffcaca;
     border: 1px solid rgba(255, 80, 80, 0.9);
@@ -5083,31 +5088,31 @@ body.custom-mode.custom-dark button#del-vision-preset-btn.icon-btn.danger {
 
 
 
-body.custom-mode.custom-dark .api-label2 {
+body.custom-dark .api-label2 {
     color: #b0b0b0;
 }
 
-body.custom-mode.custom-dark #custom-model-select.model-select {
+body.custom-dark #custom-model-select.model-select {
     background: #2b2b2b;
     border-color: #444;
     color: #fff;
 }
 
-body.custom-mode.custom-dark button#save-css-btn.icon-btn {
+body.custom-dark button#save-css-btn.icon-btn {
     background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.1);
     border: 1px solid var(--primary-btn-text);
     color: #ffffff;
 
 }
 
-body.custom-mode.custom-dark #save-preset-btn.icon-btn {
+body.custom-dark #save-preset-btn.icon-btn {
     background: rgba(255, 255, 255, 0.1);
     color: #ffffff;
     border: 2px solid var(--primary-btn-text) !important;
 
 }
 
-body.custom-mode.custom-dark button#main-confirm {
+body.custom-dark button#main-confirm {
     background: var(--btn-color);
     color: #ffffff;
     border: 2px solid var(--primary-btn-text);
@@ -5117,7 +5122,7 @@ body.custom-mode.custom-dark button#main-confirm {
     -webkit-backdrop-filter: blur(8px);
 }
 
-body.custom-mode.custom-dark .gist-sync-card {
+body.custom-dark .gist-sync-card {
     background: rgba(255, 255, 255, 0.08);
     border: none;
     box-shadow: none;
@@ -5126,60 +5131,60 @@ body.custom-mode.custom-dark .gist-sync-card {
     -webkit-backdrop-filter: blur(8px);
 }
 
-body.custom-mode.custom-dark .gist-sync-card.async-backend-card{
+body.custom-dark .gist-sync-card.async-backend-card{
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(245,245,245,0.5);
 }
 
-body.custom-mode.custom-dark .gist-sync-card.world-sense-setting-card{
+body.custom-dark .gist-sync-card.world-sense-setting-card{
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(245,245,245,0.5);
 }
 
-body.custom-mode.custom-dark .async-backend-note {
+body.custom-dark .async-backend-note {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(245,245,245,0.3);
     color: #cdcdcdc8;
 }
 
-body.custom-mode.custom-dark .world-sense-note {
+body.custom-dark .world-sense-note {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(245,245,245,0.3);
     color: #cdcdcdc8;
 }
 
-body.custom-mode.custom-dark .gist-btn.primary, body.custom-mode.custom-dark #fetch-models-btn.fetch-models-btn {
+body.custom-dark .gist-btn.primary, body.custom-dark #fetch-models-btn.fetch-models-btn {
     background: rgba(55, 55, 55, 1);
     color: #ffffff;
     border: 2px solid rgba(135, 110, 255);
 }
 
-body.custom-mode.custom-dark .wi-btn.secondary {
+body.custom-dark .wi-btn.secondary {
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
 }
 
-body.custom-mode.custom-dark .wi-btn.danger {
+body.custom-dark .wi-btn.danger {
     background: rgba(255, 33, 33, 0.5);
     color: #ffcaca;
     border: 1px solid rgba(255, 80, 80, 0.9);
 }
 
-body.custom-mode.custom-dark .wi-btn.primary {
+body.custom-dark .wi-btn.primary {
     background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.1);
     border: 1px solid var(--primary-btn-text);
     color: #ffffff;
 }
 
 
-body.custom-mode.custom-dark button#del-preset-btn.icon-btn.danger {
+body.custom-dark button#del-preset-btn.icon-btn.danger {
     background: rgba(255, 33, 33, 0.5);
     color: #ffcaca;
     border: 1px solid rgba(255, 80, 80, 0.9);
 }
 
-body.custom-mode.custom-dark .icon-btn.danger {
+body.custom-dark .icon-btn.danger {
     background: rgba(255, 33, 33, 0.5);
     color: #ffcaca;
     border: 1px solid rgba(255, 80, 80, 0.9);
@@ -5187,18 +5192,18 @@ body.custom-mode.custom-dark .icon-btn.danger {
 
 
 
-body.custom-mode.custom-dark .gist-btn {
+body.custom-dark .gist-btn {
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9
 }
 
-body.custom-mode.custom-dark .glass-card {
+body.custom-dark .glass-card {
     background: rgba(255, 255, 255, 0.1);
     color: #ffffff;
 }
 
-body.custom-mode.custom-dark .wi-btn.icon-only {
+body.custom-dark .wi-btn.icon-only {
     padding: 0px 10px;
     font-size: 18px;
     line-height: 1;
@@ -5208,13 +5213,13 @@ body.custom-mode.custom-dark .wi-btn.icon-only {
 }
 
 
-body.custom-mode.custom-dark .menu-title {
+body.custom-dark .menu-title {
     border-bottom: 1px solid rgba(255, 255, 255, 0.15);
     color: #ffffff;
     background-color: #3f3f3f63;
 }
 
-body.custom-mode.custom-dark .menu-panel button {
+body.custom-dark .menu-panel button {
     width: 100%;
     padding: 12px 7px;
     text-align: center;
@@ -5227,26 +5232,26 @@ body.custom-mode.custom-dark .menu-panel button {
 }
 
 
-body.custom-mode.custom-dark .menu-panel button[data-action="delete"] {
+body.custom-dark .menu-panel button[data-action="delete"] {
     color: #ff1900;
 
     font-weight: 500;
 }
 
-body.custom-mode.custom-dark .menu-gap {
+body.custom-dark .menu-gap {
     background-color: #3f3f3f63;
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-body.custom-mode.custom-dark .edit-box {
+body.custom-dark .edit-box {
     background: rgba(30, 30, 30, 0.65); width: 75%; max-width: 500px;
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
 
 }
 
-body.custom-mode.custom-dark .header-icon-btn.right, body.custom-mode.custom-dark .header-icon-btn.left {
+body.custom-dark .header-icon-btn.right, body.custom-dark .header-icon-btn.left {
     color: #dedede;
     /* border: 1px solid #ffffff50;
     background: rgba(255, 255, 255, 0.2); */
@@ -5255,36 +5260,36 @@ body.custom-mode.custom-dark .header-icon-btn.right, body.custom-mode.custom-dar
 
 
 /* Footer */
-body.custom-mode.custom-dark .app-footer {
+body.custom-dark .app-footer {
     background: rgba(60, 60, 60, 0.8);
     border-top: 1px solid rgba(126, 126, 126, 0.7);
 }
 
 /* 输入框区域 */
-body.custom-mode.custom-dark #task-input {
+body.custom-dark #task-input {
     border: 1px solid #9d9d9dcc; /* 稍微加深一点 */
     color: #ffffff;
     background: rgba(60, 60, 60, 0.25) !important /* 深色半透明背景 */
 }
 
 
-body.custom-mode.custom-dark #task-input:focus {
+body.custom-dark #task-input:focus {
     border: 2px solid #9d9d9d;
     background: rgba(0, 0, 0, 0.25);
 }
-body.custom-mode.custom-dark #task-input::placeholder {
+body.custom-dark #task-input::placeholder {
     color: #bdbdbd;
 }
 
 /* 按钮区域 */
-body.custom-mode.custom-dark #send-button,
-body.custom-mode.custom-dark #reroll-footer-btn {
+body.custom-dark #send-button,
+body.custom-dark #reroll-footer-btn {
     border: 1px solid rgba(182, 182, 182, 0.3);
     background: rgba(255, 255, 255, 0.2);
     color: rgba(255, 255, 255, 0.8);
 }
 
-body.custom-mode.custom-dark .menu-panel {
+body.custom-dark .menu-panel {
     position: relative;               /* 改成 relative 或者 fixed 都行 */
     background: rgba(115, 115, 115, 0.6);  /* 或者 #fff */
     border-radius: 12px;
@@ -5294,11 +5299,11 @@ body.custom-mode.custom-dark .menu-panel {
 }
 
 
-body.custom-mode.custom-dark .menu-panel button:hover {
+body.custom-dark .menu-panel button:hover {
     background: rgba(213, 213, 213, 0.05);
 }
 
-body.custom-mode.custom-dark .edit-buttons button {
+body.custom-dark .edit-buttons button {
     flex: 1;
     min-width: 120px;
     padding: 11px 16px;
@@ -5313,7 +5318,7 @@ body.custom-mode.custom-dark .edit-buttons button {
     border: 0.7px solid #a9a9a9;
 }
 
-body.custom-mode.custom-dark .edit-buttons .primary {
+body.custom-dark .edit-buttons .primary {
     background: rgba(55, 55, 55, 1);
     color: #ffffff;
     border: 2px solid var(--primary-btn-text) !important;
@@ -5322,7 +5327,7 @@ body.custom-mode.custom-dark .edit-buttons .primary {
 
 
 /* ================== 加载更多按钮 ================ */
-body.custom-mode.custom-dark button#btn-load-more-moments {   
+body.custom-dark button#btn-load-more-moments {   
     background: #626262; /* 纯白底色，和卡片呼应 */
     color: #ddd;      /* 使用和评论区名字一样的优雅蓝/灰 */
 
@@ -5334,26 +5339,26 @@ body.custom-mode.custom-dark button#btn-load-more-moments {
 }
 
 
-body.custom-mode.custom-dark .contact-item {
+body.custom-dark .contact-item {
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 
-body.custom-mode.custom-dark #upload-image-btn {
+body.custom-dark #upload-image-btn {
     border: 1px solid #9d9d9dcc;
     color: #ffffff;
     background: rgba(60, 60, 60, 0.25) ;
 }
 
-body.custom-mode.custom-dark .wi-toolbar-group label {
+body.custom-dark .wi-toolbar-group label {
     color: #ffffff;
 }
 
-body.custom-mode.custom-dark .wi-sidebar-header {
+body.custom-dark .wi-sidebar-header {
     color: #ffffff;
 }
 
-body.custom-mode.custom-dark .wi-section-title {
+body.custom-dark .wi-section-title {
     margin: 0 0 7px 0;
     font-size: 14px;
     color: #ffffff;
@@ -5362,7 +5367,7 @@ body.custom-mode.custom-dark .wi-section-title {
     gap: 8px;
 }
 
-body.custom-mode.custom-dark .wi-form-group label {
+body.custom-dark .wi-form-group label {
     font-size: 13px;
     color: #ffffff;
     font-weight: 500;
@@ -5370,7 +5375,7 @@ body.custom-mode.custom-dark .wi-form-group label {
 }
 
 
-body.custom-mode.custom-dark .wi-checkbox-wrapper {
+body.custom-dark .wi-checkbox-wrapper {
     display: flex;
     align-items: center;
     gap: 6px;
@@ -5382,13 +5387,13 @@ body.custom-mode.custom-dark .wi-checkbox-wrapper {
 
 
 
-body.custom-mode.custom-dark .history-btn {
+body.custom-dark .history-btn {
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
 }
 
-body.custom-mode.custom-dark .danger-btn.outline {
+body.custom-dark .danger-btn.outline {
     background: rgba(255, 33, 33, 0.3);
     color: #ffcaca;
     border: 1px solid rgba(255, 80, 80, 0.9);
@@ -5397,47 +5402,47 @@ body.custom-mode.custom-dark .danger-btn.outline {
 
 
 
-body.custom-mode.custom-dark details.thought-process .thought-content {
+body.custom-dark details.thought-process .thought-content {
     color: #dbdbdb;
     border-top: 1px dashed rgb(255 255 255 / 30%);
 }
 
 
 
-body.custom-mode.custom-dark details.thought-process summary {
+body.custom-dark details.thought-process summary {
 
     color: #c0c0c0; /* 灰色字 */
 
 }
 
-body.custom-mode.custom-dark details.thought-process {
+body.custom-dark details.thought-process {
     border: 1px solid rgba(150, 150, 150, 0.3);
     background-color: rgb(255 255 255 / 15%);
 
 }
 
 /* 心迹评论：回复某人的前缀样式 */
-body.custom-mode.custom-dark .comment-reply-prefix {
+body.custom-dark .comment-reply-prefix {
     color: #8ea4d1; /* 微信朋友圈名字的经典蓝色 */
 
 }
 
 
 
-body.custom-mode.custom-dark .search-btn {
+body.custom-dark .search-btn {
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
 }
 
-body.custom-mode.custom-dark button#btn-close-search {
+body.custom-dark button#btn-close-search {
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
 }
 
 
-body.custom-mode.custom-dark button#save-request-body-preset-btn.icon-btn {
+body.custom-dark button#save-request-body-preset-btn.icon-btn {
 
     background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.1);
     border: 1px solid var(--primary-btn-text);
@@ -5446,19 +5451,19 @@ body.custom-mode.custom-dark button#save-request-body-preset-btn.icon-btn {
 }
 
 
-body.custom-mode.custom-dark button#del-request-body-preset-btn.icon-btn.danger {
+body.custom-dark button#del-request-body-preset-btn.icon-btn.danger {
     background: rgba(255, 80, 80, 0.1);
     color: #ff5f5f;
     border: 1px solid rgba(255, 80, 80, 0.9);
 }
 
 
-body.custom-mode.custom-dark .world-sense-card-subtitle {
+body.custom-dark .world-sense-card-subtitle {
     color: rgba(235, 235, 235, 0.5);
 }
 
 
-body.custom-mode.custom-dark .async-backend-key-mode-card {
+body.custom-dark .async-backend-key-mode-card {
     border-color: rgba(255, 255, 255, 0.5);
     background: rgba(255, 255, 255, 0.2);
 }
@@ -5466,61 +5471,61 @@ body.custom-mode.custom-dark .async-backend-key-mode-card {
 
 
 
-body.custom-mode.custom-dark .async-backend-pending-panel {
+body.custom-dark .async-backend-pending-panel {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(245, 245, 245, 0.3);
     color: #cdcdcdc8;
 }
 
-body.custom-mode.custom-dark .async-backend-pending-summary,
-body.custom-mode.custom-dark .async-backend-pending-age {
+body.custom-dark .async-backend-pending-summary,
+body.custom-dark .async-backend-pending-age {
     color: #cdcdcdc8;
 }
 
-body.custom-mode.custom-dark .async-backend-pending-item {
+body.custom-dark .async-backend-pending-item {
     background: rgba(255, 255, 255, 0.1);
 }
 
 
 
 
-body.custom-mode.custom-dark .todo-date-group {
+body.custom-dark .todo-date-group {
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(245, 245, 245, 0.5);
 }
 
-body.custom-mode.custom-dark .todo-date-group-title {
+body.custom-dark .todo-date-group-title {
     color: #f2f2f2;
 }
 
 
-body.custom-mode.custom-dark .todo-inline-date-pill {
+body.custom-dark .todo-inline-date-pill {
     color: #ffffff83;
     background: rgb(160 160 160 / 50%);
 }
 
-body.custom-mode.custom-dark .todo-item {
+body.custom-dark .todo-item {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(245, 245, 245, 0.3);
 }
 
-body.custom-mode.custom-dark .countdown-item {
+body.custom-dark .countdown-item {
     background: rgb(15 15 15 / 40%);
     border: 1px solid rgba(245, 245, 245, 0.7);
 
 }
 
 
-body.custom-mode.custom-dark .todo-item-text,
-body.custom-mode.custom-dark .countdown-item-text {
+body.custom-dark .todo-item-text,
+body.custom-dark .countdown-item-text {
     color: #f4f4f4;
 }
 
-body.custom-mode.custom-dark .countdown-day-number {
+body.custom-dark .countdown-day-number {
     color: #bcbcbc;
 }
 
-body.custom-mode.custom-dark .todo-icon-btn {
+body.custom-dark .todo-icon-btn {
 
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(245, 245, 245, 0.3);
@@ -5528,70 +5533,70 @@ body.custom-mode.custom-dark .todo-icon-btn {
 }
 
 
-body.custom-mode.custom-dark .countdown-tabs {
+body.custom-dark .countdown-tabs {
 
     background: rgb(118 118 118 / 15%);
     border: 1px solid rgb(197 197 197 / 75%);
 }
 
 
-body.custom-mode.custom-dark .countdown-tab.active,
-body.custom-mode.custom-dark .countdown-modal-tab.active {
+body.custom-dark .countdown-tab.active,
+body.custom-dark .countdown-modal-tab.active {
     background: rgb(30 30 30 / 40%);
     color: #ffffff;
     border: 1px solid rgba(245, 245, 245, 0.5);
 }
 
-body.custom-mode.custom-dark .todo-edit-box {
+body.custom-dark .todo-edit-box {
     background: rgba(30, 30, 30, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.35);
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
 
 }
 
-body.custom-mode.custom-dark .todo-month-pill {
+body.custom-dark .todo-month-pill {
     color: #dedede;
     background: rgb(255 255 255 / 16%);
     /* border: 1px solid rgba(245, 245, 245, 0.3); */
 }
 
-body.custom-mode.custom-dark .todo-month-panel {
+body.custom-dark .todo-month-panel {
     background: rgba(48, 48, 48, 0.78);
     border-color: rgba(255, 255, 255, 0.1);
 }
 
 
-body.custom-mode.custom-dark .todo-year-label {
+body.custom-dark .todo-year-label {
     color: #dce9fa;
 }
 
-body.custom-mode.custom-dark .todo-month-option {
+body.custom-dark .todo-month-option {
     background: rgba(255, 255, 255, 0.08);
     color: #e7edf5;
 }
 
 
 
-body.custom-mode.custom-dark .todo-date-chip {
+body.custom-dark .todo-date-chip {
     background: rgba(58, 58, 58, 0.72);
     color: #f2f2f2;
     border-color: rgba(255, 255, 255, 0.1);
 }
 
-body.custom-mode.custom-dark .todo-date-chip.active {
+body.custom-dark .todo-date-chip.active {
     background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.7);
     color: #ffffff;
     border-color: #acacac;
 }
 
-body.custom-mode.custom-dark .todo-date-chip.active .week {
+body.custom-dark .todo-date-chip.active .week {
     color: rgba(255, 255, 255, 0.82);
 }
 
 
 
 
-body.custom-mode.custom-dark .todo-date-nav-btn {
+body.custom-dark .todo-date-nav-btn {
 
     background: rgb(255 255 255 / 12%);
     color: #c4c4c4;
@@ -5600,24 +5605,24 @@ body.custom-mode.custom-dark .todo-date-nav-btn {
 }
 
 
-body.custom-mode.custom-dark .todo-editor-textarea {
+body.custom-dark .todo-editor-textarea {
     color: #f4f4f4;
     background: rgba(40, 40, 40, 0.68);
     border-color: rgba(255, 255, 255, 0.25);
 }
 
 
-body.custom-mode.custom-dark .todo-icon-btn.danger {
+body.custom-dark .todo-icon-btn.danger {
     color: #d93838;
 }
 
-body.custom-mode.custom-dark .todo-time-pill {
+body.custom-dark .todo-time-pill {
     color: #ffffff9e;
     background: rgb(160 160 160 / 50%);
 }
 
 
-body.custom-mode.custom-dark .todo-time-box {
+body.custom-dark .todo-time-box {
     background: rgba(30, 30, 30, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.35);
     box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
@@ -5625,27 +5630,27 @@ body.custom-mode.custom-dark .todo-time-box {
 
 
 
-body.custom-mode.custom-dark .todo-time-field {
+body.custom-dark .todo-time-field {
     background: rgba(40, 40, 40, 0.68);
     border-color: rgba(255, 255, 255, 0.25);
 }
 
-body.custom-mode.custom-dark .todo-time-input {
+body.custom-dark .todo-time-input {
     color: #f4f4f4;
 }
 
-body.custom-mode.custom-dark .todo-time-picker-btn {
+body.custom-dark .todo-time-picker-btn {
     color: #d8d8d8;
 }
 
-body.custom-mode.custom-dark .todo-time-clear-btn {
+body.custom-dark .todo-time-clear-btn {
     background: rgba(255, 255, 255, 0.12);
     color: #d8d8d8;
 }
 
 
 
-body.custom-mode.custom-dark .contact-menu-panel {
+body.custom-dark .contact-menu-panel {
     position: relative;
     z-index: 2;
     min-width: 200px;
@@ -5660,14 +5665,14 @@ body.custom-mode.custom-dark .contact-menu-panel {
 
 
 
-body.custom-mode.custom-dark .contact-menu-title,
-body.custom-mode.custom-dark .contact-menu-gap {
+body.custom-dark .contact-menu-title,
+body.custom-dark .contact-menu-gap {
     background-color: #3f3f3f63;
     color: #fff;
     border-bottom: 1px solid rgba(255, 255, 255, 0.15);
 }
 
-body.custom-mode.custom-dark .contact-menu-panel button {
+body.custom-dark .contact-menu-panel button {
     width: 100%;
     padding: 12px 7px;
     text-align: center;
@@ -5680,18 +5685,18 @@ body.custom-mode.custom-dark .contact-menu-panel button {
 
 }
 
-body.custom-mode.custom-dark .contact-menu-panel button[data-action="cancel"] {
+body.custom-dark .contact-menu-panel button[data-action="cancel"] {
     color: #fff;
 }
 
 
-body.custom-mode.custom-dark .contact-sort-bar, body.custom-mode.custom-dark .contact-sort-done-btn, body.custom-mode.custom-dark .contact-sort-btn {
+body.custom-dark .contact-sort-bar, body.custom-dark .contact-sort-done-btn, body.custom-dark .contact-sort-btn {
     background: rgba(45, 45, 45, 0.76);
     border-color: rgba(255, 255, 255, 0.2);
     color: #eee;
 }
 
-body.custom-mode.custom-dark .contact-item-pinned {
+body.custom-dark .contact-item-pinned {
 
     border-left: 4px solid #d6a52e;
     border-right: 4px solid #d6a52e;
@@ -5701,87 +5706,87 @@ body.custom-mode.custom-dark .contact-item-pinned {
 
 
 
-body.custom-mode.custom-dark .desktop-card {
+body.custom-dark .desktop-card {
     border-color: rgba(245, 245, 245, 0.22);
     background: rgba(28, 28, 28, 0.5);
     color: #eeeeee;
 }
 
-body.custom-mode.custom-dark .desktop-date-line,
-body.custom-mode.custom-dark .desktop-lunar-line,
-body.custom-mode.custom-dark .desktop-weather-line,
-body.custom-mode.custom-dark .desktop-card-label,
-body.custom-mode.custom-dark .desktop-card-sub {
+body.custom-dark .desktop-date-line,
+body.custom-dark .desktop-lunar-line,
+body.custom-dark .desktop-weather-line,
+body.custom-dark .desktop-card-label,
+body.custom-dark .desktop-card-sub {
     color: rgba(238, 238, 238, 0.66);
 }
 
-body.custom-mode.custom-dark .desktop-signature-card p,
-body.custom-mode.custom-dark .desktop-todo-text,
-body.custom-mode.custom-dark .desktop-switch-cell,
-body.custom-mode.custom-dark .desktop-async-status {
+body.custom-dark .desktop-signature-card p,
+body.custom-dark .desktop-todo-text,
+body.custom-dark .desktop-switch-cell,
+body.custom-dark .desktop-async-status {
     color: #eeeeee;
 }
 
-body.custom-mode.custom-dark .desktop-switch-cell,
-body.custom-mode.custom-dark .desktop-trash-btn {
+body.custom-dark .desktop-switch-cell,
+body.custom-dark .desktop-trash-btn {
     background: rgba(255, 255, 255, 0.10);
 }
 
 
-body.custom-mode.custom-dark .desktop-recent-avatar,
-body.custom-mode.custom-dark .desktop-settings-icon,
-body.custom-mode.custom-dark .desktop-settings-label {
+body.custom-dark .desktop-recent-avatar,
+body.custom-dark .desktop-settings-icon,
+body.custom-dark .desktop-settings-label {
     color: #eeeeee;
 }
 
 
 
 
-body.custom-mode.custom-dark .desktop-sync-icon,
-body.custom-mode.custom-dark .desktop-sync-text {
+body.custom-dark .desktop-sync-icon,
+body.custom-dark .desktop-sync-text {
     color: #eeeeee;
 }
 
-body.custom-mode.custom-dark .desktop-switch-cell,
-body.custom-mode.custom-dark .desktop-trash-btn {
+body.custom-dark .desktop-switch-cell,
+body.custom-dark .desktop-trash-btn {
     background: rgba(255, 255, 255, 0.10);
 }
 
-body.custom-mode.custom-dark .desktop-sync-text.status-success {
+body.custom-dark .desktop-sync-text.status-success {
     color: rgb(62, 196, 68);
 }
 
-body.custom-mode.custom-dark .desktop-sync-text.status-failure,
-body.custom-mode.custom-dark .desktop-sync-text.status-error {
+body.custom-dark .desktop-sync-text.status-failure,
+body.custom-dark .desktop-sync-text.status-error {
     color: #ff6b6b;
 }
 
-body.custom-mode.custom-dark .desktop-sync-text.status-pending {
+body.custom-dark .desktop-sync-text.status-pending {
     color: #f59e0b;
 }
 
 
-body.custom-mode.custom-dark .desktop-weather-temp-line {
+body.custom-dark .desktop-weather-temp-line {
     color: rgba(238, 238, 238, 0.66);
 }
 
 
 
-body.custom-mode.custom-dark #view-worldbook .glass-card,
-body.custom-mode.custom-dark #view-worldbook .wi-section-card,
-body.custom-mode.custom-dark #view-worldbook .wi-edit-area {
+body.custom-dark #view-worldbook .glass-card,
+body.custom-dark #view-worldbook .wi-section-card,
+body.custom-dark #view-worldbook .wi-edit-area {
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(245,245,245,0.5);
 }
 
 
-body.custom-mode.custom-dark .icon-btn.danger {
+body.custom-dark .icon-btn.danger {
     background: rgba(255, 33, 33, 0.5);
     color: #ffcaca;
     border: 1px solid rgba(255, 80, 80, 0.9);
 }
 
-body.custom-mode.custom-dark button#save-system-prompt-preset-btn.icon-btn {
+body.custom-dark button#save-system-prompt-preset-btn.icon-btn {
     background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.1);
     border: 1px solid var(--primary-btn-text);
     color: #ffffff;
@@ -5790,30 +5795,30 @@ body.custom-mode.custom-dark button#save-system-prompt-preset-btn.icon-btn {
 
 
 
-body.custom-mode.custom-dark .character-schedule-contact,
-body.custom-mode.custom-dark .character-schedule-entry {
+body.custom-dark .character-schedule-contact,
+body.custom-dark .character-schedule-entry {
     background: rgb(31 31 31 / 30%);
     border: 1px solid rgba(245, 245, 245, 0.3);
 }
 
 
-body.custom-mode.custom-dark .character-schedule-avatar {
+body.custom-dark .character-schedule-avatar {
     background: rgba(255, 255, 255, 0.14);
     color: #f5f5f5;
 }
 
 
 
-body.custom-mode.custom-dark .character-schedule-contact-name {
+body.custom-dark .character-schedule-contact-name {
     color: #f4f4f4;
 }
 
-body.custom-mode.custom-dark .character-schedule-contact-status {
+body.custom-dark .character-schedule-contact-status {
     color: #bcbcbc;
 }
 
 
-body.custom-mode.custom-dark .character-schedule-status {
+body.custom-dark .character-schedule-status {
     background: rgba(0, 0, 0, 0.25);
     border-color: rgba(245, 245, 245, 0.45);
     color: #d5d5d5;
@@ -5824,23 +5829,23 @@ body.custom-mode.custom-dark .character-schedule-status {
 
 
 
-body.custom-mode.custom-dark .character-schedule-time-pill {
+body.custom-dark .character-schedule-time-pill {
     color: #ffffff9e;
     background: rgb(160 160 160 / 50%);
 }
 
-body.custom-mode.custom-dark .character-schedule-entry-text {
+body.custom-dark .character-schedule-entry-text {
     color: #f4f4f4;
 }
 
 
-body.custom-mode.custom-dark .character-schedule-edit-time {
+body.custom-dark .character-schedule-edit-time {
     background: rgb(160 160 160 / 50%);
     color: #ffffffd9;
 }
 
 
-body.custom-mode.custom-dark .theme-color-card {
+body.custom-dark .theme-color-card {
     background: rgba(255, 255, 255, 0.08);
     color: #ddd;
 
@@ -5848,7 +5853,7 @@ body.custom-mode.custom-dark .theme-color-card {
 
 
 
-body.custom-mode.custom-dark .theme-color-preview {
+body.custom-dark .theme-color-preview {
     width: 20px;
     height: 20px;
     border-radius: 50%;
@@ -5860,128 +5865,128 @@ body.custom-mode.custom-dark .theme-color-preview {
 }
 
 
-body.custom-mode.custom-dark .theme-color-row {
+body.custom-dark .theme-color-row {
 
     color: #bbb;
 
 }
 
 
-body.custom-mode.custom-dark .request-body-tip {
+body.custom-dark .request-body-tip {
     color: #ddd;
 }
 
 
-body.custom-mode.custom-dark .cache-optimization-header {
+body.custom-dark .cache-optimization-header {
     color: #b0b0b0;
 
 }
 
-body.custom-mode.custom-dark .cache-optimization-card {
+body.custom-dark .cache-optimization-card {
     background: rgba(255, 255, 255, 0.08);
 
 }
 
-body.custom-mode.custom-dark .request-body-fold-header {
+body.custom-dark .request-body-fold-header {
     color: #b0b0b0;
 }
 
-body.custom-mode.custom-dark .request-body-fold-card {
+body.custom-dark .request-body-fold-card {
     background: rgba(255, 255, 255, 0.08);
 }
 
 
 
 
-body.custom-mode.custom-dark .async-backend-pending-item {
+body.custom-dark .async-backend-pending-item {
     background: rgba(255, 255, 255, 0.1);
 }
 
 
-body.custom-mode.custom-dark .async-backend-diagnostic-title {
+body.custom-dark .async-backend-diagnostic-title {
     border-top-color: rgba(245,245,245,0.22);
 }
 
-body.custom-mode.custom-dark .async-backend-diagnostic-item {
+body.custom-dark .async-backend-diagnostic-item {
     background: rgba(255, 255, 255, 0.1);
 }
 
 
-body.custom-mode.custom-dark .async-backend-diagnostic-code {
+body.custom-dark .async-backend-diagnostic-code {
     color: #ffd08a;
 }
 
-body.custom-mode.custom-dark .async-backend-diagnostic-meta {
+body.custom-dark .async-backend-diagnostic-meta {
     color: #cdcdcdc8;
 }
 
 
-body.custom-mode.custom-dark .countdown-tabs::before {
+body.custom-dark .countdown-tabs::before {
     background: rgb(30 30 30 / 40%);
     border: 1px solid rgba(245, 245, 245, 0.5);
 }
 
 
-body.custom-mode.custom-dark .countdown-tab.active {
+body.custom-dark .countdown-tab.active {
     background: transparent;
     border-color: transparent;
 }
 
-body.custom-mode.custom-dark .desktop-activity-tip {
+body.custom-dark .desktop-activity-tip {
     background: rgba(245, 245, 245, 0.94);
     color: #232323;
 }
 
-body.custom-mode.custom-dark .sync-passphrase-primary {
+body.custom-dark .sync-passphrase-primary {
     background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.1);
     color: #fff;
     border: 1px solid var(--primary-btn-text) !important;
 }
 
 
-body.custom-mode.custom-dark .sync-forget-passphrase-btn {
+body.custom-dark .sync-forget-passphrase-btn {
     color: #ffd891;
     background: rgba(116, 80, 22, 0.32);
 }
 
 
-body.custom-mode.custom-dark .cache-optimization-row {
+body.custom-dark .cache-optimization-row {
     color: #bbb;
 }
 
 
-body.custom-mode.custom-dark .agent-card {
+body.custom-dark .agent-card {
     background: rgb(31 31 31 / 30%);
     border: 1px solid rgba(245, 245, 245, 0.3);
 }
 
-body.custom-mode.custom-dark .agent-card-icon {
+body.custom-dark .agent-card-icon {
     background: rgba(255, 255, 255, 0.14);
     color: #f5f5f5;
 }
 
-body.custom-mode.custom-dark .agent-card-name {
+body.custom-dark .agent-card-name {
     color: #f4f4f4;
 }
 
-body.custom-mode.custom-dark .agent-card-status {
+body.custom-dark .agent-card-status {
     color: #bcbcbc;
 }
 
-body.custom-mode.custom-dark .agent-api-select {
+body.custom-dark .agent-api-select {
     background: rgba(255, 255, 255, 0.1);
     border-color: rgba(245, 245, 245, 0.35);
     color: #f4f4f4;
 }
 
-body.custom-mode.custom-dark .app-top-notice {
+body.custom-dark .app-top-notice {
     background: rgba(36, 36, 36, 0.3);
     border-color: rgba(245, 245, 245, 0.28);
     color: #f4f4f4;
     box-shadow: 0 12px 34px rgba(0, 0, 0, 0.34);
 }
 
-body.custom-mode.custom-dark .app-top-notice-action {
+body.custom-dark .app-top-notice-action {
     color: #f4f4f4;
     background: rgba(255, 255, 255, 0.12);
     border-color: rgba(245, 245, 245, 0.34);
@@ -6024,131 +6029,131 @@ body.custom-mode.custom-dark .app-top-notice-action {
 
 
 
-body.custom-mode.custom-dark .character-memory-contact,
-body.custom-mode.custom-dark .character-memory-card {
+body.custom-dark .character-memory-contact,
+body.custom-dark .character-memory-card {
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(245, 245, 245, 0.3);
 }
 
-body.custom-mode.custom-dark .character-memory-avatar {
+body.custom-dark .character-memory-avatar {
     background: rgba(255, 255, 255, 0.14);
     color: #f5f5f5;
 }
 
-body.custom-mode.custom-dark .character-memory-contact-name {
+body.custom-dark .character-memory-contact-name {
     color: #f4f4f4;
 }
 
-body.custom-mode.custom-dark .character-memory-contact-status {
+body.custom-dark .character-memory-contact-status {
     color: #bcbcbc;
 }
 
-body.custom-mode.custom-dark .character-memory-item {
+body.custom-dark .character-memory-item {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(245, 245, 245, 0.2);
 }
 
-body.custom-mode.custom-dark .character-memory-text {
+body.custom-dark .character-memory-text {
     color: #f4f4f4;
 }
 
-body.custom-mode.custom-dark .character-memory-comment {
+body.custom-dark .character-memory-comment {
     color: #d5d5d5;
     border-left-color: rgba(245, 245, 245, 0.32);
 }
 
-body.custom-mode.custom-dark .character-memory-icon-btn {
+body.custom-dark .character-memory-icon-btn {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(245, 245, 245, 0.3);
     color: #adadad;
 
 }
 
-body.custom-mode.custom-dark .character-memory-icon-btn.danger {
+body.custom-dark .character-memory-icon-btn.danger {
     color: #d93838;
 }
 
-body.custom-mode.custom-dark .character-memory-setting-pill {
+body.custom-dark .character-memory-setting-pill {
     background: rgba(0, 0, 0, 0.25);
     border-color: rgba(245, 245, 245, 0.3);
     color: #d5d5d5;
 }
 
-body.custom-mode.custom-dark .character-memory-setting-pill .character-memory-status {
+body.custom-dark .character-memory-setting-pill .character-memory-status {
     background: rgba(255, 255, 255, 0.1);
     border-color: rgba(245, 245, 245, 0.3);
     color: #cdcdcdc8;
 }
 
-body.custom-mode.custom-dark .character-memory-setting-pill input,
-body.custom-mode.custom-dark .character-memory-api-select {
+body.custom-dark .character-memory-setting-pill input,
+body.custom-dark .character-memory-api-select {
     background: rgba(255, 255, 255, 0.1);
     border-color: rgba(245, 245, 245, 0.35);
     color: #f4f4f4;
 }
 
-body.custom-mode.custom-dark .character-memory-date {
+body.custom-dark .character-memory-date {
     color: #ffffffd9;
     background: rgb(160 160 160 / 50%);
 }
 
 
 
-body.custom-mode.custom-dark .agent-log-section {
+body.custom-dark .agent-log-section {
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.12);
 }
 
-body.custom-mode.custom-dark .agent-log-empty {
+body.custom-dark .agent-log-empty {
     color: rgba(245, 245, 245, 0.52);
 }
 
-body.custom-mode.custom-dark .agent-log-item {
+body.custom-dark .agent-log-item {
     background: rgba(255, 255, 255, 0.08);
 }
 
 
-body.custom-mode.custom-dark .agent-card-arrow {
+body.custom-dark .agent-card-arrow {
     color: rgba(245, 245, 245, 0.48);
 }
 
-body.custom-mode.custom-dark .character-memory-pin-btn.active {
+body.custom-dark .character-memory-pin-btn.active {
     color: #ffc247;
 }
 
-body.custom-mode.custom-dark .wi-scope-summary-box {
+body.custom-dark .wi-scope-summary-box {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(245,245,245,0.3);
     color: #cdcdcdc8;
 }
 
-body.custom-mode.custom-dark .worldbook-scope-scroll {
+body.custom-dark .worldbook-scope-scroll {
     background: rgba(20, 20, 20, 0.5);
 }
 
-body.custom-mode.custom-dark .worldbook-scope-char-name {
+body.custom-dark .worldbook-scope-char-name {
     color: #efefef;
     font-size: 15px;
 }
 
 
-body.custom-mode.custom-dark .settings-title,
-body.custom-mode.custom-dark .section-title, 
-body.custom-mode.custom-dark .settings-section-title,
-body.custom-mode.custom-dark h2,
-body.custom-mode.custom-dark h3 {
+body.custom-dark .settings-title,
+body.custom-dark .section-title, 
+body.custom-dark .settings-section-title,
+body.custom-dark h2,
+body.custom-dark h3 {
     color: #e0e0e0;
 }
 
-body.custom-mode.custom-dark .worldbook-scope-global,
-body.custom-mode.custom-dark .worldbook-scope-checkbox-group {
+body.custom-dark .worldbook-scope-global,
+body.custom-dark .worldbook-scope-checkbox-group {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(245, 245, 245, 0.3);
 
 }
 
 
-body.custom-mode.custom-dark button#wi-scope-save-btn.save-btn {
+body.custom-dark button#wi-scope-save-btn.save-btn {
   
     background: var(--btn-color);
     color: #ffffff;
@@ -6159,7 +6164,7 @@ body.custom-mode.custom-dark button#wi-scope-save-btn.save-btn {
 
 
 
-body.custom-mode.custom-dark button#wi-scope-cancel-btn.cancel-btn {
+body.custom-dark button#wi-scope-cancel-btn.cancel-btn {
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
@@ -6168,36 +6173,36 @@ body.custom-mode.custom-dark button#wi-scope-cancel-btn.cancel-btn {
 }
 
 
-body.custom-mode.custom-dark .appearance-switch-cell {
+body.custom-dark .appearance-switch-cell {
     color: #eeeeee;
     background: rgba(255, 255, 255, 0.10);
 }
 
 
 
-body.custom-mode.custom-dark .character-memory-tabs {
+body.custom-dark .character-memory-tabs {
     background: rgb(118 118 118 / 15%);
     border: 1px solid rgb(197 197 197 / 75%);
 }
 
-body.custom-mode.custom-dark .character-memory-tabs::before {
+body.custom-dark .character-memory-tabs::before {
     background: rgb(30 30 30 / 40%);
     border: 1px solid rgba(245, 245, 245, 0.5);
 }
 
-body.custom-mode.custom-dark .character-memory-tab.active {
+body.custom-dark .character-memory-tab.active {
     background: transparent;
     border-color: transparent;
     color: #ffffff;
 }
 
-body.custom-mode.custom-dark .chat-header-avatar {
+body.custom-dark .chat-header-avatar {
     border: 3px solid rgba(255, 255, 255, 0.3);
 
 }
 
 
-body.custom-mode.custom-dark button#character-schedule-entry-cancel-btn.cancel-btn {
+body.custom-dark button#character-schedule-entry-cancel-btn.cancel-btn {
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
@@ -6205,14 +6210,14 @@ body.custom-mode.custom-dark button#character-schedule-entry-cancel-btn.cancel-b
 
 
 
-body.custom-mode.custom-dark button#character-schedule-entry-save-btn.primary {
+body.custom-dark button#character-schedule-entry-save-btn.primary {
     background: rgba(255, 255, 255, 0.1);
     color: #ffffff;
     border: 2px solid var(--primary-btn-text) !important;
 }
 
 
-body.custom-mode.custom-dark button#character-memory-item-cancel-btn.cancel-btn {
+body.custom-dark button#character-memory-item-cancel-btn.cancel-btn {
     background: var(--btn-color);
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
@@ -6220,22 +6225,22 @@ body.custom-mode.custom-dark button#character-memory-item-cancel-btn.cancel-btn 
 
 
 
-body.custom-mode.custom-dark button#character-memory-item-save-btn.primary {
+body.custom-dark button#character-memory-item-save-btn.primary {
     background: rgba(255, 255, 255, 0.1);
     color: #ffffff;
     border: 2px solid var(--primary-btn-text) !important;
 }
 
-body.custom-mode.custom-dark .gist-tutorial-box {
+body.custom-dark .gist-tutorial-box {
     background: rgba(35, 35, 35, 0.72);
     border-color: rgba(255, 255, 255, 0.12);
 }
 
 
-body.custom-mode.custom-dark #custom-css-panel {
-    background: rgb(255 255 255 / 3%);
+body.custom-dark #custom-css-panel {
+    background: rgb(255 255 255 / 8%);
     border-radius: 12px;
-    border: 1px solid rgb(255 255 255 / 10%);
+
 }
 
 
