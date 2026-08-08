@@ -4762,7 +4762,7 @@ const App = {
     },
 
     isEdgeSwipeBackIgnoredTarget(target) {
-        // ★ 左边缘返回只做页面级操作：输入、按钮、弹窗、横向滚动区先全部让路，避免误触。
+        // ★ 边缘滑返回只做页面级操作：输入、按钮、弹窗、横向滚动区先全部让路，避免误触。
         if (!target || target === document) return true;
         if (target.closest('input, textarea, select, button, a, label, [contenteditable="true"], [role="button"]')) return true;
         if (target.closest('.modal:not(.hidden), .menu, .contact-menu, .message-actions-menu')) return true;
@@ -4812,37 +4812,54 @@ const App = {
 
         let startX = 0;
         let startY = 0;
-        let tracking = false;
+        let swipeDirection = null;
         const EDGE_START = 56;
         const MIN_DISTANCE = 85;
         const MAX_VERTICAL = 65;
 
-        // ★ 手机式左边缘右滑返回 START
+        // ★ 手机式边缘滑返回 START
         // 第一版先不做跟手动效，只在手势成立时触发现有左上角返回按钮。
+        // 左边缘向右滑、右边缘向左滑都走同一个返回入口，方便先验证手感。
         document.addEventListener('touchstart', (event) => {
             if (event.touches.length !== 1) {
-                tracking = false;
+                swipeDirection = null;
                 return;
             }
 
             const touch = event.touches[0];
             startX = touch.clientX;
             startY = touch.clientY;
-            tracking = startX <= EDGE_START && !this.isEdgeSwipeBackIgnoredTarget(event.target);
+
+            if (this.isEdgeSwipeBackIgnoredTarget(event.target)) {
+                swipeDirection = null;
+                return;
+            }
+
+            const screenWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+            if (startX <= EDGE_START) {
+                swipeDirection = 'right';
+            } else if (screenWidth && startX >= screenWidth - EDGE_START) {
+                swipeDirection = 'left';
+            } else {
+                swipeDirection = null;
+            }
         }, { passive: true });
 
         document.addEventListener('touchend', (event) => {
-            if (!tracking) return;
-            tracking = false;
+            if (!swipeDirection) return;
+            const direction = swipeDirection;
+            swipeDirection = null;
 
             const touch = event.changedTouches[0];
             const deltaX = touch.clientX - startX;
             const deltaY = touch.clientY - startY;
-            if (deltaX < MIN_DISTANCE || Math.abs(deltaY) > MAX_VERTICAL) return;
+            const isRightSwipe = direction === 'right' && deltaX >= MIN_DISTANCE;
+            const isLeftSwipe = direction === 'left' && deltaX <= -MIN_DISTANCE;
+            if ((!isRightSwipe && !isLeftSwipe) || Math.abs(deltaY) > MAX_VERTICAL) return;
 
             this.handleEdgeSwipeBack();
         }, { passive: true });
-        // ★ 手机式左边缘右滑返回 END
+        // ★ 手机式边缘滑返回 END
     },
     // ★★★★★ 桌面 END：页面渲染与小组件交互 ★★★★★
 
