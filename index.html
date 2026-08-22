@@ -1672,7 +1672,7 @@
                         <label class="main-option image-api-mode-option">
                             <div class="image-api-mode-copy">
                                 <strong>使用单独识图 API</strong>
-                                <small>先把图片转成文字描述，再交给聊天模型；适合长期聊天并节省图片 Token。</small>
+                                <small>先把图片转成文字描述，再交给聊天模型；节省图片 Token，并能够将图片描述持久保存至上下文。</small>
                             </div>
                             <input type="radio" name="image-api-mode" id="image-api-mode-separate" value="separate">
                         </label>
@@ -1680,7 +1680,7 @@
                         <label class="main-option image-api-mode-option">
                             <div class="image-api-mode-copy">
                                 <strong>图文使用同一 API</strong>
-                                <small>原图仅在发送图片的当轮交给主模型，后续不会重复携带；当前模型和接口必须支持图片输入。</small>
+                                <small>原图仅在发送图片的当轮交给主模型，后续不会重复携带；可减少转文字过程中的信息损失。当前模型和接口必须支持图片输入。</small>
                             </div>
                             <input type="radio" name="image-api-mode" id="image-api-mode-multimodal" value="multimodal">
                         </label>
