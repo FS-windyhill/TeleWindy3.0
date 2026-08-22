@@ -2125,6 +2125,37 @@ const UI = {
     init() {
         this.renderContacts(); // 先渲染联系人
         CloudSync.init();      // 云同步初始化
+
+        // 代码块按钮使用事件委托，历史消息和新消息无需分别绑定复制事件
+        this.els.chatMsgs.addEventListener('click', async (event) => {
+            const copyButton = event.target.closest('.code-copy-btn');
+            if (!copyButton) return;
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const codeElement = copyButton.closest('.code-block')?.querySelector('pre code');
+            if (!codeElement || copyButton.disabled) return;
+
+            copyButton.disabled = true;
+
+            try {
+                // 必须读取 textContent，避免把 Markdown 或将来的高亮标签复制进去
+                await copyPlainText(codeElement.textContent || '');
+                setCodeCopyButtonIcon(copyButton, true);
+                copyButton.classList.add('is-copied');
+            } catch (error) {
+                console.error('代码复制失败:', error);
+                copyButton.textContent = '复制失败';
+                copyButton.setAttribute('aria-label', '复制失败');
+            }
+
+            setTimeout(() => {
+                setCodeCopyButtonIcon(copyButton, false);
+                copyButton.classList.remove('is-copied');
+                copyButton.disabled = false;
+            }, 1600);
+        });
         
         // ★★★ 新增：字体滑块的实时监听（拖动时直接预览，不需要点保存）
         const slider = document.getElementById('font-size-slider');
@@ -2837,7 +2868,7 @@ const UI = {
                 // ==========================================================
 
                 // 拆分段落
-                const chunks = content.split(/\n\s*\n/).filter(p => p.trim());
+                const chunks = splitMessageIntoBubbleParts(content);
 
                 if (chunks.length > 0) {
                     let lastChunk = chunks[chunks.length - 1];
@@ -3047,6 +3078,11 @@ const UI = {
 
         } else {
             bubble.innerHTML = text; 
+        }
+
+        // 含代码窗口的消息需要占用稳定宽度，避免长代码参与气泡的固有宽度计算
+        if (bubble.querySelector('.code-block')) {
+            wrapper.classList.add('has-code-block');
         }
 
 
@@ -3279,7 +3315,7 @@ const UI = {
 
             // 处理 AI 引用格式
             if (sender === 'ai') {
-                 cleanText = cleanText.replace(/(^|\n)>\s*/g, '\n\n');
+                 cleanText = normalizeChatQuoteBreaks(cleanText);
                  if (typeof AgentIntentMarkup !== 'undefined') {
                      cleanText = AgentIntentMarkup.strip(cleanText);
                  }
@@ -3303,7 +3339,7 @@ const UI = {
                 displayImage = 'expired'; 
             }
 
-            const paragraphs = cleanText.split(/\n\s*\n/).filter(p => p.trim());
+            const paragraphs = splitMessageIntoBubbleParts(cleanText);
             const group = document.createElement('div');
             group.className = 'message-group';
 
@@ -3625,11 +3661,11 @@ const UI = {
         });
 
         // 1. Pre-process text
-        processedText = processedText.replace(/(^|\n)>\s*/g, '\n\n');
+        processedText = normalizeChatQuoteBreaks(processedText);
         if (typeof AgentIntentMarkup !== 'undefined') {
             processedText = AgentIntentMarkup.strip(processedText);
         }
-        const paragraphs = processedText.split(/\n\s*\n/).filter(p => p.trim());
+        const paragraphs = splitMessageIntoBubbleParts(processedText);
         
         // 2. Create the container group
         const group = document.createElement('div');
@@ -9061,7 +9097,7 @@ const App = {
 
             // 2. 立即在 UI 显示用户消息
             const currentMsgIndex = contact.history.length; // 即将存入的索引
-            const paragraphs = userText.split(/\n\s*\n/).filter(p => p.trim());
+            const paragraphs = splitMessageIntoBubbleParts(userText);
             
             const group = document.createElement('div');
             group.className = 'message-group';
@@ -10637,6 +10673,8 @@ const App = {
         if (!this._boundSelectClick) {
             this._selectClickHandler = (e) => {
                 if (!STATE.isSelectMode) return;
+                // 复制按钮保留自身行为，不能被多选模式截获成“选择整条气泡”
+                if (e.target.closest('.code-copy-btn')) return;
                 
                 const bubble = e.target.closest('.message-bubble');
                 if (bubble) {
@@ -10763,7 +10801,7 @@ const App = {
                 
                 // 2) AI 引用切分兼容
                 if (msg.role === 'assistant') {
-                    contentToParse = contentToParse.replace(/(^|\n)>\s*/g, '\n\n');
+                    contentToParse = normalizeChatQuoteBreaks(contentToParse);
                 }
 
                 // 3) 把思考过程抽离出来
@@ -10780,7 +10818,7 @@ const App = {
                     return `[思考过程]\n${cleanMarkdownForCopy(thoughtText)}`;
                 } else {
                     // 如果勾选的是正文气泡
-                    const paragraphs = contentToParse.split(/\n\s*\n/).filter(p => p.trim());
+                    const paragraphs = splitMessageIntoBubbleParts(contentToParse);
                     if (paragraphs[pIdx]) {
                         return cleanMarkdownForCopy(paragraphs[pIdx]);
                     } else {
@@ -10931,11 +10969,11 @@ const App = {
                     return ''; 
                 });
                 
-                content = content.replace(/(^|\n)>\s*/g, '\n\n');
+                content = normalizeChatQuoteBreaks(content);
             }
             
             // 现在 content 里只有纯文本了，切分出来的索引绝对准确
-            let paragraphs = content.split(/\n\s*\n/).filter(p => p.trim());
+            let paragraphs = splitMessageIntoBubbleParts(content);
             const imagePartIndex = paragraphs.length;
             
             // --- B. 处理文本删除 ---
@@ -12461,6 +12499,9 @@ const App = {
 
         // 1. 触摸开始
         UI.els.chatMsgs.addEventListener('touchstart', e => {
+            // 点击代码复制按钮时不启动消息长按菜单
+            if (e.target.closest('.code-copy-btn')) return;
+
             // ★★★ 核心修改：同时获取 group 和 bubble ★★★
             const bubble = e.target.closest('.message-bubble'); // 用于定位
             const group = e.target.closest('.message-group');   // 用于获取索引
@@ -12511,6 +12552,9 @@ const App = {
         // 4. 桌面端鼠标长按 (应用相同的修改逻辑)
         UI.els.chatMsgs.addEventListener('mousedown', e => {
             if (e.button !== 0) return; 
+            // 点击代码复制按钮时不启动消息长按菜单
+            if (e.target.closest('.code-copy-btn')) return;
+
             // ★★★ 核心修改：同时获取 group 和 bubble ★★★
             const bubble = e.target.closest('.message-bubble'); // 用于定位
             const group = e.target.closest('.message-group');   // 用于获取索引
@@ -15136,35 +15180,188 @@ window.importData = (input) => {
 // ============== markdown  全局配置 =================
 
 /**
+ * 只处理围栏代码块外的文本，防止引用和数学公式预处理改坏代码原文。
+ */
+function transformOutsideFencedCode(text, transform) {
+    const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
+    const outputChunks = [];
+    let plainLines = [];
+    let codeLines = [];
+    let fence = null;
+
+    const flushPlainLines = () => {
+        if (plainLines.length > 0) outputChunks.push(transform(plainLines.join('\n')));
+        plainLines = [];
+    };
+
+    const flushCodeLines = () => {
+        if (codeLines.length > 0) outputChunks.push(codeLines.join('\n'));
+        codeLines = [];
+    };
+
+    lines.forEach(line => {
+        if (fence) {
+            codeLines.push(line);
+            const closingMatch = line.match(/^ {0,3}(`+|~+)\s*$/);
+            if (closingMatch && closingMatch[1][0] === fence.char && closingMatch[1].length >= fence.length) {
+                fence = null;
+                flushCodeLines();
+            }
+            return;
+        }
+
+        const openingMatch = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+        if (openingMatch) {
+            flushPlainLines();
+            fence = {
+                char: openingMatch[1][0],
+                length: openingMatch[1].length
+            };
+            codeLines.push(line);
+            return;
+        }
+
+        plainLines.push(line);
+    });
+
+    // AI 偶尔漏掉结束围栏，此时也要原样保留剩余代码
+    flushCodeLines();
+    flushPlainLines();
+    return outputChunks.join('\n');
+}
+
+/**
+ * 延续原有“引用开头另起气泡”的规则，但代码中的 > 必须保持原样。
+ */
+function normalizeChatQuoteBreaks(text) {
+    return transformOutsideFencedCode(text, plainText => plainText.replace(/(^|\n)>\s*/g, '\n\n'));
+}
+
+/**
+ * 按双换行切分聊天气泡，但围栏代码块内部的空行必须完整保留。
+ * 同时支持反引号、波浪线和未闭合代码块，保证渲染、复制、删除共用同一套索引。
+ */
+function splitMessageIntoBubbleParts(text) {
+    if (!text) return [];
+
+    const lines = String(text).replace(/\r\n?/g, '\n').split('\n');
+    const parts = [];
+    let currentLines = [];
+    let fence = null;
+
+    const pushCurrentPart = () => {
+        const part = currentLines.join('\n').trim();
+        if (part) parts.push(part);
+        currentLines = [];
+    };
+
+    lines.forEach(line => {
+        if (fence) {
+            currentLines.push(line);
+
+            // 结束围栏必须使用相同字符，长度也不能短于开始围栏
+            const closingMatch = line.match(/^ {0,3}(`+|~+)\s*$/);
+            if (closingMatch && closingMatch[1][0] === fence.char && closingMatch[1].length >= fence.length) {
+                fence = null;
+            }
+            return;
+        }
+
+        const openingMatch = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+        if (openingMatch) {
+            fence = {
+                char: openingMatch[1][0],
+                length: openingMatch[1].length
+            };
+            currentLines.push(line);
+            return;
+        }
+
+        if (line.trim() === '') {
+            // 连续空行在代码块外仍沿用原有逻辑：结束当前气泡
+            pushCurrentPart();
+            return;
+        }
+
+        currentLines.push(line);
+    });
+
+    pushCurrentPart();
+    return parts;
+}
+
+/**
+ * 复制纯文本。安全上下文优先使用 Clipboard API，本地文件等环境使用旧接口兜底。
+ */
+async function copyPlainText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+
+    const copied = document.execCommand('copy');
+    textarea.remove();
+    if (!copied) throw new Error('浏览器拒绝了剪贴板写入');
+}
+
+/**
+ * 切换代码复制按钮图标。SVG 为固定模板，不接收消息内容，避免引入不可信 HTML。
+ */
+function setCodeCopyButtonIcon(button, copied) {
+    if (copied) {
+        button.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-check-icon lucide-check" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+        button.setAttribute('aria-label', '已复制');
+        return;
+    }
+
+    button.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy-icon lucide-copy" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+    button.setAttribute('aria-label', '复制代码');
+}
+
+/**
  * 终极无敌版 Markdown 解析器 (修复表格 object 报错版)
  */
 function parseCustomMarkdown(text) {
     if (!text) return '';
 
-    // 预处理：处理引用的换行
-    let processedText = text.replace(/^>\s*/gm, '\n\n'); 
+    // 预处理：处理引用换行，但代码块中的 > 必须保持原样
+    let processedText = normalizeChatQuoteBreaks(text);
 
     // 暂存数学公式的数组
     const mathBlocks = [];
 
-    // 1. 提取块级公式 $$ ... $$
-    processedText = processedText.replace(/\$\$([\s\S]*?)\$\$/g, (match, mathCode) => {
-        const placeholder = `%%%MATH_BLOCK_${mathBlocks.length}%%%`;
-        try {
-            const html = katex.renderToString(mathCode, { displayMode: true, throwOnError: false });
-            mathBlocks.push({ placeholder, html });
-            return placeholder;
-        } catch (e) { return match; }
-    });
+    // 数学公式只在普通 Markdown 中解析，代码里的 $、$$ 必须作为代码原文保留
+    processedText = transformOutsideFencedCode(processedText, plainText => {
+        // 1. 提取块级公式 $$ ... $$
+        let mathProcessedText = plainText.replace(/\$\$([\s\S]*?)\$\$/g, (match, mathCode) => {
+            const placeholder = `%%%MATH_BLOCK_${mathBlocks.length}%%%`;
+            try {
+                const html = katex.renderToString(mathCode, { displayMode: true, throwOnError: false });
+                mathBlocks.push({ placeholder, html });
+                return placeholder;
+            } catch (e) { return match; }
+        });
 
-    // 2. 提取行内公式 $ ... $
-    processedText = processedText.replace(/\$([^\$\n]+?)\$/g, (match, mathCode) => {
-        const placeholder = `%%%MATH_INLINE_${mathBlocks.length}%%%`;
-        try {
-            const html = katex.renderToString(mathCode, { displayMode: false, throwOnError: false });
-            mathBlocks.push({ placeholder, html });
-            return placeholder;
-        } catch (e) { return match; }
+        // 2. 提取行内公式 $ ... $
+        mathProcessedText = mathProcessedText.replace(/\$([^\$\n]+?)\$/g, (match, mathCode) => {
+            const placeholder = `%%%MATH_INLINE_${mathBlocks.length}%%%`;
+            try {
+                const html = katex.renderToString(mathCode, { displayMode: false, throwOnError: false });
+                mathBlocks.push({ placeholder, html });
+                return placeholder;
+            } catch (e) { return match; }
+        });
+
+        return mathProcessedText;
     });
 
     // 3. 配置 marked.js（注意：这里删除了原来惹祸的 renderer）
@@ -15204,6 +15401,38 @@ function parseCustomMarkdown(text) {
     };
 
     let sanitizedHtml = DOMPurify.sanitize(rawHtml, purifyConfig);
+
+    // marked 已经生成 <pre><code>，这里仅补上 AI 聊天常见的标题栏和复制按钮
+    const markdownTemplate = document.createElement('template');
+    markdownTemplate.innerHTML = sanitizedHtml;
+
+    markdownTemplate.content.querySelectorAll('pre > code').forEach(codeElement => {
+        const preElement = codeElement.parentElement;
+        const languageClass = Array.from(codeElement.classList)
+            .find(className => className.startsWith('language-'));
+        const languageName = languageClass ? languageClass.slice('language-'.length) : '代码';
+
+        const codeBlock = document.createElement('div');
+        codeBlock.className = 'code-block';
+
+        const toolbar = document.createElement('div');
+        toolbar.className = 'code-block-toolbar';
+
+        const languageLabel = document.createElement('span');
+        languageLabel.className = 'code-block-language';
+        languageLabel.textContent = languageName || '代码';
+
+        const copyButton = document.createElement('button');
+        copyButton.type = 'button';
+        copyButton.className = 'code-copy-btn';
+        setCodeCopyButtonIcon(copyButton, false);
+
+        preElement.replaceWith(codeBlock);
+        toolbar.append(languageLabel, copyButton);
+        codeBlock.append(toolbar, preElement);
+    });
+
+    sanitizedHtml = markdownTemplate.innerHTML;
 
     return sanitizedHtml;
 }

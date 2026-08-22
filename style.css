@@ -4235,6 +4235,159 @@ body.dark-mode .sb-battery-icon::after {
     margin-top: 10px; 
 }
 
+/* ==================== 聊天代码窗口 ==================== */
+
+/* 代码气泡固定占用可用宽度，避免超长代码把 flex 容器和整个页面一起撑开 */
+.message-wrapper.has-code-block {
+    width: 96%;
+    min-width: 0;
+}
+
+.message-wrapper.has-code-block .message-content,
+.message-wrapper.has-code-block .message-bubble {
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.message-bubble .code-block {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin: 3px 0;
+    overflow: hidden;
+    border: 1px solid rgba(0, 0, 0, 0.18);
+    border-radius: 9px;
+    background: #f7f7f78c;
+    color: #17191d;
+    box-sizing: border-box;
+}
+
+body.dark-mode .message-bubble .code-block {
+
+
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 9px;
+    background: #17191d8c;
+    color: #e8eaf0;
+}
+
+
+.message-bubble .code-block-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 34px;
+    padding: 0 9px 0 12px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    background: #f1f1f18c;
+    box-sizing: border-box;
+}
+
+
+body.dark-mode .message-bubble .code-block-toolbar {
+
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: #24272d5c;
+
+}
+
+.message-bubble .code-block-language {
+    min-width: 0;
+    overflow: hidden;
+    color: #555;
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: 0.76rem;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.dark-mode .message-bubble .code-block-language {
+
+    color: #b9bec9;
+
+}
+
+
+.message-bubble .code-copy-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-left: 12px;
+    padding: 4px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: #777;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.message-bubble .code-copy-btn svg {
+    display: block;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+}
+
+body.dark-mode .message-bubble .code-copy-btn {
+    color: #d8dbe2;
+}
+
+.message-bubble .code-copy-btn:hover,
+.message-bubble .code-copy-btn:focus-visible {
+    background: rgba(255, 255, 255, 0.1);
+    outline: none;
+}
+
+.message-bubble .code-copy-btn.is-copied {
+    color: #82d993;
+}
+
+.message-bubble .code-copy-btn:disabled {
+    cursor: default;
+    opacity: 1;
+}
+
+/* 横向滚动严格限制在 pre 内部，气泡和聊天页面本身不会产生横向滚动条 */
+.message-bubble .code-block pre {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 12px 14px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    background: transparent;
+    box-sizing: border-box;
+    white-space: pre;
+}
+
+.message-bubble .code-block code {
+    display: block;
+    width: max-content;
+    min-width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    text-align: left;
+    white-space: pre;
+    word-break: normal;
+    overflow-wrap: normal;
+    box-sizing: border-box;
+}
+
+/* ==================== 聊天代码窗口结束 ==================== */
+
 /* 解决 <ul> 标签在气泡内引入的多余间距问题 */
 /* 解决 <ul> 标签在气泡内引入的多余间距问题 */
 .message-bubble ul {
@@ -6254,6 +6407,35 @@ body.custom-dark h3#modal-title.bianjixiaoxi{
 }
 
 
+body.custom-dark .message-bubble .code-block {
+
+
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 9px;
+    background: #17191d8c;
+    color: #e8eaf0;
+}
+
+body.custom-dark .message-bubble .code-block-toolbar {
+
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    background: #24272d5c;
+
+}
+
+body.custom-dark .message-bubble .code-block-language {
+
+    color: #b9bec9;
+
+}
+
+body.custom-dark .message-bubble .code-copy-btn {
+    color: #d8dbe2;
+}
+
+body.custom-dark .desktop-todo-empty {
+    color: rgba(230, 230, 230, 0.55);
+}
 
 /* 【【【[[[】】】*/
 
@@ -11083,6 +11265,10 @@ button.desktop-card {
     padding: 8px 0 2px;
     font-size: 0.9rem;
     color: rgba(60, 60, 60, 0.55);
+}
+
+body.dark-mode .desktop-todo-empty {
+    color: rgba(230, 230, 230, 0.55);
 }
 
 .desktop-shortcut-row {
