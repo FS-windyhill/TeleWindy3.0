@@ -179,6 +179,7 @@ async function createJob(request, env) {
   const messages = sanitizeMessages(payload.messages);
   const requestBodyExtra = sanitizeRequestBodyExtra(payload.request_body_extra);
   const vision = sanitizeVisionPayload(payload.vision, authMode);
+  const imageDiagnostics = getImageDiagnostics(messages, vision);
   const agent = sanitizeAgentPayload(payload.agent, authMode);
   const agentModelForAllowList = agent?.todoManager ? sanitizeModel(agent.todoManager.model || env.DEFAULT_MODEL) : "";
   if (allowedModels && agentModelForAllowList && !allowedModels.has(agentModelForAllowList)) {
@@ -200,7 +201,7 @@ async function createJob(request, env) {
     authMode,
     model,
     messageCount: messages.length,
-    hasVision: !!vision,
+    ...imageDiagnostics,
     requestBodyExtraKeys: Object.keys(requestBodyExtra),
     hasAgent: !!agent?.todoManager,
     ttlSeconds,
@@ -212,7 +213,7 @@ async function createJob(request, env) {
     authMode,
     model,
     messageCount: messages.length,
-    hasVision: !!vision,
+    ...imageDiagnostics,
     requestBodyExtraKeys: Object.keys(requestBodyExtra),
     hasAgent: !!agent?.todoManager,
     ttlSeconds,
@@ -358,12 +359,13 @@ async function consumeQueuedJob(message, env) {
 
 async function runJob(jobId, body, env) {
   try {
+    const imageDiagnostics = getImageDiagnostics(body.messages, body.vision);
     await appendJobEvent(jobId, env, "job_run_start", {
       provider: body.upstream.id,
       authMode: body.upstream.authMode,
       model: body.model,
       messageCount: body.messages.length,
-      hasVision: !!body.vision,
+      ...imageDiagnostics,
       requestBodyExtraKeys: Object.keys(body.request_body_extra || {}),
       ttlSeconds: body.ttlSeconds
     }, body.ttlSeconds);
@@ -374,7 +376,7 @@ async function runJob(jobId, body, env) {
       authMode: body.upstream.authMode,
       model: body.model,
       messageCount: body.messages.length,
-      hasVision: !!body.vision,
+      ...imageDiagnostics,
       requestBodyExtraKeys: Object.keys(body.request_body_extra || {}),
       ttlSeconds: body.ttlSeconds
     });
@@ -1626,8 +1628,19 @@ function replaceMessageText(content, text) {
 }
 
 function hasMultimodalImage(messages) {
-  return messages.some(message => Array.isArray(message?.content)
+  return Array.isArray(messages) && messages.some(message => Array.isArray(message?.content)
     && message.content.some(block => block?.type === "image_url" && block.image_url?.url));
+}
+
+// ★ 同一组字段同时用于 job_create / job_run_start，避免“hasVision=false”被误读成“本轮没图片”。
+function getImageDiagnostics(messages, vision) {
+  const usesVisionApi = !!vision;
+  const usesMultimodalApi = hasMultimodalImage(messages);
+  return {
+    hasImage: usesVisionApi || usesMultimodalApi,
+    imageMode: usesVisionApi ? "separate" : (usesMultimodalApi ? "multimodal" : "none"),
+    usesVisionApi
+  };
 }
 
 function isMultimodalUnsupportedError(status, errorText) {

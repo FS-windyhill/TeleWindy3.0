@@ -1045,14 +1045,18 @@ const API = {
                 max_tokens: settings.MAX_TOKENS,
                 stream: false,
                 ...(requestBodyExtraForLog || {}),
-            async_backend: {
-                url: backendUrl,
-                ttl_hours: settings.ASYNC_BACKEND_TTL_HOURS,
-                has_vision: !!settings.ASYNC_BACKEND_VISION,
-                has_multimodal_image: !!settings.MULTIMODAL_IMAGE,
-                has_agent: !!settings.ASYNC_BACKEND_AGENT
-            }
-        };
+                async_backend: {
+                    url: backendUrl,
+                    ttl_hours: settings.ASYNC_BACKEND_TTL_HOURS,
+                    // ★ has_image 回答“本轮有没有图”；image_mode 再说明图片走独立视觉 API 还是主模型多模态。
+                    has_image: !!settings.ASYNC_BACKEND_VISION || !!settings.MULTIMODAL_IMAGE,
+                    image_mode: settings.ASYNC_BACKEND_VISION
+                        ? 'separate'
+                        : (settings.MULTIMODAL_IMAGE ? 'multimodal' : 'none'),
+                    uses_vision_api: !!settings.ASYNC_BACKEND_VISION,
+                    has_agent: !!settings.ASYNC_BACKEND_AGENT
+                }
+            };
 
             this.setLatestMainContextLog({
                 content: JSON.stringify(asyncLogPayload, null, 2),
@@ -1271,8 +1275,9 @@ const API = {
             payloadBytes,
             maxTokens: payload.max_tokens,
             ttlHours: payload.ttl_hours,
-            hasVision: !!visionPayload,
-            hasMultimodalImage: !!multimodalImage,
+            hasImage: !!visionPayload || !!multimodalImage,
+            imageMode: visionPayload ? 'separate' : (multimodalImage ? 'multimodal' : 'none'),
+            usesVisionApi: !!visionPayload,
             hasAgent: !!payload.agent,
             visionModel: visionPayload?.model || '',
             hasRequestBodyExtra: !!requestBodyExtra,
@@ -1605,7 +1610,9 @@ const API = {
             if (!payload.async_backend || typeof payload.async_backend !== 'object') {
                 payload.async_backend = {};
             }
-            payload.async_backend.has_vision = true;
+            payload.async_backend.has_image = true;
+            payload.async_backend.image_mode = 'separate';
+            payload.async_backend.uses_vision_api = true;
             payload.async_backend.image_description = description;
 
             if (Array.isArray(payload.messages)) {
