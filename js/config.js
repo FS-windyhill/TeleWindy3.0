@@ -101,6 +101,8 @@ const CONFIG = {
 
         CUSTOM_CSS: '', 
         CSS_PRESETS: [],
+        // ★ 图片处理方式：老用户默认沿用“视觉 API 转文字”，避免升级后误把图片发给纯文字模型。
+        IMAGE_API_MODE: 'separate',
         VISION_URL: 'https://api.siliconflow.cn/v1/chat/completions',
         VISION_KEY: '',
         VISION_MODEL: 'Qwen/Qwen3-VL-30B-A3B-Instruct',

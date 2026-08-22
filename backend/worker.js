@@ -383,6 +383,7 @@ async function runJob(jobId, body, env) {
     let agentActions = [];
     let agentPrompt = "";
     let agentStatus = body.agent?.todoManager ? "pending" : "disabled";
+    let multimodalFallback = false;
     let messagesForChat = body.messages;
     if (body.vision) {
       imageDescription = await analyzeVisionImage(body.vision, env, jobId, body.ttlSeconds);
@@ -427,16 +428,18 @@ async function runJob(jobId, body, env) {
       });
     }
 
-    const upstreamBody = {
+    // ★ messages 和 stream 属于程序控制字段：附加参数可以覆盖温度等高级配置，但不能抹掉本轮图片。
+    const buildUpstreamBody = (messages) => ({
       model: body.model,
-      messages: messagesForChat,
       temperature: body.temperature,
       max_tokens: body.max_tokens,
       ...(body.request_body_extra || {}),
+      messages,
       stream: false
-    };
+    });
+    let upstreamBody = buildUpstreamBody(messagesForChat);
 
-    const response = await fetchWithTimeout(body.upstream.url, {
+    let response = await fetchWithTimeout(body.upstream.url, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${body.upstream.apiKey}`,
@@ -446,29 +449,48 @@ async function runJob(jobId, body, env) {
     }, UPSTREAM_TIMEOUT_MS, "chat_upstream");
 
     if (!response.ok) {
-      // ★★★★★ 上游错误原文回传 START ★★★★★
-      // 前端需要看到一小段真实错误，才能判断是不是“多 system 不兼容”，并提示切换 user 兼容模式。
-      const upstreamErrorText = sanitizeLogText(await response.text());
-      const upstreamError = upstreamErrorText
-        ? `upstream_${response.status}: ${upstreamErrorText}`
-        : `upstream_${response.status}`;
-      console.warn("job_upstream_failed", {
-        jobId: shortJobId(jobId),
-        provider: body.upstream.id,
-        status: response.status,
-        error: upstreamErrorText
-      });
-      const job = await buildJobWithEvent(jobId, env, {
-        status: "failed",
-        error: upstreamError,
-        finishedAt: Date.now()
-      }, "job_upstream_failed", {
-        provider: body.upstream.id,
-        status: response.status,
-        error: upstreamErrorText
-      });
-      // ★★★★★ 上游错误原文回传 END ★★★★★
-      return;
+      let upstreamErrorText = sanitizeLogText(await response.text());
+
+      // ★ 多模态请求被明确拒绝时，只去图重试一次；鉴权、限流和服务故障不会进入这个分支。
+      if (hasMultimodalImage(messagesForChat) && isMultimodalUnsupportedError(response.status, upstreamErrorText)) {
+        messagesForChat = buildMultimodalFallbackMessages(messagesForChat);
+        upstreamBody = buildUpstreamBody(messagesForChat);
+        response = await fetchWithTimeout(body.upstream.url, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${body.upstream.apiKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(upstreamBody)
+        }, UPSTREAM_TIMEOUT_MS, "chat_upstream_fallback");
+        multimodalFallback = response.ok;
+        if (!response.ok) upstreamErrorText = sanitizeLogText(await response.text());
+      }
+
+      if (!response.ok) {
+        // ★★★★★ 上游错误原文回传 START ★★★★★
+        // 前端需要看到一小段真实错误，才能判断是不是“多 system 不兼容”，并提示切换 user 兼容模式。
+        const upstreamError = upstreamErrorText
+          ? `upstream_${response.status}: ${upstreamErrorText}`
+          : `upstream_${response.status}`;
+        console.warn("job_upstream_failed", {
+          jobId: shortJobId(jobId),
+          provider: body.upstream.id,
+          status: response.status,
+          error: upstreamErrorText
+        });
+        const job = await buildJobWithEvent(jobId, env, {
+          status: "failed",
+          error: upstreamError,
+          finishedAt: Date.now()
+        }, "job_upstream_failed", {
+          provider: body.upstream.id,
+          status: response.status,
+          error: upstreamErrorText
+        });
+        // ★★★★★ 上游错误原文回传 END ★★★★★
+        return;
+      }
     }
 
     const data = await response.json();
@@ -483,6 +505,7 @@ async function runJob(jobId, body, env) {
       status: "done",
       result: content.trim(),
       image_description: imageDescription,
+      multimodal_fallback: multimodalFallback,
       agent_status: agentStatus,
       agent_actions: agentActions,
       agent_prompt: agentPrompt,
@@ -1148,13 +1171,14 @@ function injectVolatilePrompt(messages, prompt, insertMode, userMessageIndex) {
     : nextMessages.map(message => message.role).lastIndexOf("user");
   if (insertMode === "user" || insertMode === "auto") {
     if (index >= 0 && nextMessages[index]?.role === "user") {
-      nextMessages[index].content = [
+      const nextUserText = [
         "【系统信息补充】",
         cleanPrompt,
         "",
         "【用户当前消息】",
-        nextMessages[index].content || ""
+        getMessageText(nextMessages[index])
       ].join("\n\n");
+      nextMessages[index].content = replaceMessageText(nextMessages[index].content, nextUserText);
       return nextMessages;
     }
   }
@@ -1558,9 +1582,76 @@ function extractAssistantContent(data) {
 function sanitizeMessages(messages) {
   return messages.slice(-80).map((message) => ({
     role: sanitizeRole(message.role),
-    content: String(message.content || "").slice(0, 20000)
+    content: sanitizeMessageContent(message.content)
   }));
 }
+
+// ★★★★★ 后台多模态消息清洗 START ★★★★★
+// 只接受本前端实际会生成的 text/image_url 块；其它对象一律丢弃，避免把任意结构透传给上游。
+function sanitizeMessageContent(content) {
+  if (!Array.isArray(content)) return String(content || "").slice(0, 20000);
+
+  const blocks = content.slice(0, 8).map((block) => {
+    if (!block || typeof block !== "object" || Array.isArray(block)) return null;
+    if (block.type === "text") {
+      return { type: "text", text: String(block.text || "").slice(0, 20000) };
+    }
+    if (block.type === "image_url") {
+      const imageUrl = String(block.image_url?.url || "");
+      if (!/^data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=\r\n]+$/i.test(imageUrl)) return null;
+      return { type: "image_url", image_url: { url: imageUrl } };
+    }
+    return null;
+  }).filter(Boolean);
+
+  return blocks.length ? blocks : "";
+}
+
+function getMessageText(message) {
+  const content = message?.content;
+  if (!Array.isArray(content)) return String(content || "");
+  return content
+    .filter(block => block?.type === "text")
+    .map(block => String(block.text || ""))
+    .join("\n\n");
+}
+
+function replaceMessageText(content, text) {
+  if (!Array.isArray(content)) return String(text || "");
+  const nextBlocks = content.map(block => block?.type === "text" ? { ...block } : block);
+  const textIndex = nextBlocks.findIndex(block => block?.type === "text");
+  if (textIndex >= 0) nextBlocks[textIndex].text = String(text || "");
+  else nextBlocks.unshift({ type: "text", text: String(text || "") });
+  return nextBlocks;
+}
+
+function hasMultimodalImage(messages) {
+  return messages.some(message => Array.isArray(message?.content)
+    && message.content.some(block => block?.type === "image_url" && block.image_url?.url));
+}
+
+function isMultimodalUnsupportedError(status, errorText) {
+  if (![400, 415, 422].includes(Number(status))) return false;
+  const text = String(errorText || "").toLowerCase();
+  return [
+    "image", "vision", "multimodal", "image_url",
+    "unsupported content", "content must be", "content type", "expected a string", "valid string"
+  ].some(keyword => text.includes(keyword));
+}
+
+function buildMultimodalFallbackMessages(messages) {
+  const fallbackText = "（系统提示：用户发送了一张图片，但当前主模型或 API 不支持读取图片，无法提供图片内容。请根据用户的文字上下文回复；如有需要，可以询问用户图片内容。）";
+  const nextMessages = messages.map(message => ({ ...message }));
+  for (let index = nextMessages.length - 1; index >= 0; index--) {
+    const message = nextMessages[index];
+    if (message.role !== "user" || !Array.isArray(message.content)) continue;
+    const text = getMessageText(message).trim();
+    message.content = text ? `${text}\n\n${fallbackText}` : fallbackText;
+    break;
+  }
+  return nextMessages;
+}
+// ★★★★★ 后台多模态消息清洗 END ★★★★★
 
 function sanitizeRole(role) {
   if (role === "system" || role === "assistant" || role === "user") {

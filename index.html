@@ -1665,6 +1665,28 @@
                 <!-- ====================== 2. 模型 ====================== -->
                 <div class="tab-pane" id="model">
 
+                    <!-- ★★★★★ 图片处理方式 START ★★★★★ -->
+                    <!-- 两种方式互斥：旧用户默认继续使用单独视觉 API，多模态模式只在图片发送当轮携带原图。 -->
+                    <h3 class="section-title">图片处理方式</h3>
+                    <div class="main-options image-api-mode-options">
+                        <label class="main-option image-api-mode-option">
+                            <div class="image-api-mode-copy">
+                                <strong>使用单独识图 API</strong>
+                                <small>先把图片转成文字描述，再交给聊天模型；适合长期聊天并节省图片 Token。</small>
+                            </div>
+                            <input type="radio" name="image-api-mode" id="image-api-mode-separate" value="separate">
+                        </label>
+
+                        <label class="main-option image-api-mode-option">
+                            <div class="image-api-mode-copy">
+                                <strong>图文使用同一 API</strong>
+                                <small>原图仅在发送图片的当轮交给主模型，后续不会重复携带；当前模型和接口必须支持图片输入。</small>
+                            </div>
+                            <input type="radio" name="image-api-mode" id="image-api-mode-multimodal" value="multimodal">
+                        </label>
+                    </div>
+                    <!-- ★★★★★ 图片处理方式 END ★★★★★ -->
+
                     <h3 class="section-title">文字模型</h3>
                     <div class="main-options api-section">
 
@@ -1862,6 +1884,8 @@
 
 
                     <!-- ====================== 视觉模型设置 (重构版) ====================== -->
+                    <!-- 多模态模式只使用上面的聊天 API；这里整块隐藏，但保留用户已经保存的视觉配置。 -->
+                    <div id="separate-vision-settings">
 
                     <!-- 分割线与标题 -->
                     <h3 class="section-title" style="margin-top: 10px; border-top: 3px solid #ccc; padding-top: 20px;">视觉模型（可选）</h3>
@@ -1947,6 +1971,8 @@
                     <div class="preset-btn-group">
                         <button id="save-vision-preset-btn" type="button" class="icon-btn">保存</button>
                         <button id="del-vision-preset-btn" type="button" class="icon-btn danger">删除</button>
+                    </div>
+
                     </div>
 
 

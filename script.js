@@ -1049,6 +1049,7 @@ const API = {
                 url: backendUrl,
                 ttl_hours: settings.ASYNC_BACKEND_TTL_HOURS,
                 has_vision: !!settings.ASYNC_BACKEND_VISION,
+                has_multimodal_image: !!settings.MULTIMODAL_IMAGE,
                 has_agent: !!settings.ASYNC_BACKEND_AGENT
             }
         };
@@ -1149,8 +1150,10 @@ const API = {
                 agent_status: result.agent_status || '',
                 agent_error: result.agent_error || '',
                 post_agent: result.post_agent || null,
+                multimodal_fallback: result.multimodal_fallback === true,
                 userMessageIndex: settings.ASYNC_BACKEND_USER_MESSAGE_INDEX ?? null
             };
+            if (result.multimodal_fallback === true) this.notifyMultimodalFallback(job.jobId);
             return (result.result || '').trim();
         } catch (error) {
             console.warn('[AsyncBackend] job failed or interrupted', {
@@ -1216,6 +1219,23 @@ const API = {
             };
         }
 
+        // ★ 后台多模态同样只把本轮图片挂到指定 user 消息；历史消息始终保持纯文字。
+        let messagesForJob = messages.map(message => ({ ...message }));
+        const multimodalImage = settings.IMAGE_API_MODE === 'multimodal' ? String(settings.MULTIMODAL_IMAGE || '') : '';
+        const multimodalIndex = Number.isInteger(settings.MULTIMODAL_MESSAGE_INDEX)
+            ? settings.MULTIMODAL_MESSAGE_INDEX
+            : -1;
+        if (multimodalImage && messagesForJob[multimodalIndex]?.role === 'user') {
+            const targetMessage = messagesForJob[multimodalIndex];
+            messagesForJob[multimodalIndex] = {
+                ...targetMessage,
+                content: [
+                    { type: 'text', text: String(targetMessage.content || '') || '请查看这张图片。' },
+                    { type: 'image_url', image_url: { url: multimodalImage } }
+                ]
+            };
+        }
+
         const payload = {
             // ★ 后台 Key 模式：
             // client_key 会跟随当前前端 API 预设，把模型 Key 临时交给私人 Worker 使用；
@@ -1224,7 +1244,7 @@ const API = {
             auth_mode: settings.ASYNC_BACKEND_KEY_MODE || 'client_key',
             api_key: settings.ASYNC_BACKEND_KEY_MODE === 'server_secret' ? '' : settings.API_KEY,
             model: settings.MODEL,
-            messages,
+            messages: messagesForJob,
             temperature: settings.TEMPERATURE,
             max_tokens: settings.MAX_TOKENS,
             ttl_hours: settings.ASYNC_BACKEND_TTL_HOURS,
@@ -1241,17 +1261,18 @@ const API = {
             apiUrl: payload.api_url,
             authMode: payload.auth_mode,
             model: payload.model,
-            messageCount: Array.isArray(messages) ? messages.length : 0,
-            messageChars: Array.isArray(messages)
-                ? messages.map(message => String(message?.content || '').length)
+            messageCount: Array.isArray(messagesForJob) ? messagesForJob.length : 0,
+            messageChars: Array.isArray(messagesForJob)
+                ? messagesForJob.map(message => String(message?.content || '').length)
                 : [],
-            totalMessageChars: Array.isArray(messages)
-                ? messages.reduce((sum, message) => sum + String(message?.content || '').length, 0)
+            totalMessageChars: Array.isArray(messagesForJob)
+                ? messagesForJob.reduce((sum, message) => sum + String(message?.content || '').length, 0)
                 : 0,
             payloadBytes,
             maxTokens: payload.max_tokens,
             ttlHours: payload.ttl_hours,
             hasVision: !!visionPayload,
+            hasMultimodalImage: !!multimodalImage,
             hasAgent: !!payload.agent,
             visionModel: visionPayload?.model || '',
             hasRequestBodyExtra: !!requestBodyExtra,
@@ -1715,6 +1736,72 @@ const API = {
         return this.ensureAgentContextLogs();
     },
 
+    // ★★★★★ 主模型多模态消息 START ★★★★★
+    notifyMultimodalFallback(jobId = '') {
+        if (!this._multimodalFallbackNoticeJobs) this._multimodalFallbackNoticeJobs = new Set();
+        const noticeKey = String(jobId || 'direct');
+        if (this._multimodalFallbackNoticeJobs.has(noticeKey)) return;
+        this._multimodalFallbackNoticeJobs.add(noticeKey);
+
+        if (typeof App !== 'undefined' && typeof App.showTopNotice === 'function') {
+            App.showTopNotice('当前模型或 API 拒绝了图片输入，已移除图片并按纯文字重新请求。', {
+                type: 'pending',
+                timeout: 6500
+            });
+        }
+    },
+
+    parseImageDataUrl(image) {
+        const match = String(image || '').match(/^data:(image\/[^;,]+);base64,(.+)$/s);
+        if (!match) return null;
+        return {
+            mimeType: match[1].toLowerCase(),
+            data: match[2]
+        };
+    },
+
+    isMultimodalUnsupportedError(status, errorText) {
+        if (![400, 415, 422].includes(Number(status))) return false;
+        const text = String(errorText || '').toLowerCase();
+        return [
+            'image', 'vision', 'multimodal', 'image_url', 'inline_data', 'inlinedata',
+            'unsupported content', 'content must be', 'content type', 'expected a string', 'valid string'
+        ].some(keyword => text.includes(keyword));
+    },
+
+    redactMultimodalImagesForLog(value) {
+        if (Array.isArray(value)) return value.map(item => this.redactMultimodalImagesForLog(item));
+        if (!value || typeof value !== 'object') return value;
+
+        const next = {};
+        Object.entries(value).forEach(([key, child]) => {
+            if (key === 'url' && typeof child === 'string' && child.startsWith('data:image/')) {
+                next[key] = `[图片 data URL 已省略，共 ${child.length} 字符]`;
+                return;
+            }
+            if (key === 'data' && typeof child === 'string' && child.length > 256
+                && (value.mimeType || value.media_type)) {
+                next[key] = `[图片 base64 已省略，共 ${child.length} 字符]`;
+                return;
+            }
+            next[key] = this.redactMultimodalImagesForLog(child);
+        });
+        return next;
+    },
+
+    buildMultimodalFallbackMessages(messages, targetIndex) {
+        const fallbackText = '（系统提示：用户发送了一张图片，但当前主模型或 API 不支持读取图片，无法提供图片内容。请根据用户的文字上下文回复；如有需要，可以询问用户图片内容。）';
+        return messages.map((message, index) => {
+            if (index !== targetIndex) return { ...message };
+            const text = String(message?.content || '').trim();
+            return {
+                ...message,
+                content: text ? `${text}\n\n${fallbackText}` : fallbackText
+            };
+        });
+    },
+    // ★★★★★ 主模型多模态消息 END ★★★★★
+
     async chat(messages, settings) {
         // ★ 后台任务去重标记只属于“本次 API.chat 调用”，每次开始前先清空旧结果。
         this.lastAsyncBackendResult = null;
@@ -1742,47 +1829,97 @@ const API = {
             headers: { 'Content-Type': 'application/json' }
         };
 
-        const lastUserMsg = messages.filter(m => m.role === 'user').pop()?.content || '';
         const sysPrompts = messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n');
+        const requestedMessageIndex = Number.isInteger(settings.MULTIMODAL_MESSAGE_INDEX)
+            ? settings.MULTIMODAL_MESSAGE_INDEX
+            : -1;
+        const multimodalImage = settings.IMAGE_API_MODE === 'multimodal'
+            ? this.parseImageDataUrl(settings.MULTIMODAL_IMAGE)
+            : null;
+        const targetMessageIndex = multimodalImage && messages[requestedMessageIndex]?.role === 'user'
+            ? requestedMessageIndex
+            : -1;
 
-        let requestBody = null;
+        // ★ 同一份内部消息在最后一刻才转成服务商格式；历史图片不会进入这里，只有本轮图片会被附加。
+        const buildProviderRequestBody = (sourceMessages, includeImage) => {
+            const lastUserText = sourceMessages.filter(m => m.role === 'user').pop()?.content || '';
+            const targetText = targetMessageIndex >= 0
+                ? String(sourceMessages[targetMessageIndex]?.content || '')
+                : String(lastUserText || '');
 
-        // 构建请求体
-        if (provider === 'claude') {
-            options.headers['x-api-key'] = API_KEY;
-            options.headers['anthropic-version'] = '2023-06-01';
+            if (provider === 'claude') {
+                const content = includeImage && multimodalImage
+                    ? [
+                        { type: 'text', text: targetText || '请查看这张图片。' },
+                        {
+                            type: 'image',
+                            source: {
+                                type: 'base64',
+                                media_type: multimodalImage.mimeType,
+                                data: multimodalImage.data
+                            }
+                        }
+                    ]
+                    : String(lastUserText || '');
+                return {
+                    model: MODEL,
+                    system: sysPrompts,
+                    messages: [{ role: 'user', content }],
+                    max_tokens: MAX_TOKENS,
+                    temperature: TEMPERATURE
+                };
+            }
 
-            requestBody = {
-                model: MODEL,
-                system: sysPrompts,
-                messages: [{ role: "user", content: lastUserMsg }],
-                max_tokens: MAX_TOKENS,
-                temperature: TEMPERATURE
-            };
-
-        } else if (provider === 'gemini') {
-            fetchUrl = API_URL.endsWith(':generateContent') ? API_URL : `${API_URL}/${MODEL}:generateContent?key=${API_KEY}`;
-
-            requestBody = {
-                contents: [{ role: 'user', parts: [{ text: lastUserMsg }] }],
-                systemInstruction: { parts: [{ text: sysPrompts }] }, 
-                generationConfig: { 
-                    temperature: TEMPERATURE,
-                    maxOutputTokens: MAX_TOKENS
+            if (provider === 'gemini') {
+                const parts = [{ text: includeImage ? (targetText || '请查看这张图片。') : String(lastUserText || '') }];
+                if (includeImage && multimodalImage) {
+                    parts.push({
+                        inlineData: {
+                            mimeType: multimodalImage.mimeType,
+                            data: multimodalImage.data
+                        }
+                    });
                 }
-            };
+                return {
+                    contents: [{ role: 'user', parts }],
+                    systemInstruction: { parts: [{ text: sysPrompts }] },
+                    generationConfig: {
+                        temperature: TEMPERATURE,
+                        maxOutputTokens: MAX_TOKENS
+                    }
+                };
+            }
 
-        } else {
-            // OpenAI Standard，包括 SiliconFlow、DeepSeek、OpenAI 兼容接口等
-            options.headers['Authorization'] = `Bearer ${API_KEY}`;
-
-            requestBody = {
+            // OpenAI Standard，包括 SiliconFlow、DeepSeek、Gemini OpenAI 兼容接口等。
+            const openAiMessages = sourceMessages.map((message, index) => {
+                if (!includeImage || !multimodalImage || index !== targetMessageIndex) return { ...message };
+                return {
+                    ...message,
+                    content: [
+                        { type: 'text', text: String(message.content || '') || '请查看这张图片。' },
+                        { type: 'image_url', image_url: { url: settings.MULTIMODAL_IMAGE } }
+                    ]
+                };
+            });
+            return {
                 model: MODEL,
-                messages: messages,
+                messages: openAiMessages,
                 temperature: TEMPERATURE,
                 max_tokens: MAX_TOKENS
             };
+        };
+
+        if (provider === 'claude') {
+            options.headers['x-api-key'] = API_KEY;
+            options.headers['anthropic-version'] = '2023-06-01';
+        } else if (provider === 'gemini') {
+            fetchUrl = API_URL.endsWith(':generateContent') ? API_URL : `${API_URL}/${MODEL}:generateContent?key=${API_KEY}`;
+        } else {
+            options.headers['Authorization'] = `Bearer ${API_KEY}`;
         }
+
+        let requestBody = buildProviderRequestBody(messages, targetMessageIndex >= 0);
+        let requestBodyExtra = {};
 
         // ==========================================
         // ★★★ 新增：合并请求体附加参数 JSON ★★★
@@ -1808,6 +1945,12 @@ const API = {
                     ...requestBody,
                     ...extraBody
                 };
+                requestBodyExtra = extraBody;
+
+                // ★ 附加参数可以覆盖温度等高级配置，但不能把程序刚生成的图文 messages/contents 整体抹掉。
+                const protectedBody = buildProviderRequestBody(messages, targetMessageIndex >= 0);
+                if (provider === 'gemini') requestBody.contents = protectedBody.contents;
+                else requestBody.messages = protectedBody.messages;
 
                 console.log("[API] 已合并请求体附加参数:", extraBody);
             }
@@ -1827,6 +1970,9 @@ const API = {
             if (typeof options.body === 'string') {
                 requestBodyObject = JSON.parse(options.body);
             }
+
+            // ★ API 日志和控制台只保留图片体积占位，不把整段 base64 再复制一份进内存和 IndexedDB。
+            requestBodyObject = this.redactMultimodalImagesForLog(requestBodyObject);
             
             console.log(`[${provider}] Sending...`, requestBodyObject);
 
@@ -1868,11 +2014,33 @@ const API = {
             console.error("【API日志记录失败】", error);
         }
 
-        const response = await fetch(fetchUrl, options);
+        let response = await fetch(fetchUrl, options);
 
         if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`API Error ${response.status}: ${errText}`);
+            let finalErrorText = await response.text();
+
+            // ★ 只在 API 明确表示“不支持图片/多模态结构”时去图重试一次。
+            // Key、限流、服务故障和网络问题保持原错误，避免把真正问题伪装成识图失败。
+            if (targetMessageIndex >= 0 && this.isMultimodalUnsupportedError(response.status, finalErrorText)) {
+                const fallbackMessages = this.buildMultimodalFallbackMessages(messages, targetMessageIndex);
+                requestBody = {
+                    ...buildProviderRequestBody(fallbackMessages, false),
+                    ...requestBodyExtra
+                };
+                const protectedFallbackBody = buildProviderRequestBody(fallbackMessages, false);
+                if (provider === 'gemini') requestBody.contents = protectedFallbackBody.contents;
+                else requestBody.messages = protectedFallbackBody.messages;
+                requestBody.stream = false;
+                options.body = JSON.stringify(requestBody);
+
+                response = await fetch(fetchUrl, options);
+                if (!response.ok) finalErrorText = await response.text();
+                if (response.ok) this.notifyMultimodalFallback(`direct_${Date.now()}`);
+            }
+
+            if (!response.ok) {
+                throw new Error(`API Error ${response.status}: ${finalErrorText}`);
+            }
         }
         
         const data = await response.json();
@@ -4057,6 +4225,11 @@ const App = {
                     if (job.status === 'done') {
                         API.updateAsyncBackendLogWithVision(job, pending);
                         API.rememberResumedAsyncJobResult(pending.jobId, job);
+
+                        // ★ 后台任务可能已经完成“去图重试”；恢复链路也要告诉用户，不能只在前台轮询时提示。
+                        if (job.multimodal_fallback === true) {
+                            API.notifyMultimodalFallback(pending.jobId);
+                        }
 
                         // ★ 后台识图回填：
                         // Worker 完成识图后只返回文字描述，不保存原图。
@@ -8911,6 +9084,9 @@ const App = {
             HISTORY_WINDOW_MAX_CONTEXT: STATE.settings.HISTORY_WINDOW_MAX_CONTEXT || CONFIG.DEFAULT.HISTORY_WINDOW_MAX_CONTEXT || 25,
             DYNAMIC_CONTEXT_INSERT_MODE: STATE.settings.DYNAMIC_CONTEXT_INSERT_MODE || CONFIG.DEFAULT.DYNAMIC_CONTEXT_INSERT_MODE || 'auto',
 
+            // ★ 图片处理方式独立于 API 预设：切换角色专属文字预设时也继续跟随全局选择。
+            IMAGE_API_MODE: STATE.settings.IMAGE_API_MODE === 'multimodal' ? 'multimodal' : 'separate',
+
             // ★★★ 新增：请求体附加参数 JSON ★★★
             CUSTOM_REQUEST_BODY_JSON: STATE.settings.CUSTOM_REQUEST_BODY_JSON || ''
         };
@@ -9005,6 +9181,7 @@ const App = {
             historyWindowStrategy: requestSettings.HISTORY_WINDOW_STRATEGY,
             historyWindowMaxContext: requestSettings.HISTORY_WINDOW_MAX_CONTEXT,
             dynamicContextInsertMode: requestSettings.DYNAMIC_CONTEXT_INSERT_MODE,
+            imageApiMode: requestSettings.IMAGE_API_MODE,
             linkedPresetName: contact.linkedPresetName || "跟随全局默认设置",
             extraBodyJson: requestSettings.CUSTOM_REQUEST_BODY_JSON || ""
         });
@@ -9077,9 +9254,15 @@ const App = {
             // Reroll 复用历史记录里的文本
             userText = lastUserMsg.content;
             
-            // 【建议】Reroll 时应清空当前可能存在的待发送图片，防止逻辑混淆
-            // (虽然 API 可能主要看 history，但保持状态纯净更安全)
-            currentImageBase64 = null; 
+            // ★ 多模态重新生成必须复用这条用户消息原来的图片；普通模式仍然只复用已经保存的识图描述。
+            // 图片气泡被“向 Ta 隐藏”后不能偷偷重新带回请求，索引规则与渲染/删除保持一致。
+            if (requestSettings.IMAGE_API_MODE === 'multimodal' && Array.isArray(lastUserMsg.images) && lastUserMsg.images[0]) {
+                const imagePartIndex = HistoryVisibility.getTextParagraphs(lastUserMsg).length;
+                const hiddenIndices = Array.isArray(lastUserMsg.hiddenIndices) ? lastUserMsg.hiddenIndices : [];
+                if (!hiddenIndices.includes(imagePartIndex)) {
+                    currentImageBase64 = lastUserMsg.images[0];
+                }
+            }
             
             // 移除最近的 AI 回复
             while(contact.history.length > 0 && contact.history[contact.history.length-1].role === 'assistant') {
@@ -9152,7 +9335,7 @@ const App = {
 
             // 4. ★★★ 核心分支：如果有图，先跑识图 API ★★★
             // 4. ★★★ 核心分支：如果有图，先跑识图 API ★★★
-            if (hasPendingImage) {
+            if (hasPendingImage && requestSettings.IMAGE_API_MODE === 'separate') {
                 const visionSettings = {
                     // 稍微优化下默认值，如果这里是空字符串， fetch 会直接报错被 catch 捕获
                     url: STATE.settings.VISION_URL, 
@@ -9261,6 +9444,12 @@ const App = {
         let currentUserMessage = null;
         if (historyForPayload.length && historyForPayload[historyForPayload.length - 1].role === 'user') {
             currentUserMessage = historyForPayload.pop();
+        }
+
+        // ★ 纯图片多模态消息没有 image_description，历史清洗会自然得到空文本。
+        // 这里仅给本轮请求补一个很短的文字块，不写回聊天记录，也不会多渲染一个用户气泡。
+        if (!currentUserMessage && currentImageBase64 && requestSettings.IMAGE_API_MODE === 'multimodal') {
+            currentUserMessage = { role: 'user', content: '请查看这张图片。' };
         }
 
 
@@ -9471,6 +9660,14 @@ const App = {
         requestSettings.ASYNC_BACKEND_REQUEST_USER_MESSAGE_INDEX = currentUserMessage
             ? messagesToSend.length - 1
             : -1;
+
+        // ★ 多模态只携带本轮原图：历史中的其它 images 不进入 messagesToSend，避免每轮重复计算图片 Token。
+        requestSettings.MULTIMODAL_IMAGE = requestSettings.IMAGE_API_MODE === 'multimodal'
+            ? (currentImageBase64 || '')
+            : '';
+        requestSettings.MULTIMODAL_MESSAGE_INDEX = requestSettings.MULTIMODAL_IMAGE
+            ? requestSettings.ASYNC_BACKEND_REQUEST_USER_MESSAGE_INDEX
+            : -1;
         requestSettings.ASYNC_BACKEND_AGENT = null;
         if (requestSettings.ASYNC_BACKEND_AGENT?.todo_manager) {
             await this.setAgentExecutionState(contact, agentUserMessage, 'todo_manager', {
@@ -9678,6 +9875,17 @@ const App = {
         }
     },
 
+    // ★★★★★ 图片处理方式 UI START ★★★★★
+    syncImageApiModeUI() {
+        const checkedMode = document.querySelector('input[name="image-api-mode"]:checked')?.value;
+        const mode = checkedMode === 'multimodal' ? 'multimodal' : 'separate';
+        const visionSettings = document.getElementById('separate-vision-settings');
+        if (visionSettings) {
+            visionSettings.classList.toggle('hidden', mode === 'multimodal');
+        }
+    },
+    // ★★★★★ 图片处理方式 UI END ★★★★★
+
     openSettings() {
         UI.els.mainModal.classList.remove('hidden');
         const s = STATE.settings;
@@ -9760,6 +9968,12 @@ const App = {
         if (hideThoughtToggle) {
             hideThoughtToggle.checked = s.HIDE_THOUGHT_PROCESS === true;
         }
+
+        // ★ 图片处理方式不跟随 API 预设；旧设置没有该字段时继续使用单独视觉 API。
+        const imageApiMode = s.IMAGE_API_MODE === 'multimodal' ? 'multimodal' : 'separate';
+        const imageApiModeRadio = document.querySelector(`input[name="image-api-mode"][value="${imageApiMode}"]`);
+        if (imageApiModeRadio) imageApiModeRadio.checked = true;
+        this.syncImageApiModeUI();
         
         // 壁纸回显
         const previewImg = document.getElementById('wallpaper-preview-img');
@@ -10490,6 +10704,10 @@ const App = {
             s.HIDE_THOUGHT_PROCESS = hideThoughtToggle.checked === true;
         }
 
+        // ★ 图片处理方式单独保存，不写进文字 API 总预设。
+        const checkedImageApiMode = document.querySelector('input[name="image-api-mode"]:checked');
+        s.IMAGE_API_MODE = checkedImageApiMode?.value === 'multimodal' ? 'multimodal' : 'separate';
+
         // 保存视觉设置
         if (UI.els.settingVisionUrl) s.VISION_URL = UI.els.settingVisionUrl.value.trim();
         if (UI.els.settingVisionKey) s.VISION_KEY = UI.els.settingVisionKey.value.trim();
@@ -10627,7 +10845,7 @@ const App = {
             } 
             // 最后：如果没描述，且图片已被清理（显示过期占位符）
             else if (msgData.isImageExpired) {
-                imageSuffix = `[图片已清理或识图失败]`;
+                imageSuffix = `[图片（原图已清理）]`;
             }
 
             // 4. 将文本和图片描述组合
@@ -10781,7 +10999,7 @@ const App = {
                     if (msg && msg.image_description) {
                         return `[图片描述: ${msg.image_description}]`;
                     } else {
-                        return img ? "[图片]" : "[图片已清理或识图失败]";
+                        return img ? "[图片]" : "[图片（原图已清理）]";
                     }
                 } 
 
@@ -12860,6 +13078,12 @@ const App = {
             radio.addEventListener('change', (e) => {
                 UI.toggleTheme(e.target.value);
             });
+        });
+
+        // 模型页图片处理方式切换时立即显隐视觉设置，尚未点“确定”前不改已保存配置。
+        const imageApiModeRadios = document.querySelectorAll('input[name="image-api-mode"]');
+        imageApiModeRadios.forEach(radio => {
+            radio.addEventListener('change', () => this.syncImageApiModeUI());
         });
 
         // (2) 监听自定义模式底座切换：只切 body 类名，不影响用户输入的 CSS。
