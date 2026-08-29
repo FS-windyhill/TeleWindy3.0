@@ -9883,6 +9883,14 @@ body.dark-mode .character-memory-tab.active {
     margin-bottom: 10px;
 }
 
+/* ★ 日期右侧的新增、重新总结按钮放在同一组，窄屏时也不会挤乱日期。 */
+.character-memory-card-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
 .character-memory-date {
     display: inline-flex;
     align-items: center;

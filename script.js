@@ -7871,14 +7871,22 @@ const App = {
         card.innerHTML = `
                 <div class="character-memory-card-head">
                     <div class="character-memory-date">${this.escapeHtml(record.dateKey)}</div>
-                    <button type="button" class="character-memory-icon-btn" data-action="reroll-memory-day" title="重新总结这天的记忆">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"></path>
-                            <path d="M3 21v-5h5"></path>
-                            <path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"></path>
-                            <path d="M21 3v5h-5"></path>
-                        </svg>
-                    </button>
+                    <div class="character-memory-card-actions">
+                        <button type="button" class="character-memory-icon-btn" data-action="add-memory-item" title="添加一条当天记忆" aria-label="添加一条当天记忆">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 5v14"></path>
+                                <path d="M5 12h14"></path>
+                            </svg>
+                        </button>
+                        <button type="button" class="character-memory-icon-btn" data-action="reroll-memory-day" title="重新总结这天的记忆">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"></path>
+                                <path d="M3 21v-5h5"></path>
+                                <path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"></path>
+                                <path d="M21 3v5h-5"></path>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="character-memory-items">${items}</div>
                 ${comment}
@@ -8021,7 +8029,9 @@ const App = {
                 const rawText = await API.chat(messages, settings);
                 const parsed = CharacterMemory.parseAiMemory(rawText);
 
-                record.memories = parsed.memories;
+                // ★ AI 重新总结只替换 AI 记忆，用户亲手补进来的内容必须留下来。
+                const manualMemories = (record.memories || []).filter(item => item?.createdManually === true);
+                record.memories = [...parsed.memories, ...manualMemories];
                 record.comment = parsed.comment;
                 record.generatedAt = new Date().toISOString();
                 record.updatedAt = Date.now();
@@ -8117,11 +8127,29 @@ const App = {
         const record = CharacterMemory.getRecord(memory, dateKey);
         const item = record?.memories?.find(entry => entry.id === itemId);
         const modal = document.getElementById('modal-character-memory-item');
+        const title = document.getElementById('character-memory-item-modal-title');
         const textInput = document.getElementById('character-memory-item-text');
         if (!item || !modal || !textInput) return;
 
         STATE.editingMemoryItem = { dateKey, itemId };
+        if (title) title.textContent = '编辑记忆';
         textInput.value = item.text || '';
+        modal.classList.remove('hidden');
+        textInput.focus();
+    },
+
+    openAddMemoryItemModal(dateKey) {
+        const memory = CharacterMemory.getMemory(STATE.currentMemoryContactId);
+        const record = CharacterMemory.getRecord(memory, dateKey);
+        const modal = document.getElementById('modal-character-memory-item');
+        const title = document.getElementById('character-memory-item-modal-title');
+        const textInput = document.getElementById('character-memory-item-text');
+        if (!record || !modal || !textInput) return;
+
+        // ★ 复用编辑弹窗，但用 isNew 区分保存时是修改旧条目还是追加新条目。
+        STATE.editingMemoryItem = { dateKey, itemId: null, isNew: true };
+        if (title) title.textContent = '添加记忆';
+        textInput.value = '';
         modal.classList.remove('hidden');
         textInput.focus();
     },
@@ -8135,18 +8163,31 @@ const App = {
         const memory = CharacterMemory.getMemory(STATE.currentMemoryContactId);
         const editing = STATE.editingMemoryItem;
         const record = CharacterMemory.getRecord(memory, editing?.dateKey);
-        const item = record?.memories?.find(entry => entry.id === editing?.itemId);
         const textInput = document.getElementById('character-memory-item-text');
         const text = textInput ? textInput.value.trim() : '';
-        if (!item) return;
+        if (!record || !editing) return;
         if (!text) {
             alert('写点记忆内容吧');
             return;
         }
 
-        item.text = text;
-        item.userEdited = true;
-        item.updatedAt = Date.now();
+        if (editing.isNew) {
+            // ★ 手动添加的记忆做独立标记，之后重新总结当天内容时不会被 AI 覆盖掉。
+            record.memories.push({
+                id: `memory_item_${Date.now()}_manual`,
+                text,
+                alwaysInject: false,
+                userEdited: true,
+                createdManually: true,
+                updatedAt: Date.now()
+            });
+        } else {
+            const item = record.memories?.find(entry => entry.id === editing.itemId);
+            if (!item) return;
+            item.text = text;
+            item.userEdited = true;
+            item.updatedAt = Date.now();
+        }
         record.updatedAt = Date.now();
         memory.updatedAt = Date.now();
         await Storage.saveCharacterMemories();
@@ -13764,6 +13805,8 @@ const App = {
 
             if (actionEl.dataset.action === 'reroll-memory-day') {
                 this.rerollCharacterMemoryDay(dateKey);
+            } else if (actionEl.dataset.action === 'add-memory-item') {
+                this.openAddMemoryItemModal(dateKey);
             } else if (actionEl.dataset.action === 'toggle-memory-pin' && itemEl?.dataset.id) {
                 this.toggleMemoryItemPin(dateKey, itemEl.dataset.id);
             } else if (actionEl.dataset.action === 'edit-memory-item' && itemEl?.dataset.id) {
@@ -13774,7 +13817,10 @@ const App = {
         });
 
         document.getElementById('character-schedule-refresh-btn')?.addEventListener('click', () => {
-            if (STATE.currentScheduleContactId) this.generateCharacterSchedule(STATE.currentScheduleContactId, { silent: false });
+            if (!STATE.currentScheduleContactId) return;
+            // ★ 手动刷新会覆盖今天现有的日程，先确认，避免用户误触后内容悄悄变化。
+            if (!confirm('重新生成当日日程？')) return;
+            this.generateCharacterSchedule(STATE.currentScheduleContactId, { silent: false });
         });
 
         document.getElementById('character-schedule-entry-cancel-btn')?.addEventListener('click', () => {
