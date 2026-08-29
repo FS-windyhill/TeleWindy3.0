@@ -608,9 +608,9 @@
 //     - bindEvents(): 绑定应用程序中所有的用户交互事件（点击、输入、长按、文件上传等），是事件监听器的核心注册中心
 //     - readFile(file): 读取文件并返回Promise，结果为文件的Base64编码字符串
 //     - handleTestConnection(): 异步测试API连接，根据设置的URL、密钥和模型发送测试请求
-//     - fetchModelsForUI(): 异步从配置的API端点拉取可用模型列表，并填充到UI的datalist中
+//     - fetchModelsForUI(): 异步从配置的API端点拉取可用模型列表，并打开文字模型选择弹窗
 //     - handleVisionTestConnection(): 异步测试视觉API的连接性，支持复用主API密钥
-//     - fetchVisionModelsForUI(): 异步拉取视觉API的可用模型列表，并填充到视觉设置的下拉选项中
+//     - fetchVisionModelsForUI(): 异步拉取视觉API的可用模型列表，并打开视觉模型选择弹窗
 //     - bindImageUpload(inputId, imgId, inputUrlId, callback): 绑定图片上传输入框的事件，将图片转为Base64并更新预览和可选的回调函数
 //     - handleSaveVisionPreset(): 保存当前的视觉API配置（URL、密钥、模型、提示词）为一个预设
 //     - handleLoadVisionPreset(): 加载选中的视觉API预设配置到设置表单中
@@ -2276,7 +2276,6 @@ const UI = {
         fetchVisionBtn: document.getElementById('fetch-vision-models-btn'), // 拉取按钮
         testVisionBtn: document.getElementById('test-vision-api-btn'),     // 测试按钮
         visionStatus: document.getElementById('test-vision-api-status'),   // 测试结果文字
-        visionModelList: document.getElementById('vision-model-options'),  // datalist
 
         // ★★★ 新增：发图 DOM ★★★
         uploadBtn: document.getElementById('upload-image-btn'),
@@ -12650,6 +12649,43 @@ const App = {
         if(mainConfirm) mainConfirm.onclick = () => this.saveSettingsFromUI();
         if(UI.els.fetchBtn) UI.els.fetchBtn.onclick = () => this.fetchModelsForUI();
 
+        // ==================== 拉取模型后的选择弹窗 ====================
+        // 搜索框只负责本次弹窗内的筛选，不复用主设置里的已选模型值。
+        const modelPickerOverlay = document.getElementById('model-picker-modal-overlay');
+        const modelPickerInput = document.getElementById('model-picker-input');
+        const modelPickerClose = document.getElementById('model-picker-close');
+        const modelPickerUseInput = document.getElementById('model-picker-use-input');
+
+        if (modelPickerInput) {
+            modelPickerInput.addEventListener('input', () => {
+                this.renderModelPickerList(modelPickerInput.value);
+            });
+
+            modelPickerInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    this.useModelPickerInput();
+                } else if (event.key === 'Escape') {
+                    this.closeModelPicker();
+                }
+            });
+        }
+
+        if (modelPickerUseInput) {
+            modelPickerUseInput.addEventListener('click', () => this.useModelPickerInput());
+        }
+
+        if (modelPickerClose) {
+            modelPickerClose.addEventListener('click', () => this.closeModelPicker());
+        }
+
+        if (modelPickerOverlay) {
+            modelPickerOverlay.addEventListener('click', (event) => {
+                if (event.target === modelPickerOverlay) this.closeModelPicker();
+            });
+        }
+        // ==================== 拉取模型后的选择弹窗结束 ====================
+
         // =========== 【新增】测试API按钮事件 ===========
         const testApiBtn = document.getElementById('test-api-btn');
         if (testApiBtn) {
@@ -14770,6 +14806,108 @@ const App = {
         }
     },
 
+    // ==================== 拉取模型后的选择弹窗 ====================
+    openModelPicker(models, targetInput, title) {
+        const overlay = document.getElementById('model-picker-modal-overlay');
+        const input = document.getElementById('model-picker-input');
+        const titleEl = document.getElementById('model-picker-title');
+        if (!overlay || !input || !targetInput) return;
+
+        // 接口偶尔会返回重复项或空 id，这里先清洗，避免列表出现无效行。
+        this.modelPickerModels = [...new Set(
+            models
+                .map(model => typeof model === 'string' ? model.trim() : '')
+                .filter(Boolean)
+        )];
+        this.modelPickerTargetInput = targetInput;
+
+        if (titleEl) titleEl.textContent = title || '选择模型';
+
+        // ★ 核心：每次打开都清空搜索词，所以默认永远展示完整模型列表。
+        input.value = '';
+        this.renderModelPickerList('');
+        overlay.classList.remove('hidden');
+
+        requestAnimationFrame(() => input.focus());
+    },
+
+    closeModelPicker() {
+        document.getElementById('model-picker-modal-overlay')?.classList.add('hidden');
+    },
+
+    renderModelPickerList(keyword = '') {
+        const resultsEl = document.getElementById('model-picker-results');
+        const countEl = document.getElementById('model-picker-count');
+        if (!resultsEl) return;
+
+        const allModels = Array.isArray(this.modelPickerModels) ? this.modelPickerModels : [];
+        const normalizedKeyword = keyword.trim().toLowerCase();
+        const filteredModels = normalizedKeyword
+            ? allModels.filter(model => model.toLowerCase().includes(normalizedKeyword))
+            : allModels;
+
+        resultsEl.replaceChildren();
+        if (countEl) {
+            countEl.textContent = normalizedKeyword
+                ? `${filteredModels.length} / ${allModels.length} 个模型`
+                : `${allModels.length} 个模型`;
+        }
+
+        if (filteredModels.length === 0) {
+            const emptyEl = document.createElement('div');
+            emptyEl.className = 'model-picker-empty';
+            emptyEl.textContent = normalizedKeyword
+                ? '返回列表中没有匹配项，可以直接使用上方输入的模型名称。'
+                : '接口没有返回模型，可以在上方手动输入模型名称。';
+            resultsEl.appendChild(emptyEl);
+            return;
+        }
+
+        const currentModel = this.modelPickerTargetInput?.value?.trim();
+        filteredModels.forEach(model => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'model-picker-result-item';
+
+            const nameEl = document.createElement('span');
+            nameEl.className = 'model-picker-result-name';
+            nameEl.textContent = model;
+            item.appendChild(nameEl);
+
+            // 当前模型仍然显示在完整列表中，只做标记，不再拿它当筛选条件。
+            if (model === currentModel) {
+                const badge = document.createElement('span');
+                badge.className = 'model-picker-current-badge';
+                badge.textContent = '当前';
+                item.appendChild(badge);
+            }
+
+            item.addEventListener('click', () => this.selectModelFromPicker(model));
+            resultsEl.appendChild(item);
+        });
+    },
+
+    selectModelFromPicker(model) {
+        if (!this.modelPickerTargetInput || !model) return;
+
+        this.modelPickerTargetInput.value = model;
+        // 同时派发事件，兼容以后给模型输入框增加的联动逻辑。
+        this.modelPickerTargetInput.dispatchEvent(new Event('input', { bubbles: true }));
+        this.modelPickerTargetInput.dispatchEvent(new Event('change', { bubbles: true }));
+        this.closeModelPicker();
+    },
+
+    useModelPickerInput() {
+        const input = document.getElementById('model-picker-input');
+        const model = input?.value.trim();
+        if (!model) {
+            input?.focus();
+            return;
+        }
+        this.selectModelFromPicker(model);
+    },
+    // ==================== 拉取模型后的选择弹窗结束 ====================
+
     async fetchModelsForUI() {
         const url = UI.els.settingUrl.value.trim();
         const key = UI.els.settingKey.value.trim();
@@ -14779,20 +14917,9 @@ const App = {
         btn.disabled = true;
         try {
             const data = await API.fetchModels(url, key);
-            const datalist = document.getElementById('model-options');
-            if(datalist) datalist.innerHTML = '';
             if (data.data && Array.isArray(data.data)) {
-                data.data.forEach(m => {
-                    if(datalist) {
-                        const opt = document.createElement('option');
-                        opt.value = m.id;
-                        datalist.appendChild(opt);
-                    }
-                });
-                if (data.data.length > 0) {
-                    UI.els.settingModel.value = data.data[0].id;
-                }
-                alert(`成功拉取 ${data.data.length} 个模型！`);
+                const models = data.data.map(model => model?.id).filter(Boolean);
+                this.openModelPicker(models, UI.els.settingModel, '选择文字模型');
             } else {
                 alert('连接成功，但对方没有返回有效的模型列表，请手动输入。');
             }
@@ -14869,28 +14996,10 @@ const App = {
             // 2. 调用同一个 API 函数
             const data = await API.fetchModels(url, key);
             
-            // 3. 获取视觉专用的 datalist
-            const datalist = UI.els.visionModelList; // 对应 id="vision-model-options"
-            if(datalist) datalist.innerHTML = '';
-
-            // 4. 解析逻辑 (和你原来的一模一样)
+            // 3. 文字和视觉模型共用选择弹窗，最终写回各自的模型输入框。
             if (data.data && Array.isArray(data.data)) {
-                data.data.forEach(m => {
-                    if(datalist) {
-                        const opt = document.createElement('option');
-                        opt.value = m.id; // 这里的 m.id 是模型名
-                        datalist.appendChild(opt);
-                    }
-                });
-
-                // 自动填入第一个
-                if (data.data.length > 0) {
-                    UI.els.settingVisionModel.value = data.data[0].id;
-                }
-                
-                // ★★★ 这里就是你要的弹窗 ★★★
-                alert(`成功拉取 ${data.data.length} 个模型！`);
-                
+                const models = data.data.map(model => model?.id).filter(Boolean);
+                this.openModelPicker(models, UI.els.settingVisionModel, '选择视觉模型');
             } else {
                 // 如果格式不对或者列表为空
                 alert('连接成功，但对方没有返回有效的模型列表，请手动输入。');
@@ -14900,7 +15009,7 @@ const App = {
             console.error(e);
             alert('拉取失败，请手动输入模型名。');
         } finally {
-            // 5. 恢复按钮
+            // 4. 恢复按钮
             btn.textContent = '拉取模型';
             btn.disabled = false;
         }

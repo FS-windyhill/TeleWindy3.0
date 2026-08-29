@@ -1237,7 +1237,7 @@ body.dark-mode .modal-overlay.moments-bg {
 
 /* ============= 毛玻璃面板（两个弹窗公用）============= */
 .modal.glass-panel {
-    background: rgba(255, 255, 255, 0.92);
+    background: rgba(255, 255, 255, 0.7);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border-radius: 18px;
@@ -6470,6 +6470,48 @@ body.custom-dark .world-sense-auto-source {
     color: rgba(235, 235, 235, 0.76);
 }
 
+/* ==================== 自定义主题：模型选择弹窗 ==================== */
+/* custom-dark 必须独立放在分界标记前，避免和普通暗色模式互相覆盖。 */
+body.custom-dark .model-picker-input-group input {
+    background: rgba(30, 30, 30, 0.5);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #f1f1f1;
+}
+
+body.custom-dark .model-picker-list-header,
+body.custom-dark .model-picker-empty {
+    color: rgba(235, 235, 235, 0.62);
+}
+
+body.custom-dark .model-picker-results {
+    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(20, 20, 20, 0.32);
+}
+
+body.custom-dark .model-picker-result-item {
+    color: #eeeeee;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+body.custom-dark .model-picker-result-item:hover,
+body.custom-dark .model-picker-result-item:focus-visible {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+body.custom-dark .model-picker-current-badge {
+    color: #ffffff;
+    border-color: var(--primary-btn-text);
+    background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.16);
+}
+
+body.custom-dark button#model-picker-close,
+body.custom-dark button#model-picker-use-input {
+    background: var(--btn-color);
+    color: #ffffff;
+    border: 0.7px solid #a9a9a9;
+}
+/* ==================== 自定义主题：模型选择弹窗结束 ==================== */
+
 /* 【【【[[[】】】*/
 
 
@@ -8004,6 +8046,160 @@ body.dark-mode button#btn-close-search {
 
 
 /*================== 搜索聊天记录结束 ================*/
+
+
+/* ==================== 拉取模型后的选择弹窗 ==================== */
+#model-picker-modal-overlay {
+    /* 主设置弹窗本身是 10001，这里必须再高一层才能正常盖在它上面。 */
+    z-index: 10050;
+}
+
+.model-picker-modal {
+    max-width: 500px;
+    max-height: 80vh;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    box-sizing: border-box;
+    overflow: hidden !important;
+}
+
+.model-picker-modal h2 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.model-picker-input-group {
+    margin-bottom: 12px;
+}
+
+.model-picker-input-group .search-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.model-picker-list-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 2px 8px;
+    color: #777;
+    font-size: 12px;
+}
+
+.model-picker-results {
+    flex: 1;
+    min-height: 220px;
+    overflow-y: auto;
+    border-top: 1px solid rgba(150, 150, 150, 0.2);
+    border-bottom: 1px solid rgba(150, 150, 150, 0.2);
+}
+
+.model-picker-result-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 11px 10px;
+    border: 0;
+    border-bottom: 1px solid rgba(150, 150, 150, 0.1);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-color);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.model-picker-result-item:hover,
+.model-picker-result-item:focus-visible {
+    background: rgba(150, 150, 150, 0.15);
+    outline: none;
+}
+
+.model-picker-result-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.model-picker-current-badge {
+    flex: 0 0 auto;
+    padding: 2px 7px;
+    border: 1px solid var(--primary-color);
+    border-radius: 999px;
+    color: var(--primary-color);
+    font-size: 11px;
+}
+
+body.dark-mode .model-picker-current-badge {
+    color: #ffffff;
+    border-color: var(--primary-btn-text);
+    background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.16);
+}
+
+.model-picker-empty {
+    padding: 28px 16px;
+    color: #777;
+    font-size: 13px;
+    line-height: 1.7;
+    text-align: center;
+}
+
+button#model-picker-close {
+    border: 0.7px solid var(--btn-border-color);
+    background: var(--btn-color);
+    color: #333;
+}
+
+body.dark-mode .model-picker-input-group input {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+}
+
+body.dark-mode .model-picker-list-header,
+body.dark-mode .model-picker-empty {
+    color: rgba(255, 255, 255, 0.62);
+}
+
+body.dark-mode .model-picker-results {
+    border-color: rgba(255, 255, 255, 0.16);
+}
+
+body.dark-mode .model-picker-result-item {
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .model-picker-result-item:hover,
+body.dark-mode .model-picker-result-item:focus-visible {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode button#model-picker-close {
+    background: var(--btn-color);
+    color: #ffffff;
+    border: 0.7px solid #a9a9a9;
+}
+
+@media (max-width: 520px) {
+    .model-picker-input-group {
+        flex-direction: column;
+    }
+
+    .model-picker-input-group .search-btn {
+        width: 100%;
+    }
+
+    .model-picker-results {
+        min-height: 180px;
+    }
+}
+/* ==================== 拉取模型后的选择弹窗结束 ==================== */
 
 
 

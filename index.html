@@ -1772,8 +1772,8 @@
                             <div class="model-setting-group">
                                 
                                 <!-- 1. 输入框 (去掉了右边的小图标) -->
-                                <input type="text" id="custom-model-select" list="model-options" class="model-select" placeholder="手动输入或点击拉取...">
-                                <datalist id="model-options"></datalist>
+                                <!-- 主输入框保留手动填写能力；拉取结果统一放到独立的模型选择弹窗里。 -->
+                                <input type="text" id="custom-model-select" class="model-select" placeholder="手动输入或点击拉取...">
 
                                 <!-- 2. 按钮组 (模仿 Gist 的排版，左右并排) -->
                                 <div class="api-buttons-row">
@@ -1971,10 +1971,9 @@
                             <!-- 模型设置区域 (与主模型一致的布局) -->
                             <div class="model-setting-group">
                                 
-                                <!-- 1. 输入框 (绑定 datalist) -->
-                                <input type="text" id="vision-model-name" list="vision-model-options" class="model-select" 
+                                <!-- 1. 输入框（拉取结果由独立模型选择弹窗展示） -->
+                                <input type="text" id="vision-model-name" class="model-select"
                                     placeholder="手动输入或点击拉取..." value="Qwen/Qwen3-VL-30B-A3B-Instruct">
-                                <datalist id="vision-model-options"></datalist>
 
                                 <!-- 2. 按钮组 -->
                                 <div class="api-buttons-row">
@@ -2430,6 +2429,33 @@
                 <div>输入 Token：0</div>
                 <div>输出 Token：0</div>
                 <div>总 Token：0</div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ==================== 拉取模型后的选择弹窗 ==================== -->
+    <!-- 文字模型和视觉模型共用这个面板；上方既能搜索，也能直接填写接口未返回的模型名。 -->
+    <div id="model-picker-modal-overlay" class="modal-overlay hidden">
+        <div class="modal glass-panel model-picker-modal" role="dialog" aria-modal="true" aria-labelledby="model-picker-title">
+            <h2 id="model-picker-title">选择模型</h2>
+
+            <!-- 搜索词独立于当前已选模型，打开弹窗时不会用旧模型名过滤列表。 -->
+            <div class="search-input-group model-picker-input-group">
+                <input type="text" id="model-picker-input" placeholder="搜索或手动输入模型名称..." autocomplete="off">
+                <button type="button" id="model-picker-use-input" class="search-btn">使用此名称</button>
+            </div>
+
+            <div class="model-picker-list-header">
+                <span id="model-picker-count">0 个模型</span>
+                <span>点击模型即可选择</span>
+            </div>
+
+            <!-- 拉取到的模型会动态注入到这里。 -->
+            <div id="model-picker-results" class="model-picker-results"></div>
+
+            <div class="modal-buttons">
+                <button type="button" id="model-picker-close">关闭</button>
             </div>
         </div>
     </div>
