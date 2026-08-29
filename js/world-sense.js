@@ -5,7 +5,7 @@
 // =========================================
 // ★★★★★ 世界感知 START：独立工具层 ★★★★★
 // 这一层只负责“算”和“拼”：
-// 1. 算天气缓存是不是今天的
+// 1. 算天气缓存是不是当前 0/12 点刷新时段的
 // 2. 算节日文案
 // 3. 最后拼出要注入 system prompt 的第四段
 // 不直接碰页面按钮，方便后面单独维护。
@@ -102,6 +102,11 @@ const WorldSense = {
             weather: {
                 enabled: settings.WORLD_SENSE_WEATHER_ENABLED === true,
                 city: settings.WORLD_SENSE_WEATHER_CITY || '',
+                location: settings.WORLD_SENSE_WEATHER_LOCATION
+                    ? JSON.parse(JSON.stringify(settings.WORLD_SENSE_WEATHER_LOCATION))
+                    : null,
+                apiHost: settings.WORLD_SENSE_WEATHER_API_HOST || '',
+                apiKey: settings.WORLD_SENSE_WEATHER_API_KEY || '',
                 cache: settings.WORLD_SENSE_WEATHER_CACHE
                     ? JSON.parse(JSON.stringify(settings.WORLD_SENSE_WEATHER_CACHE))
                     : null
@@ -121,6 +126,13 @@ const WorldSense = {
         const mm = String(date.getMonth() + 1).padStart(2, '0');
         const dd = String(date.getDate()).padStart(2, '0');
         return `${yyyy}-${mm}-${dd}`;
+    },
+
+    buildWeatherRefreshSlotKey(date = new Date()) {
+        // ★ 天气每天只分两个刷新时段：
+        // 00:00—11:59 算上午档，12:00—23:59 算下午档；网页错过整点时，首次使用会补刷当前档。
+        const slot = date.getHours() < 12 ? '00' : '12';
+        return `${this.buildDateKey(date)}-${slot}`;
     },
 
     formatShortDateTime(input) {
@@ -167,7 +179,7 @@ const WorldSense = {
         const normalizedCity = this.normalizeCity(city);
         if (!normalizedCity) return false;
         if (this.normalizeCity(cache.cityQuery) !== normalizedCity) return false;
-        return cache.dateKey === this.buildDateKey(now);
+        return cache.refreshSlotKey === this.buildWeatherRefreshSlotKey(now);
     },
 
     weatherCodeToText(code) {
@@ -180,25 +192,130 @@ const WorldSense = {
         return result.name || '';
     },
 
-    async fetchWeather(city) {
+    normalizeApiHost(host) {
+        return String(host || '')
+            .trim()
+            .replace(/^https?:\/\//i, '')
+            .split('/')[0]
+            .replace(/\/+$/, '');
+    },
+
+    hasQWeatherConfig(apiHost, apiKey) {
+        return !!(this.normalizeApiHost(apiHost) && String(apiKey || '').trim());
+    },
+
+    buildLocationDisplayName(location) {
+        if (!location) return '';
+        const parts = [location.country, location.admin1, location.admin2, location.name]
+            .map(item => String(item || '').trim())
+            .filter(Boolean);
+        return [...new Set(parts)].join(' · ');
+    },
+
+    async searchOpenMeteoLocations(city) {
         const normalizedCity = this.normalizeCity(city);
         if (!normalizedCity) {
             throw new Error('请先填写城市');
         }
 
-        const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=1&language=zh&format=json`;
+        const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(normalizedCity)}&count=10&language=zh&format=json`;
         const geoRes = await fetch(geoUrl);
         if (!geoRes.ok) {
             throw new Error(`城市查询失败（${geoRes.status}）`);
         }
 
         const geoData = await geoRes.json();
-        const result = Array.isArray(geoData.results) ? geoData.results[0] : null;
-        if (!result) {
+        const results = Array.isArray(geoData.results) ? geoData.results : [];
+        if (results.length === 0) {
             throw new Error('没有找到这个城市');
         }
 
-        const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${result.latitude}&longitude=${result.longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1`;
+        return results.map(result => {
+            const location = {
+                name: result.name || normalizedCity,
+                country: result.country || '',
+                admin1: result.admin1 || '',
+                admin2: result.admin2 || '',
+                latitude: Number(result.latitude),
+                longitude: Number(result.longitude),
+                timezone: result.timezone || '',
+                source: 'open_meteo'
+            };
+            location.displayName = this.buildLocationDisplayName(location) || location.name;
+            return location;
+        });
+    },
+
+    async searchQWeatherLocations(city, apiHost, apiKey) {
+        const normalizedCity = this.normalizeCity(city);
+        if (!normalizedCity) throw new Error('请先填写城市');
+
+        const host = this.normalizeApiHost(apiHost);
+        const key = String(apiKey || '').trim();
+        const url = `https://${host}/geo/v2/city/lookup?location=${encodeURIComponent(normalizedCity)}&number=10&lang=zh&key=${encodeURIComponent(key)}`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`和风城市查询失败（${response.status}）`);
+
+        const data = await response.json();
+        if (String(data.code) !== '200') throw new Error(`和风城市查询失败（${data.code || '未知错误'}）`);
+        const results = Array.isArray(data.location) ? data.location : [];
+        if (results.length === 0) throw new Error('和风天气没有找到这个城市');
+
+        return results.map(result => {
+            const location = {
+                name: result.name || normalizedCity,
+                country: result.country || '',
+                admin1: result.adm1 || '',
+                admin2: result.adm2 || '',
+                latitude: Number(result.lat),
+                longitude: Number(result.lon),
+                timezone: result.tz || '',
+                qweatherId: result.id || '',
+                source: 'qweather'
+            };
+            location.displayName = this.buildLocationDisplayName(location) || location.name;
+            return location;
+        });
+    },
+
+    async searchLocationCandidates(city, options = {}) {
+        const { apiHost = '', apiKey = '' } = options;
+        if (this.hasQWeatherConfig(apiHost, apiKey)) {
+            try {
+                return {
+                    source: 'qweather',
+                    sourceLabel: '和风天气',
+                    candidates: await this.searchQWeatherLocations(city, apiHost, apiKey),
+                    fallbackReason: ''
+                };
+            } catch (error) {
+                return {
+                    source: 'open_meteo',
+                    sourceLabel: 'Open-Meteo',
+                    candidates: await this.searchOpenMeteoLocations(city),
+                    fallbackReason: error.message || String(error)
+                };
+            }
+        }
+
+        return {
+            source: 'open_meteo',
+            sourceLabel: 'Open-Meteo',
+            candidates: await this.searchOpenMeteoLocations(city),
+            fallbackReason: ''
+        };
+    },
+
+    async fetchOpenMeteoWeather(city, location, now = new Date()) {
+        const normalizedCity = this.normalizeCity(city);
+        let resolvedLocation = location;
+        if (!resolvedLocation) {
+            // ★ 旧版用户只有城市文本，没有保存候选地点：
+            // 自动刷新时仍取第一条以兼容旧行为；用户下次进入设置页可重新搜索并明确选择。
+            resolvedLocation = (await this.searchOpenMeteoLocations(normalizedCity))[0];
+        }
+
+        const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${resolvedLocation.latitude}&longitude=${resolvedLocation.longitude}&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1`;
         const forecastRes = await fetch(forecastUrl);
         if (!forecastRes.ok) {
             throw new Error(`天气获取失败（${forecastRes.status}）`);
@@ -218,15 +335,83 @@ const WorldSense = {
         return {
             dateKey,
             cityQuery: normalizedCity,
-            cityName: this.formatResolvedCity(result) || normalizedCity,
-            latitude: result.latitude,
-            longitude: result.longitude,
+            cityName: resolvedLocation.name || normalizedCity,
+            cityDisplayName: resolvedLocation.displayName || resolvedLocation.name || normalizedCity,
+            latitude: resolvedLocation.latitude,
+            longitude: resolvedLocation.longitude,
             weatherCode,
             weatherText: this.weatherCodeToText(weatherCode),
             tempMin: Math.round(tempMin),
             tempMax: Math.round(tempMax),
+            source: 'open_meteo',
+            sourceLabel: 'Open-Meteo',
+            refreshSlotKey: this.buildWeatherRefreshSlotKey(now),
             updatedAt: new Date().toISOString()
         };
+    },
+
+    async fetchQWeather(city, location, apiHost, apiKey, now = new Date()) {
+        if (!location) throw new Error('请先搜索并选择具体地点');
+
+        const host = this.normalizeApiHost(apiHost);
+        const key = String(apiKey || '').trim();
+        const coordinate = `${Number(location.longitude).toFixed(2)},${Number(location.latitude).toFixed(2)}`;
+        const locationValue = location.qweatherId || coordinate;
+        const url = `https://${host}/v7/weather/3d?location=${encodeURIComponent(locationValue)}&lang=zh&unit=m&key=${encodeURIComponent(key)}`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`和风天气获取失败（${response.status}）`);
+
+        const data = await response.json();
+        if (String(data.code) !== '200') throw new Error(`和风天气获取失败（${data.code || '未知错误'}）`);
+        const daily = Array.isArray(data.daily) ? data.daily[0] : null;
+        if (!daily || daily.tempMax === undefined || daily.tempMin === undefined) {
+            throw new Error('和风天气数据不完整');
+        }
+
+        const textDay = String(daily.textDay || '').trim();
+        const textNight = String(daily.textNight || '').trim();
+        const weatherText = textDay && textNight && textDay !== textNight
+            ? `${textDay}转${textNight}`
+            : (textDay || textNight || '天气变化');
+
+        return {
+            dateKey: daily.fxDate || this.buildDateKey(now),
+            cityQuery: this.normalizeCity(city),
+            cityName: location.name || this.normalizeCity(city),
+            cityDisplayName: location.displayName || location.name || this.normalizeCity(city),
+            latitude: Number(location.latitude),
+            longitude: Number(location.longitude),
+            weatherCode: daily.iconDay || '',
+            weatherText,
+            tempMin: Math.round(Number(daily.tempMin)),
+            tempMax: Math.round(Number(daily.tempMax)),
+            source: 'qweather',
+            sourceLabel: '和风天气',
+            refreshSlotKey: this.buildWeatherRefreshSlotKey(now),
+            updatedAt: data.updateTime || new Date().toISOString()
+        };
+    },
+
+    async fetchWeather(city, options = {}) {
+        const normalizedCity = this.normalizeCity(city);
+        if (!normalizedCity) throw new Error('请先填写城市');
+
+        const { location = null, apiHost = '', apiKey = '', now = new Date() } = options;
+        if (this.hasQWeatherConfig(apiHost, apiKey)) {
+            try {
+                return await this.fetchQWeather(normalizedCity, location, apiHost, apiKey, now);
+            } catch (error) {
+                const fallback = await this.fetchOpenMeteoWeather(normalizedCity, location, now);
+                fallback.fallbackReason = error.message || String(error);
+                return fallback;
+            }
+        }
+
+        const result = await this.fetchOpenMeteoWeather(normalizedCity, location, now);
+        if (this.normalizeApiHost(apiHost) || String(apiKey || '').trim()) {
+            result.fallbackReason = '和风天气配置不完整';
+        }
+        return result;
     },
 
     getLunarParts(date) {

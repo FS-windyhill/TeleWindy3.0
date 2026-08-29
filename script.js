@@ -4,8 +4,9 @@
 // 3.5. WORLD SENSE (世界感知)
 //   - WorldSense: 世界感知独立工具层
 //     - cloneDraftFromSettings(): 从已保存设置复制一份编辑草稿
-//     - fetchWeather(city): 通过 Open-Meteo 获取天气
-//     - isWeatherCacheValid(cache, city, now): 判断天气缓存今天还能不能用
+//     - searchLocationCandidates(city, options): 优先和风、失败回退 Open-Meteo 搜索地点候选
+//     - fetchWeather(city, options): 优先和风、失败回退 Open-Meteo 获取天气
+//     - isWeatherCacheValid(cache, city, now): 判断天气缓存是否属于当前 0/12 点时段
 //     - buildWeekText(date): 生成星期文案，例如“周五”
 //     - buildFestivalText(date): 生成节日文案
 //     - buildPromptFromSettings(settings, now): 生成第 4 段 system prompt
@@ -58,7 +59,7 @@
 //     - persistWorldSenseDraft(): 把世界感知草稿写入 IndexedDB
 //     - testWorldSenseWeather(): 测试天气，并把成功结果直接写入 IndexedDB
 //     - saveWorldSenseSettings(): 点击总保存时兜底写入 IndexedDB
-//     - ensureWorldSenseWeatherReady(): 聊天真正发 prompt 前，按“当天一次”策略自动补天气
+//     - ensureWorldSenseWeatherReady(): 聊天真正发 prompt 前，按每天 0 点 / 12 点两个时段自动补天气
 //   - TO DO / 倒数日页面逻辑
 //     - syncTodoContextToggles(): 同步探索页 TO DO / 倒数日注入开关
 //     - toggleTodoPlanInjectEnabled(enabled): 保存 TO DO 计划是否注入 AI
@@ -721,6 +722,9 @@ const STATE = {
     asyncBackendTestStatus: null,
     worldSenseDraft: null,
     worldSenseTestStatus: null,
+    worldSenseLocationCandidates: [],
+    worldSenseWeatherRefreshPromise: null,
+    worldSenseWeatherRetryAt: 0,
 
 
 };
@@ -4502,8 +4506,11 @@ const App = {
     startDesktopClock() {
         if (STATE.desktopClockTimer) return;
         STATE.desktopClockTimer = setInterval(() => {
-            // 桌面时间保持分钟级跳动；整套小组件在进入桌面 / 启动应用时统一刷新。
-            this.updateDesktopClock();
+            // ★ 每分钟只做一次轻量缓存检查：
+            // 平时不会发请求，跨过 0 点或 12 点后才会补刷新时段的天气。
+            Promise.resolve(this.ensureWorldSenseWeatherReady())
+                .catch(error => console.warn('[Desktop] weather slot check failed:', error))
+                .finally(() => this.updateDesktopClock());
         }, 60 * 1000);
     },
 
@@ -4511,7 +4518,7 @@ const App = {
         this.startDesktopClock();
         STATE.desktopLastDateKey = this.getDesktopDateKey();
 
-        // 天气和世界感知共用“当天一次”的缓存策略；失败时桌面继续显示旧状态。
+        // 天气按每天 0 点 / 12 点两个时段缓存；错过整点时，打开网页后补刷当前时段。
         if (typeof this.ensureWorldSenseWeatherReady === 'function') {
             await this.ensureWorldSenseWeatherReady();
         }
@@ -5084,7 +5091,7 @@ const App = {
     // 1. 负责把已保存配置加载到页面
     // 2. 负责天气测试，测试成功后直接入库
     // 3. 负责开关即时生效，不再强制用户多点一次保存
-    // 4. 负责聊天前按需自动补当天天气缓存
+    // 4. 负责聊天前按需自动补当前 0/12 点时段的天气缓存
     // 这一层会同时碰到 DOM、STATE.settings 和草稿态 STATE.worldSenseDraft。
     // =========================================
     syncWorldSenseToggle() {
@@ -5122,7 +5129,8 @@ const App = {
 
         const lines = [
             `<div class="world-sense-cache-line"><span class="world-sense-cache-label">已保存城市</span>${this.escapeHtml(cache.cityName || cache.cityQuery || '-')}</div>`,
-            `<div class="world-sense-cache-line"><span class="world-sense-cache-label">当前缓存</span>${this.escapeHtml(WorldSense.formatWeatherSummary(cache))}</div>`
+            `<div class="world-sense-cache-line"><span class="world-sense-cache-label">当前缓存</span>${this.escapeHtml(WorldSense.formatWeatherSummary(cache))}</div>`,
+            `<div class="world-sense-cache-line"><span class="world-sense-cache-label">当前来源</span>${this.escapeHtml(cache.sourceLabel || 'Open-Meteo')}${cache.fallbackReason ? '（和风天气连接失败后自动回退）' : ''}</div>`
         ];
         const updatedAt = WorldSense.formatShortDateTime(cache.updatedAt);
         if (updatedAt) {
@@ -5135,12 +5143,22 @@ const App = {
         const draft = STATE.worldSenseDraft || WorldSense.cloneDraftFromSettings();
         const weatherToggle = document.getElementById('world-sense-weather-toggle');
         const weatherCity = document.getElementById('world-sense-weather-city');
+        const weatherLocationHint = document.getElementById('world-sense-weather-location-hint');
+        const qweatherHost = document.getElementById('world-sense-qweather-host');
+        const qweatherKey = document.getElementById('world-sense-qweather-key');
         const festivalToggle = document.getElementById('world-sense-festival-toggle');
         const cacheBox = document.getElementById('world-sense-weather-cache');
         const previewBox = document.getElementById('world-sense-festival-preview');
 
         if (weatherToggle) weatherToggle.checked = draft.weather.enabled === true;
         if (weatherCity) weatherCity.value = draft.weather.city || '';
+        if (qweatherHost) qweatherHost.value = draft.weather.apiHost || '';
+        if (qweatherKey) qweatherKey.value = draft.weather.apiKey || '';
+        if (weatherLocationHint) {
+            weatherLocationHint.textContent = draft.weather.location
+                ? `已选择：${draft.weather.location.displayName || draft.weather.location.name || draft.weather.city}`
+                : '输入城市后搜索并选择具体地点，避免同名城市匹配错误。';
+        }
         if (festivalToggle) festivalToggle.checked = draft.festival.enabled === true;
         if (cacheBox) cacheBox.innerHTML = this.buildWorldSenseWeatherCacheHtml(draft.weather.cache);
 
@@ -5169,12 +5187,16 @@ const App = {
         const draft = STATE.worldSenseDraft || WorldSense.cloneDraftFromSettings();
         const weatherToggle = document.getElementById('world-sense-weather-toggle');
         const weatherCity = document.getElementById('world-sense-weather-city');
+        const qweatherHost = document.getElementById('world-sense-qweather-host');
+        const qweatherKey = document.getElementById('world-sense-qweather-key');
         const festivalToggle = document.getElementById('world-sense-festival-toggle');
 
         // ★ 页面输入先收回草稿：
         // 这样“测试天气”“单独开关”“总保存”都走同一份数据，不会出现 UI 和入库内容不一致。
         draft.weather.enabled = weatherToggle ? weatherToggle.checked : draft.weather.enabled;
         draft.weather.city = WorldSense.normalizeCity(weatherCity ? weatherCity.value : draft.weather.city);
+        draft.weather.apiHost = WorldSense.normalizeApiHost(qweatherHost ? qweatherHost.value : draft.weather.apiHost);
+        draft.weather.apiKey = String(qweatherKey ? qweatherKey.value : draft.weather.apiKey || '').trim();
         draft.festival.enabled = festivalToggle ? festivalToggle.checked : draft.festival.enabled;
 
         STATE.worldSenseDraft = draft;
@@ -5187,14 +5209,35 @@ const App = {
             ? JSON.parse(JSON.stringify(draft.weather.cache))
             : null;
 
-        // ★ 城市变了就丢掉旧天气：
-        // 避免用户把城市从成都改成上海后，页面还拿着成都的缓存继续注入 prompt。
-        if (!draft.weather.city || WorldSense.normalizeCity(nextCache?.cityQuery) !== draft.weather.city) {
+        // ★ 城市、地点或专业源配置变了都丢掉旧天气：
+        // 避免页面改成新地点后仍注入旧缓存，也让刚配置好的和风天气能在下一次使用时立即接管。
+        const savedLocation = STATE.settings.WORLD_SENSE_WEATHER_LOCATION;
+        const nextLocation = draft.weather.location;
+        const savedLocationKey = savedLocation
+            ? `${Number(savedLocation.latitude)},${Number(savedLocation.longitude)}`
+            : '';
+        const nextLocationKey = nextLocation
+            ? `${Number(nextLocation.latitude)},${Number(nextLocation.longitude)}`
+            : '';
+        const locationChanged = savedLocationKey !== nextLocationKey;
+        const qweatherConfigChanged = WorldSense.normalizeApiHost(STATE.settings.WORLD_SENSE_WEATHER_API_HOST) !== draft.weather.apiHost ||
+            String(STATE.settings.WORLD_SENSE_WEATHER_API_KEY || '').trim() !== draft.weather.apiKey;
+        if (
+            !draft.weather.city ||
+            WorldSense.normalizeCity(nextCache?.cityQuery) !== draft.weather.city ||
+            (options.keepWeatherCache !== true && locationChanged) ||
+            (options.keepWeatherCache !== true && qweatherConfigChanged)
+        ) {
             nextCache = null;
         }
 
         STATE.settings.WORLD_SENSE_WEATHER_ENABLED = draft.weather.enabled === true;
         STATE.settings.WORLD_SENSE_WEATHER_CITY = draft.weather.city;
+        STATE.settings.WORLD_SENSE_WEATHER_LOCATION = nextLocation
+            ? JSON.parse(JSON.stringify(nextLocation))
+            : null;
+        STATE.settings.WORLD_SENSE_WEATHER_API_HOST = draft.weather.apiHost;
+        STATE.settings.WORLD_SENSE_WEATHER_API_KEY = draft.weather.apiKey;
         STATE.settings.WORLD_SENSE_WEATHER_CACHE = nextCache;
         STATE.settings.WORLD_SENSE_FESTIVAL_ENABLED = draft.festival.enabled === true;
 
@@ -5206,17 +5249,83 @@ const App = {
         if (options.render !== false) this.renderWorldSenseSettings();
     },
 
-    async testWorldSenseWeather() {
-        const draft = STATE.worldSenseDraft || WorldSense.cloneDraftFromSettings();
-        const cityInput = document.getElementById('world-sense-weather-city');
-        const testBtn = document.getElementById('world-sense-weather-test-btn');
-        const city = WorldSense.normalizeCity(cityInput ? cityInput.value : draft.weather.city);
+    openWorldSenseLocationModal(searchResult) {
+        const modal = document.getElementById('world-sense-location-modal');
+        const list = document.getElementById('world-sense-location-candidates');
+        const desc = document.getElementById('world-sense-location-modal-desc');
+        if (!modal || !list) return;
 
-        draft.weather.city = city;
+        STATE.worldSenseLocationCandidates = searchResult.candidates || [];
+        list.replaceChildren();
+        if (desc) {
+            desc.textContent = searchResult.fallbackReason
+                ? '和风天气地点查询失败，下面是 Open-Meteo 返回的候选地点。'
+                : `地点候选来源：${searchResult.sourceLabel}`;
+        }
+
+        STATE.worldSenseLocationCandidates.forEach((location, index) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'world-sense-location-candidate';
+            button.dataset.index = String(index);
+            button.textContent = location.displayName || location.name || '未命名地点';
+            list.appendChild(button);
+        });
+        modal.classList.remove('hidden');
+    },
+
+    closeWorldSenseLocationModal() {
+        document.getElementById('world-sense-location-modal')?.classList.add('hidden');
+    },
+
+    selectWorldSenseLocation(index) {
+        const location = STATE.worldSenseLocationCandidates[index];
+        if (!location) return;
+
+        const draft = STATE.worldSenseDraft || WorldSense.cloneDraftFromSettings();
+        draft.weather.location = JSON.parse(JSON.stringify(location));
+        draft.weather.cache = null;
         STATE.worldSenseDraft = draft;
+        this.closeWorldSenseLocationModal();
+        this.renderWorldSenseSettings();
+        this.setWorldSenseStatus(`已选择地点：${location.displayName || location.name}`, 'api-status-text status-success');
+    },
+
+    async searchWorldSenseWeatherLocation() {
+        const draft = this.collectWorldSenseDraftFromDom();
+        const button = document.getElementById('world-sense-weather-search-btn');
+        if (!draft.weather.city) {
+            this.setWorldSenseStatus('请先填写城市', 'api-status-text status-failure');
+            return;
+        }
+
+        if (button) button.disabled = true;
+        this.setWorldSenseStatus(`正在搜索地点：${draft.weather.city}`, 'api-status-text status-pending');
+        try {
+            const result = await WorldSense.searchLocationCandidates(draft.weather.city, {
+                apiHost: draft.weather.apiHost,
+                apiKey: draft.weather.apiKey
+            });
+            this.openWorldSenseLocationModal(result);
+            this.setWorldSenseStatus(`找到 ${result.candidates.length} 个候选地点`, 'api-status-text status-success');
+        } catch (error) {
+            this.setWorldSenseStatus(`地点搜索失败：${error.message || error}`, 'api-status-text status-failure');
+        } finally {
+            if (button) button.disabled = false;
+        }
+    },
+
+    async testWorldSenseWeather() {
+        const draft = this.collectWorldSenseDraftFromDom();
+        const testBtn = document.getElementById('world-sense-weather-test-btn');
+        const city = draft.weather.city;
 
         if (!city) {
             this.setWorldSenseStatus('请先填写城市', 'api-status-text status-failure');
+            return;
+        }
+        if (!draft.weather.location) {
+            this.setWorldSenseStatus('请先点击“搜索地点”并选择具体地点', 'api-status-text status-failure');
             return;
         }
 
@@ -5224,15 +5333,23 @@ const App = {
         this.setWorldSenseStatus(`正在测试天气：${city}`, 'api-status-text status-pending');
 
         try {
-            const cache = await WorldSense.fetchWeather(city);
+            const cache = await WorldSense.fetchWeather(city, {
+                location: draft.weather.location,
+                apiHost: draft.weather.apiHost,
+                apiKey: draft.weather.apiKey,
+                now: new Date()
+            });
             // ★ 用户已经主动测试出天气了，就顺手打开天气分开关；
             // 否则“有缓存但分开关仍关闭”，桌面会继续显示天气未开启，看起来像保存没生效。
             draft.weather.enabled = true;
             draft.weather.cache = cache;
             STATE.worldSenseDraft = draft;
-            await this.persistWorldSenseDraft({ draft });
+            await this.persistWorldSenseDraft({ draft, keepWeatherCache: true });
             this.renderWorldSenseSettings();
-            this.setWorldSenseStatus(`天气测试成功：${cache.cityName} ${WorldSense.formatWeatherSummary(cache)}`, 'api-status-text status-success');
+            const sourceText = cache.fallbackReason
+                ? `来源：Open-Meteo；和风天气失败：${cache.fallbackReason}`
+                : `来源：${cache.sourceLabel || 'Open-Meteo'}`;
+            this.setWorldSenseStatus(`天气测试成功：${cache.cityName} ${WorldSense.formatWeatherSummary(cache)}（${sourceText}）`, 'api-status-text status-success');
         } catch (error) {
             this.setWorldSenseStatus(`天气测试失败：${error.message || error}`, 'api-status-text status-failure');
         } finally {
@@ -5254,13 +5371,32 @@ const App = {
         if (settings.WORLD_SENSE_WEATHER_ENABLED !== true) return;
         if (!city) return;
         if (WorldSense.isWeatherCacheValid(settings.WORLD_SENSE_WEATHER_CACHE, city, new Date())) return;
+        if (Date.now() < Number(STATE.worldSenseWeatherRetryAt || 0)) return;
+        if (STATE.worldSenseWeatherRefreshPromise) return STATE.worldSenseWeatherRefreshPromise;
 
-        try {
-            STATE.settings.WORLD_SENSE_WEATHER_CACHE = await WorldSense.fetchWeather(city);
-            await Storage.saveSettings();
-        } catch (error) {
-            console.warn('[WorldSense] weather refresh failed:', error);
-        }
+        // ★ 多个入口可能同时检查天气（桌面分钟计时器、聊天发送、打开详情页）：
+        // 共用同一个 Promise，避免在 0 点或 12 点边界重复请求天气源。
+        STATE.worldSenseWeatherRefreshPromise = (async () => {
+            try {
+                STATE.settings.WORLD_SENSE_WEATHER_CACHE = await WorldSense.fetchWeather(city, {
+                    location: settings.WORLD_SENSE_WEATHER_LOCATION,
+                    apiHost: settings.WORLD_SENSE_WEATHER_API_HOST,
+                    apiKey: settings.WORLD_SENSE_WEATHER_API_KEY,
+                    now: new Date()
+                });
+                STATE.worldSenseWeatherRetryAt = 0;
+                await Storage.saveSettings();
+                this.refreshDesktopWorldSenseWidgets();
+            } catch (error) {
+                // 自动刷新失败后 15 分钟再试，避免页面常驻时每分钟反复打失败请求。
+                STATE.worldSenseWeatherRetryAt = Date.now() + 15 * 60 * 1000;
+                console.warn('[WorldSense] weather refresh failed:', error);
+            } finally {
+                STATE.worldSenseWeatherRefreshPromise = null;
+            }
+        })();
+
+        return STATE.worldSenseWeatherRefreshPromise;
     },
     // ★★★★★ 世界感知 END：页面设置层 ★★★★★
 
@@ -9534,7 +9670,7 @@ const App = {
         // ★★★★★ 世界书分层注入 END ★★★★★
 
         // ★★★★★ 世界感知：收集本轮动态背景 START ★★★★★
-        // 这里会先检查天气缓存是不是今天的。
+        // 这里会先检查天气缓存是不是当前 0/12 点刷新时段的。
         // 如果今天还没有缓存，就在真正发请求前补一次。
         await this.ensureWorldSenseWeatherReady();
         const worldSensePrompt = WorldSense.buildPromptFromSettings(STATE.settings, new Date());
@@ -13906,6 +14042,10 @@ const App = {
             this.testWorldSenseWeather();
         });
 
+        document.getElementById('world-sense-weather-search-btn')?.addEventListener('click', () => {
+            this.searchWorldSenseWeatherLocation();
+        });
+
         document.getElementById('world-sense-weather-toggle')?.addEventListener('change', (event) => {
             if (!STATE.worldSenseDraft) STATE.worldSenseDraft = WorldSense.cloneDraftFromSettings();
             STATE.worldSenseDraft.weather.enabled = event.target.checked;
@@ -13914,7 +14054,51 @@ const App = {
 
         document.getElementById('world-sense-weather-city')?.addEventListener('input', (event) => {
             if (!STATE.worldSenseDraft) STATE.worldSenseDraft = WorldSense.cloneDraftFromSettings();
+            const previousCity = WorldSense.normalizeCity(STATE.worldSenseDraft.weather.city);
             STATE.worldSenseDraft.weather.city = event.target.value;
+            if (WorldSense.normalizeCity(event.target.value) !== previousCity) {
+                // 城市文本一旦改动，旧候选地点就不能继续沿用，避免“输入上海、坐标还是成都”。
+                STATE.worldSenseDraft.weather.location = null;
+                STATE.worldSenseDraft.weather.cache = null;
+                const hint = document.getElementById('world-sense-weather-location-hint');
+                if (hint) hint.textContent = '城市已修改，请重新搜索并选择具体地点。';
+            }
+        });
+
+        document.getElementById('world-sense-qweather-host')?.addEventListener('input', (event) => {
+            if (!STATE.worldSenseDraft) STATE.worldSenseDraft = WorldSense.cloneDraftFromSettings();
+            STATE.worldSenseDraft.weather.apiHost = event.target.value;
+        });
+
+        document.getElementById('world-sense-qweather-key')?.addEventListener('input', (event) => {
+            if (!STATE.worldSenseDraft) STATE.worldSenseDraft = WorldSense.cloneDraftFromSettings();
+            STATE.worldSenseDraft.weather.apiKey = event.target.value;
+        });
+
+        document.getElementById('world-sense-qweather-help-btn')?.addEventListener('click', () => {
+            document.getElementById('qweather-tutorial-modal')?.classList.remove('hidden');
+        });
+
+        document.getElementById('qweather-tutorial-close-btn')?.addEventListener('click', () => {
+            document.getElementById('qweather-tutorial-modal')?.classList.add('hidden');
+        });
+
+        document.getElementById('qweather-tutorial-modal')?.addEventListener('click', (event) => {
+            if (event.target === event.currentTarget) event.currentTarget.classList.add('hidden');
+        });
+
+        document.getElementById('world-sense-location-cancel-btn')?.addEventListener('click', () => {
+            this.closeWorldSenseLocationModal();
+        });
+
+        document.getElementById('world-sense-location-modal')?.addEventListener('click', (event) => {
+            if (event.target === event.currentTarget) this.closeWorldSenseLocationModal();
+        });
+
+        document.getElementById('world-sense-location-candidates')?.addEventListener('click', (event) => {
+            const button = event.target.closest('.world-sense-location-candidate');
+            if (!button) return;
+            this.selectWorldSenseLocation(Number(button.dataset.index));
         });
 
         document.getElementById('world-sense-festival-toggle')?.addEventListener('change', (event) => {

@@ -6464,6 +6464,12 @@ body.custom-dark .desktop-todo-empty {
     color: rgba(230, 230, 230, 0.55);
 }
 
+body.custom-dark .world-sense-auto-source {
+    border-color: rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(235, 235, 235, 0.76);
+}
+
 /* 【【【[[[】】】*/
 
 
@@ -8632,9 +8638,10 @@ body.dark-mode .gist-sync-card.world-sense-setting-card{
 
 .world-sense-card-header {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 16px;
+    gap: 10px;
     margin-bottom: 14px;
 }
 
@@ -8644,6 +8651,16 @@ body.dark-mode .gist-sync-card.world-sense-setting-card{
 
 .world-sense-card-title {
     margin-bottom: 6px;
+}
+
+/* ★ 自动来源说明从属于“天气感知”标题；标题区自己收缩，右侧开关保持原位。 */
+.world-sense-weather-header-content {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.world-sense-weather-header-content .world-sense-card-title {
+    margin-bottom: 0;
 }
 
 .world-sense-card-subtitle {
@@ -8672,9 +8689,10 @@ body.dark-mode .world-sense-card-subtitle {
     margin-top: 0;
 }
 
-.world-sense-test-btn {
-    width: 100%;
-    flex: 0 0 100%;
+.world-sense-test-btn,
+.world-sense-location-search-btn {
+    width: auto;
+    flex: 1 1 0;
 }
 
 .world-sense-save-btn,
@@ -8682,9 +8700,10 @@ body.dark-mode .world-sense-card-subtitle {
     flex: 1 1 0;
 }
 
-body.dark-mode .world-sense-test-btn {
-    flex: 0 0 100%;
-    width: 100%;
+body.dark-mode .world-sense-test-btn,
+body.dark-mode .world-sense-location-search-btn {
+    flex: 1 1 0;
+    width: auto;
 }
 
 body.dark-mode .world-sense-save-btn,
@@ -8743,6 +8762,137 @@ body.dark-mode .world-sense-cache-empty {
 
 #world-sense-weather-status {
     margin-top: 12px;
+}
+
+.world-sense-auto-source {
+    /* ★ 标题和开关在第一行，说明框独占第二行，避免被右侧开关挤成偏窄的一列。 */
+    width: 100%;
+    flex: 0 0 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.14);
+    background: rgba(0, 0, 0, 0.04);
+    color: #555;
+    font-size: 0.82rem;
+    line-height: 1.5;
+}
+
+body.dark-mode .world-sense-auto-source {
+    border-color: rgba(255, 255, 255, 0.22);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(235, 235, 235, 0.76);
+}
+
+.world-sense-professional-api {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+body.dark-mode .world-sense-professional-api,
+body.custom-dark .world-sense-professional-api {
+    border-top-color: rgba(255, 255, 255, 0.18);
+}
+
+.world-sense-professional-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.world-sense-professional-title-row .input-label {
+    margin: 0;
+}
+
+.world-sense-info-btn {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 4px;
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 50%;
+    color: inherit;
+    background: transparent;
+    cursor: pointer;
+}
+
+/* ★ 图标本体收小，但保留 32px 点击热区，手机端不容易点偏。 */
+.world-sense-info-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+.world-sense-info-btn:hover,
+.world-sense-info-btn:focus-visible {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+body.dark-mode .world-sense-info-btn:hover,
+body.dark-mode .world-sense-info-btn:focus-visible,
+body.custom-dark .world-sense-info-btn:hover,
+body.custom-dark .world-sense-info-btn:focus-visible {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+#qweather-tutorial-modal,
+#world-sense-location-modal {
+    z-index: 10050;
+}
+
+#qweather-tutorial-modal .sync-passphrase-header a {
+    color: var(--primary-color, #7165e3);
+    overflow-wrap: anywhere;
+}
+
+.world-sense-location-modal-box {
+    width: min(88vw, 560px);
+}
+
+.world-sense-location-candidates {
+    margin-top: 14px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.world-sense-location-candidate {
+    width: 100%;
+    margin: 0;
+    padding: 11px 13px;
+    border-radius: 10px;
+    border: 1px solid rgba(0, 0, 0, 0.14);
+    background: rgba(255, 255, 255, 0.48);
+    color: inherit;
+    text-align: left;
+    line-height: 1.45;
+    cursor: pointer;
+}
+
+.world-sense-location-candidate:hover,
+.world-sense-location-candidate:focus-visible {
+    border-color: var(--primary-color, #7165e3);
+    background: rgba(255, 255, 255, 0.75);
+}
+
+body.dark-mode .world-sense-location-candidate,
+body.custom-dark .world-sense-location-candidate {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-mode .world-sense-location-candidate:hover,
+body.dark-mode .world-sense-location-candidate:focus-visible,
+body.custom-dark .world-sense-location-candidate:hover,
+body.custom-dark .world-sense-location-candidate:focus-visible {
+    background: rgba(255, 255, 255, 0.14);
 }
 
 /* =================世界感知结束====================*/
