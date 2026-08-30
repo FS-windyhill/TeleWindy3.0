@@ -910,7 +910,7 @@
                             <span class="app-switch-slider world-sense-switch-slider"></span>
                         </label>
                         <div class="world-sense-auto-source">
-                            配置天气API时，天气信息更准确，未配置或请求失败时使用开源免费天气
+                            配置天气API时，天气信息更准确，未配置或请求失败时使用开源天气。</br>和风天气每月免费调用50000次，教程见下方i图标。
                         </div>
                     </div>
 
@@ -2198,6 +2198,9 @@
             <button data-action="cancel" class="btn-cancel">取消</button>
         </div>
     </div>
+
+    <!-- 轻量操作反馈独立于弹窗存在，消息菜单关闭后仍能继续显示。 -->
+    <div id="toast-stack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
 
     <!-- 2. 编辑消息的弹窗 (顺便检查下有没有加这个) -->
     <div id="msg-edit-modal" class="modal-overlay" style="display: none;">

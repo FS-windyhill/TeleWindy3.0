@@ -8094,6 +8094,7 @@ body.dark-mode button#btn-close-search {
     min-height: 220px;
     overflow-y: auto;
     border-top: 1px solid rgba(150, 150, 150, 0.2);
+    background: rgba(255, 255, 255, 0.25);
     border-bottom: 1px solid rgba(150, 150, 150, 0.2);
 }
 
@@ -8168,6 +8169,7 @@ body.dark-mode .model-picker-empty {
 
 body.dark-mode .model-picker-results {
     border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(20, 20, 20, 0.32);
 }
 
 body.dark-mode .model-picker-result-item {
@@ -12251,3 +12253,56 @@ body.dark-mode .gist-tutorial-box {
     background: rgba(35, 35, 35, 0.72);
     border-color: rgba(255, 255, 255, 0.12);
 }
+
+/* ======================= 轻量 Toast 操作反馈 START ======================= */
+.toast-stack {
+    position: fixed;
+    left: 50%;
+    bottom: calc(16vh + env(safe-area-inset-bottom, 0px));
+    z-index: 10100;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.45rem;
+    width: max-content;
+    max-width: calc(100vw - 2rem);
+    pointer-events: none;
+    transform: translateX(-50%);
+}
+
+.toast-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    max-width: 100%;
+    padding: 0.55rem 0.8rem;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 0.6rem;
+    color: #fff;
+    background: rgba(20, 20, 20, 0.7);
+    font-size: 0.8rem;
+    line-height: 1;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateY(0.65rem);
+    transition: opacity 220ms ease, transform 220ms ease-out;
+}
+
+.toast-item svg {
+    width: 0.8rem;
+    height: 0.8rem;
+    flex: 0 0 0.8rem;
+}
+
+.toast-item.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.toast-item.leaving {
+    opacity: 0;
+    transform: translateY(-0.25rem);
+    transition-duration: 300ms;
+}
+/* ======================= 轻量 Toast 操作反馈 END ======================= */

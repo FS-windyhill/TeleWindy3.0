@@ -2228,6 +2228,83 @@ const API = {
 };
 
 // =========================================
+// 轻量 Toast：同时显示 3 条，额外保留 3 条短队列，避免连续操作把屏幕占满。
+// =========================================
+const Toast = {
+    maxVisible: 3,
+    maxQueued: 3,
+    visibleCount: 0,
+    queue: [],
+
+    show(message, options = {}) {
+        const item = {
+            message: String(message || ''),
+            duration: Number.isFinite(options.duration) ? Math.max(0, options.duration) : 1500
+        };
+
+        if (!item.message) return;
+
+        if (this.visibleCount >= this.maxVisible) {
+            // 队列已满时优先保留最新反馈，避免过时提示排很久才出现。
+            if (this.queue.length >= this.maxQueued) this.queue.shift();
+            this.queue.push(item);
+            return;
+        }
+
+        this._mount(item);
+    },
+
+    _mount(item) {
+        const stack = document.getElementById('toast-stack');
+        if (!stack) return;
+
+        const toast = document.createElement('div');
+        toast.className = 'toast-item';
+
+        // SVG 使用固定模板，不接收外部内容；路径沿用 Lucide 的 check 图标。
+        const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        icon.setAttribute('viewBox', '0 0 24 24');
+        icon.setAttribute('fill', 'none');
+        icon.setAttribute('stroke', 'currentColor');
+        icon.setAttribute('stroke-width', '2');
+        icon.setAttribute('stroke-linecap', 'round');
+        icon.setAttribute('stroke-linejoin', 'round');
+        icon.setAttribute('aria-hidden', 'true');
+
+        const checkPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        checkPath.setAttribute('d', 'M20 6 9 17l-5-5');
+        icon.appendChild(checkPath);
+
+        const text = document.createElement('span');
+        text.textContent = item.message;
+        toast.append(icon, text);
+        stack.appendChild(toast);
+        this.visibleCount += 1;
+
+        // 分气泡复制后会在同一轮任务里退出多选模式；先强制落地初始样式，
+        // 避免浏览器把“插入元素”和“进入 show 状态”合并，导致进场动画被跳过。
+        void toast.offsetHeight;
+        requestAnimationFrame(() => toast.classList.add('show'));
+
+        const close = () => {
+            if (toast.classList.contains('leaving')) return;
+            toast.classList.add('leaving');
+
+            setTimeout(() => {
+                toast.remove();
+                this.visibleCount = Math.max(0, this.visibleCount - 1);
+
+                // 当前 Toast 完全移除后再补位，堆叠移动不会互相覆盖。
+                const nextItem = this.queue.shift();
+                if (nextItem) this._mount(nextItem);
+            }, 300);
+        };
+
+        setTimeout(close, item.duration);
+    }
+};
+
+// =========================================
 // =========================================
 // 6. UI RENDERER (DOM 操作)
 // =========================================
@@ -11047,8 +11124,7 @@ const App = {
             // 5. 执行复制
             navigator.clipboard.writeText(finalCopyText)
                 .then(() => {
-                    // console.log("复制成功:", finalCopyText);
-                    // 可以加一个轻提示 UI.showToast("复制成功");
+                    Toast.show('已复制');
                 })
                 .catch(err => {
                     console.error("复制失败:", err);
@@ -11240,7 +11316,7 @@ const App = {
         // 3. 执行复制
         navigator.clipboard.writeText(fullText)
             .then(() => {
-                // console.log('复制成功');
+                Toast.show('已复制');
             })
             .catch(err => {
                 console.error('无法复制文本: ', err);
