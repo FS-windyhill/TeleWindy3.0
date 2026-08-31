@@ -12322,7 +12322,7 @@ body.dark-mode .gist-tutorial-box {
 /* =========== 恢复预设 ================== */
 
 button#restore-default-system-prompt-btn.icon-btn {
-    padding: 6px;
+
     background: #ffffff;
     color: #333;
     border: 0.7px solid var(--btn-border-color);
