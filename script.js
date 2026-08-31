@@ -4092,6 +4092,7 @@ const UI = {
         const select = document.getElementById('system-prompt-preset-select');
         const saveBtn = document.getElementById('save-system-prompt-preset-btn');
         const delBtn = document.getElementById('del-system-prompt-preset-btn');
+        const restoreBtn = document.getElementById('restore-default-system-prompt-btn');
 
         if (!select) return;
 
@@ -4104,6 +4105,10 @@ const UI = {
         }
 
         select.onchange = (e) => App.handleLoadSystemPromptPreset(e.target.value);
+
+        if (restoreBtn) {
+            restoreBtn.onclick = () => App.handleRestoreDefaultSystemPrompt();
+        }
 
         select.innerHTML = '<option value="">-- 选择 System Prompt 预设 --</option>';
 
@@ -10811,6 +10816,18 @@ const App = {
 
         input.value = preset.prompt !== undefined ? preset.prompt : '';
         STATE.settings.SYSTEM_PROMPT = input.value.trim();
+    },
+
+    handleRestoreDefaultSystemPrompt() {
+        const input = document.getElementById('global-system-prompt');
+        if (!input) return;
+
+        // 只回填内置原文，不改 STATE 或存储；沿用设置面板的保存流程正式生效。
+        input.value = CONFIG.SYSTEM_PROMPT;
+
+        // 恢复后不再对应某个用户预设，清空选择，避免名称与内容对不上。
+        const select = document.getElementById('system-prompt-preset-select');
+        if (select) select.value = '';
     },
 
     async handleDeleteSystemPromptPreset() {

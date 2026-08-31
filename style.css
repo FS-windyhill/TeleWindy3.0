@@ -6510,7 +6510,18 @@ body.custom-dark button#model-picker-use-input {
     color: #ffffff;
     border: 0.7px solid #a9a9a9;
 }
+
 /* ==================== 自定义主题：模型选择弹窗结束 ==================== */
+
+
+
+body.custom-dark button#restore-default-system-prompt-btn.icon-btn {
+    background: var(--btn-color);
+    color: #ffffff;
+    border: 0.7px solid #a9a9a9;
+}
+
+
 
 /* 【【【[[[】】】*/
 
@@ -12280,8 +12291,8 @@ body.dark-mode .gist-tutorial-box {
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 0.6rem;
     color: #fff;
-    background: rgba(20, 20, 20, 0.7);
-    font-size: 0.8rem;
+    background: rgba(20, 20, 20, 0.78);
+    font-size: 0.85rem;
     line-height: 1;
     white-space: nowrap;
     opacity: 0;
@@ -12306,3 +12317,32 @@ body.dark-mode .gist-tutorial-box {
     transition-duration: 300ms;
 }
 /* ======================= 轻量 Toast 操作反馈 END ======================= */
+
+
+/* =========== 恢复预设 ================== */
+
+button#restore-default-system-prompt-btn.icon-btn {
+    padding: 6px;
+    background: #ffffff;
+    color: #333;
+    border: 0.7px solid var(--btn-border-color);
+}
+
+
+body.dark-mode button#restore-default-system-prompt-btn.icon-btn {
+    background: var(--btn-color);
+    color: #ffffff;
+    border: 0.7px solid #a9a9a9;
+}
+
+
+/* =========== 恢复预设END ================== */
+
+
+
+
+
+
+
+
+
