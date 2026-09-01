@@ -3952,7 +3952,11 @@ const UI = {
 
         // 3. Loop through paragraphs
         for (let i = 0; i < paragraphs.length; i++) {
-            if (i > 0) await new Promise(r => setTimeout(r, 400));
+            if (i > 0) {
+                // 第一条立即显示；后续气泡按自身可见文字长度模拟输入时间，并加入轻微随机浮动。
+                const bubbleDelayMs = getWaterfallBubbleDelayMs(paragraphs[i]);
+                await new Promise(r => setTimeout(r, bubbleDelayMs));
+            }
             
             const p = paragraphs[i].trim();
 
@@ -15951,6 +15955,33 @@ function splitMessageIntoBubbleParts(text) {
 
     pushCurrentPart();
     return parts;
+}
+
+/**
+ * 根据待显示气泡的可见文字长度计算瀑布流等待时间。
+ * 这里集中保留最短、最长、满速字数和随机浮动，后续测试手感时只需要调整这几个值。
+ */
+function getWaterfallBubbleDelayMs(text) {
+    const minDelayMs = 500;
+    const maxDelayMs = 2500;
+    const maxLengthChars = 120;
+    const jitterMs = 120;
+
+    // 只统计用户大致能看到的内容，避免 Markdown 链接地址和格式符号把等待时间明显拉长。
+    const visibleText = String(text || '')
+        .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+        .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+        .replace(/<[^>]+>/g, '')
+        .replace(/[`*_>#~|\[\]()]/g, '')
+        .replace(/\s+/g, '');
+
+    const visibleLength = Array.from(visibleText).length;
+    const lengthRatio = Math.min(visibleLength / maxLengthChars, 1);
+    const baseDelayMs = minDelayMs + (maxDelayMs - minDelayMs) * lengthRatio;
+    const randomOffsetMs = (Math.random() * 2 - 1) * jitterMs;
+
+    // 最终结果始终限制在 0.5～2.5 秒，随机浮动也不能突破边界。
+    return Math.round(Math.min(maxDelayMs, Math.max(minDelayMs, baseDelayMs + randomOffsetMs)));
 }
 
 /**
