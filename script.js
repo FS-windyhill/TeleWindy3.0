@@ -15962,8 +15962,8 @@ function splitMessageIntoBubbleParts(text) {
  * 这里集中保留最短、最长、满速字数和随机浮动，后续测试手感时只需要调整这几个值。
  */
 function getWaterfallBubbleDelayMs(text) {
-    const minDelayMs = 800;
-    const maxDelayMs = 3000;
+    const minDelayMs = 1000;
+    const maxDelayMs = 3500;
     const maxLengthChars = 120;
     const jitterMs = 120;
 
