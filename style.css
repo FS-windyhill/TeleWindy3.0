@@ -7955,7 +7955,8 @@ body.dark-mode #modal-moments-settings .moments-auto-switch-cell {
     padding: 0;
     border: 0;
     background: transparent;
-    accent-color: #657da8;
+    /* ★ 跟随“主设置 → 外观”保存的主题色，不再使用心迹自己的固定蓝色。 */
+    accent-color: var(--primary-btn-text, #876eff);
 }
 
 .moments-probability-card .moments-setting-hint {
