@@ -995,7 +995,7 @@
                     </svg>
                 </button>
                 
-                <h1>我的心迹</h1>
+                <h1 id="moments-page-title">心迹</h1>
 
                 <button id="moments-settings-btn" class="header-icon-btn right" title="心迹设置">
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1021,8 +1021,8 @@
                 <input type="file" id="m-avatar-upload-input" accept="image/*" style="display: none;">
 
 
-                <!-- 朋友圈头部：背景、头像、签名 -->
-                <div class="moments-header">
+                <!-- ★ 公屏和个人主页都保留原有封面布局；公屏大头像是“我的主页”入口。 -->
+                <div id="moments-profile-header" class="moments-header">
                     <img id="moments-bg" class="m-bg clickable-img" src="assets/images/wallpaper.jpg" title="点击更换背景">
                     
                     <div class="m-user-info">
@@ -1032,8 +1032,10 @@
                             <span id="moments-signature" class="m-signature" title="点击修改签名">写下你的个性签名...</span>
                         </div>
                         
-                        <!-- 头像 -->
-                        <img id="moments-avatar" class="m-avatar clickable-img" src="assets/images/user.jpg" title="点击更换头像">
+                        <!-- 头像：公屏点击进我的主页，在我的主页内继续保留更换头像功能。 -->
+                        <button id="moments-avatar-button" class="m-avatar-button" type="button" aria-label="进入我的主页">
+                            <img id="moments-avatar" class="m-avatar" src="assets/images/user.jpg" alt="">
+                        </button>
                     </div>
                 </div>
 
@@ -1049,7 +1051,8 @@
 
         <!-- ================= 4. 心迹设置 Modal ================= -->
         <div id="modal-moments-settings" class="modal-overlay moments-bg hidden">
-            <div class="modal.extra-layout glass-panel">
+            <!-- ★ 设置页沿用旧版单层内容框，不再在滚动区外重复套毛玻璃卡片。 -->
+            <div class="moments-settings-panel">
                 <h3 id="modal-title">心迹设置</h3>
                 <div class="m-modal-scroll-container">
                     <div class="input-group">
@@ -1058,9 +1061,61 @@
                     </div>
                     
                     <div class="input-group">
-                        <label>谁可以评论我 (留空则所有人):</label>
+                        <label>谁能看到我的动态</label>
+                        <p class="moments-setting-hint">留空代表所有角色；这些角色会看到动态并为你评论。</p>
                         <div id="m-setting-allowed-chars" class="checkbox-group">
                             <!-- JS 动态渲染复选框 -->
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label>我能看到谁的动态</label>
+                        <p class="moments-setting-hint">留空代表所有角色；只有关闭下方总开关才会彻底停止角色发布。</p>
+                        <div id="m-setting-visible-authors" class="checkbox-group">
+                            <!-- JS 动态渲染角色动态作者复选框 -->
+                        </div>
+                    </div>
+
+                    <div class="input-group moments-auto-setting">
+                        <!-- ★ 独立类名复刻“外观-不展示思考链”的开关样式，避免两个设置互相影响。 -->
+                        <label class="moments-auto-switch-cell" for="m-setting-auto-enabled">
+                            <input id="m-setting-auto-enabled" type="checkbox">
+                            <span>
+                                <strong>角色自动动态</strong>
+                                <small>每次打开网页时最多尝试生成一条。</small>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div class="input-group moments-probability-setting">
+                        <!-- ★ 概率卡片参考“外观-字号大小”，标题、数值和滑块收进同一个底板。 -->
+                        <div class="moments-probability-card">
+                            <div class="moments-probability-heading">
+                                <label for="m-setting-auto-probability">出现新动态的概率</label>
+                                <span class="moments-probability-value">
+                                    <input id="m-setting-auto-probability" type="number" min="0" max="100" step="1" inputmode="numeric">
+                                    <em>%</em>
+                                </span>
+                            </div>
+                            <div class="moments-probability-control">
+                            <input id="m-setting-auto-probability-range" type="range" min="0" max="100" step="1">
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <div class="input-group moments-probability-setting">
+                        <div class="moments-probability-card">
+                            <div class="moments-probability-heading">
+                                <label for="m-setting-auto-like-probability">角色点赞我的动态概率</label>
+                                <span class="moments-probability-value">
+                                    <input id="m-setting-auto-like-probability" type="number" min="0" max="100" step="1" inputmode="numeric">
+                                    <em>%</em>
+                                </span>
+                            </div>
+                            <div class="moments-probability-control">
+                            <input id="m-setting-auto-like-probability-range" type="range" min="0" max="100" step="1">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1083,6 +1138,18 @@
                 <div class="edit-buttons">
                     <button id="btn-close-m-write" class="cancel-btn">取消</button>
                     <button id="btn-publish-m-write" class="primary">发布</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= 5-2. 给动态写评论 Modal ================= -->
+        <div id="modal-write-moment-comment" class="modal-overlay moments-bg hidden">
+            <div class="edit-box glass-panel">
+                <h3 id="moment-comment-modal-title" class="bianjixiaoxi">写评论</h3>
+                <textarea id="m-comment-text" placeholder="写下你的评论..." rows="4"></textarea>
+                <div class="edit-buttons">
+                    <button id="btn-close-m-comment" class="cancel-btn">取消</button>
+                    <button id="btn-publish-m-comment" class="primary">发送</button>
                 </div>
             </div>
         </div>
@@ -2202,6 +2269,7 @@
             <div class="menu-gap"></div>
             <button data-action="cancel" class="btn-cancel">取消</button>
         </div>
+
     </div>
 
     <!-- 轻量操作反馈独立于弹窗存在，消息菜单关闭后仍能继续显示。 -->

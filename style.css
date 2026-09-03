@@ -6521,6 +6521,96 @@ body.custom-dark button#restore-default-system-prompt-btn.icon-btn {
     border: 0.7px solid #a9a9a9;
 }
 
+/* ==================== 自定义主题：心迹 2.0 ==================== */
+body.custom-dark .moment-card {
+    border-color: rgba(255, 255, 255, 0.08);
+    background: #3f3f3f;
+    color: #f4f4f4;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+body.custom-dark .moment-content,
+body.custom-dark .moments-empty-state p {
+    color: #f4f4f4;
+}
+
+body.custom-dark .moment-action-row {
+    border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+body.custom-dark .moment-action-btn {
+    color: #c8cbd0;
+}
+
+body.custom-dark .moment-action-btn.active {
+    color: #ff929a;
+}
+
+body.custom-dark .moment-interactions {
+    color: #f1f1f1;
+}
+
+body.custom-dark .moment-like-panel,
+body.custom-dark .moment-comment-panel {
+    background: #4b4b4b;
+}
+
+body.custom-dark .moment-comments {
+    background: transparent;
+    color: inherit;
+}
+
+body.custom-dark #modal-moments-settings .moments-auto-switch-cell,
+body.custom-dark .moments-probability-card {
+    color: #eeeeee;
+    background: rgba(255, 255, 255, 0.10);
+}
+
+body.custom-dark #modal-moments-settings .moments-probability-value input[type="number"] {
+    color: #eeeeee;
+}
+
+
+body.custom-dark .moment-author-name {
+    color: #9ab6e8;
+}
+
+
+body.custom-dark .moment-likes {
+    color: #aec0e5;
+
+}
+
+
+body.custom-dark #modal-moments-settings .moments-auto-switch-cell {
+    background: rgba(60, 60, 60, 0.58);
+    color: #e0e0e0;
+
+}
+
+/* ==================== 自定义主题：心迹 2.0 结束 ==================== */
+
+/* ==================== 自定义主题：世界感知补充 ==================== */
+body.custom-dark .world-sense-professional-api {
+    border-top-color: rgba(255, 255, 255, 0.18);
+}
+
+body.custom-dark .world-sense-info-btn:hover,
+body.custom-dark .world-sense-info-btn:focus-visible {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+body.custom-dark .world-sense-location-candidate {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+body.custom-dark .world-sense-location-candidate:hover,
+body.custom-dark .world-sense-location-candidate:focus-visible {
+    background: rgba(255, 255, 255, 0.14);
+}
+/* ==================== 自定义主题：世界感知补充结束 ==================== */
+
 
 
 /* 【【【[[[】】】*/
@@ -7458,6 +7548,494 @@ body.dark-mode .momment-btn.cancel {
     color: #92b5ff; /* 微信经典蓝灰，或者可以直接用 #333 */
 }
 
+/* =========================================================
+   ★★★★★ 朋友圈 2.0 START：公共动态流 / 个人主页 / 互动区 ★★★★★
+   旧版心迹样式仍保留给弹窗和动作菜单使用，这里只收口新版卡片层级。
+   ========================================================= */
+.moments-header {
+    overflow: visible;
+}
+
+/* ★ 头像外层改用按钮承接公屏跳转，视觉仍保持原来的大头像样式。 */
+.m-avatar-button {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    display: block;
+    background: transparent;
+    line-height: 0;
+}
+
+.m-avatar-button.clickable-img {
+    cursor: pointer;
+}
+
+.moment-card {
+    position: relative;
+    margin: 0 16px 12px;
+    padding: 16px;
+    border: 1px solid rgba(37, 45, 58, 0.055);
+    border-radius: 17px;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 12px;
+    box-shadow: 0 8px 24px rgba(25, 34, 49, 0.055);
+}
+
+.moment-avatar-button,
+.moment-author-name,
+.comment-sender-name {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
+}
+
+.moment-avatar-button {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    flex: 0 0 46px;
+    overflow: hidden;
+}
+
+.moment-author-avatar {
+    width: 100%;
+    height: 100%;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    object-fit: cover;
+    background: #edf0f4;
+    font-size: 1.45rem;
+}
+
+.moment-card-main {
+    min-width: 0;
+    flex: 1;
+}
+
+.moment-card-heading {
+    margin: 1px 0 7px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.moment-author-name {
+    min-width: 0;
+    margin: 0;
+    color: #536b98;
+    font-size: 0.95rem;
+    font-weight: 700;
+    line-height: 1.25;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.dark-mode .moment-author-name {
+
+    color: #9ab6e8;
+}
+
+.moment-content {
+    margin: 0;
+    padding: 0;
+    color: #25272c;
+    font-size: 0.96rem;
+    line-height: 1.65;
+    overflow-wrap: anywhere;
+}
+
+.moment-content .moment-img {
+    display: block;
+    margin-top: 10px;
+}
+
+.moment-meta-row {
+    min-height: 26px;
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: #999fa8;
+    font-size: 0.75rem;
+}
+
+.moment-floor,
+.moment-corner-time {
+    flex: 0 0 auto;
+    color: #b0b4bb;
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.moment-action-row {
+    padding-top: 4px;
+    border-top: 1px solid rgba(39, 45, 55, 0.07);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.moment-action-btn {
+    min-height: 35px;
+    border: 0;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.38em;
+    background: transparent;
+    color: #707680;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+
+/* ★ 操作图标跟随按钮字号缩放，SVG 与“点赞 / 评论”文字保持同高。 */
+.moment-action-btn svg {
+    width: 1em;
+    height: 1em;
+    flex: 0 0 1em;
+}
+
+.moment-action-btn:hover {
+    background: rgba(83, 107, 152, 0.07);
+    color: #536b98;
+}
+
+.moment-action-btn:active {
+    transform: scale(0.96);
+}
+
+.moment-action-btn.active {
+    color: #e36a73;
+}
+
+.moment-interactions {
+    margin-top: 3px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    color: #353940;
+    font-size: 0.86rem;
+}
+
+/* ★ 点赞和评论是两个独立内容框；对应数据为空时连 DOM 都不生成。 */
+.moment-like-panel,
+.moment-comment-panel {
+    padding: 8px 10px;
+    border-radius: 9px;
+    background: #f2f4f7;
+}
+
+.moment-likes {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+    color: #536b98;
+    line-height: 1.45;
+}
+
+body.dark-mode .moment-likes {
+    color: #aec0e5;
+
+}
+
+.moment-comments {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    font-size: inherit;
+}
+
+.comment-item {
+    margin-bottom: 5px;
+    overflow-wrap: anywhere;
+}
+
+.comment-name {
+    color: #536b98;
+    font-weight: 700;
+}
+
+.comment-reply-prefix {
+    margin-right: 3px;
+    color: #7d8490;
+}
+
+.moments-empty-state {
+    min-height: 220px;
+    padding: 40px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #9a9fa8;
+    text-align: center;
+}
+
+.moments-empty-state > span {
+    margin-bottom: 7px;
+    font-size: 2rem;
+}
+
+.moments-empty-state p {
+    margin: 0 0 5px;
+    color: #727780;
+    font-weight: 600;
+}
+
+.moments-empty-state small {
+    font-size: 0.78rem;
+}
+
+.moments-setting-hint {
+    margin: 5px 0 9px;
+    color: #8d929a;
+    font-size: 0.75rem;
+    line-height: 1.45;
+}
+
+.moments-character-choice {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+}
+
+/* ★ 心迹设置沿用旧版的单层结构：只有滚动内容区是一块面板。 */
+.moments-settings-panel {
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    animation: modalPop 0.3s ease-out;
+}
+
+.moments-settings-panel .m-modal-scroll-container {
+    min-height: 0;
+}
+
+.moments-settings-panel > h3 {
+    margin: 0 0 12px;
+    color: #ffffff;
+    text-align: center;
+}
+
+/* ★ 独立复刻主设置的方形开关，不复用 appearance-switch-cell。 */
+#modal-moments-settings .moments-auto-switch-cell {
+    min-height: 32px;
+    margin: 0;
+    padding: 8px 10px;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.48);
+    color: #333;
+    font-size: 0.88rem;
+    cursor: pointer;
+}
+
+body.dark-mode #modal-moments-settings .moments-auto-switch-cell {
+    background: rgba(60, 60, 60, 0.58);
+    color: #e0e0e0;
+
+}
+
+.moments-auto-switch-cell > span {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.moments-auto-switch-cell small {
+    color: #8d929a;
+    font-size: 0.75rem;
+    font-weight: 400;
+}
+
+#modal-moments-settings .moments-auto-switch-cell input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    padding: 0;
+    border: 1px solid #888;
+    border-radius: 5px;
+    position: relative;
+    flex: 0 0 20px;
+    background: rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#modal-moments-settings .moments-auto-switch-cell input[type="checkbox"]:checked {
+    border-color: var(--primary-btn-text, #876eff);
+    background-color: var(--primary-btn-text, #876eff);
+}
+
+#modal-moments-settings .moments-auto-switch-cell input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+    background-position: center;
+    background-size: 70%;
+    background-repeat: no-repeat;
+}
+
+#modal-moments-settings .moments-auto-switch-cell input[type="checkbox"]:focus-visible {
+    outline: 2px solid var(--primary-btn-text, #876eff);
+    outline-offset: 3px;
+}
+
+/* ★ 概率项复刻“字号大小”的一体式底板，数字框仍可直接输入。 */
+.moments-probability-card {
+    padding: 15px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.6);
+    color: #444;
+}
+
+.moments-probability-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+#modal-moments-settings .moments-probability-heading > label {
+    margin: 0;
+    color: inherit;
+    font-size: 0.9rem;
+}
+
+.moments-probability-value {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-weight: 700;
+}
+
+#modal-moments-settings .moments-probability-value input[type="number"] {
+    width: 42px;
+    min-height: auto;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: right;
+    box-shadow: none;
+}
+
+.moments-probability-value em {
+    font-style: normal;
+}
+
+.moments-probability-control {
+    margin-top: 6px;
+}
+
+.moments-probability-control input[type="range"] {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    accent-color: #657da8;
+}
+
+.moments-probability-card .moments-setting-hint {
+    margin: 9px 0 0;
+}
+
+body.dark-mode .moment-card {
+    border-color: rgba(255, 255, 255, 0.08);
+    background: #3f3f3f;
+    color: #f4f4f4;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+body.dark-mode .moment-content,
+body.dark-mode .moments-empty-state p {
+    color: #f4f4f4;
+}
+
+body.dark-mode .moment-action-row {
+    border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+body.dark-mode .moment-action-btn {
+    color: #c8cbd0;
+}
+
+body.dark-mode .moment-action-btn.active {
+    color: #ff929a;
+}
+
+body.dark-mode .moment-interactions {
+    color: #f1f1f1;
+}
+
+body.dark-mode .moment-like-panel,
+body.dark-mode .moment-comment-panel {
+    background: #4b4b4b;
+}
+
+body.dark-mode .moment-comments {
+    background: transparent;
+    color: inherit;
+}
+
+body.dark-mode .moments-auto-switch-cell,
+body.dark-mode .moments-probability-card {
+    color: #e0e0e0;
+    background: rgba(60, 60, 60, 0.58);
+}
+
+body.dark-mode .moments-probability-value input[type="number"] {
+    color: #e0e0e0;
+}
+
+@media (max-width: 520px) {
+    .moment-card {
+        margin: 0 10px 10px;
+        padding: 16px 12px;
+        gap: 10px;
+        border-radius: 14px;
+    }
+
+    .moment-avatar-button {
+        width: 42px;
+        height: 42px;
+        flex-basis: 42px;
+    }
+
+}
+/* ★★★★★ 朋友圈 2.0 END ★★★★★ */
+
 
 /* 菜单项按钮 */
 .momment-btn {
@@ -7567,16 +8145,25 @@ body.dark-mode #m-setting-api-preset {
 
 
 
-/* 复选框外层容器 */
-#m-setting-allowed-chars {
+/* 两份角色名单沿用旧版复选框外观，固定并列两列 */
+#m-setting-allowed-chars,
+#m-setting-visible-authors {
     display: grid;
-    /* 自动网格：每列最小 100px，自动填满一行 */
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 15px;
     padding: 15px;
     background: rgba(255, 255, 255, 0.05);
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 名字过长时省略，避免双列布局被撑开 */
+#m-setting-allowed-chars .char-name,
+#m-setting-visible-authors .char-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* 单个选项的 Label */
@@ -8999,8 +9586,7 @@ body.dark-mode .world-sense-auto-source {
     border-top: 1px solid rgba(0, 0, 0, 0.12);
 }
 
-body.dark-mode .world-sense-professional-api,
-body.custom-dark .world-sense-professional-api {
+body.dark-mode .world-sense-professional-api {
     border-top-color: rgba(255, 255, 255, 0.18);
 }
 
@@ -9044,9 +9630,7 @@ body.custom-dark .world-sense-professional-api {
 }
 
 body.dark-mode .world-sense-info-btn:hover,
-body.dark-mode .world-sense-info-btn:focus-visible,
-body.custom-dark .world-sense-info-btn:hover,
-body.custom-dark .world-sense-info-btn:focus-visible {
+body.dark-mode .world-sense-info-btn:focus-visible {
     background: rgba(255, 255, 255, 0.12);
 }
 
@@ -9091,16 +9675,13 @@ body.custom-dark .world-sense-info-btn:focus-visible {
     background: rgba(255, 255, 255, 0.75);
 }
 
-body.dark-mode .world-sense-location-candidate,
-body.custom-dark .world-sense-location-candidate {
+body.dark-mode .world-sense-location-candidate {
     border-color: rgba(255, 255, 255, 0.2);
     background: rgba(255, 255, 255, 0.08);
 }
 
 body.dark-mode .world-sense-location-candidate:hover,
-body.dark-mode .world-sense-location-candidate:focus-visible,
-body.custom-dark .world-sense-location-candidate:hover,
-body.custom-dark .world-sense-location-candidate:focus-visible {
+body.dark-mode .world-sense-location-candidate:focus-visible {
     background: rgba(255, 255, 255, 0.14);
 }
 

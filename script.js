@@ -113,6 +113,7 @@
 //     - isViewingContactChat(contactId): 判断用户是否真的正在查看某个角色聊天窗口
 //     - markContactIncomingMessage(contact, options): 统一处理非当前窗口 AI 新消息的红点和顶部通知
 //     - showMomentReplyNotice(charId, options): 心迹收到新 AI 回复时弹顶部通知，当前就在心迹页则静默
+//     - showMomentLikeNotice(charId, options): 角色延迟点赞后弹顶部通知，当前就在心迹页则静默
 //     - showTopNotice(message, options): 通用顶部通知栈，支持多条并发、按钮和上划关闭
 //     - isDynamicContextSystemRoleError(error): 判断错误是否像多 system / system role 兼容问题
 //     - getDynamicContextWarnKey(contact, requestSettings): 生成兼容提示的会话内去重 key
@@ -593,7 +594,9 @@
 //     - rememberReturnView(pageName, fallback): 记录二级页面从哪个主入口进入
 //     - getReturnView(pageName, fallback): 获取二级页面返回时应该回到的主入口
 //     - switchMainTab(tab): 切换底部导航栏的主视图（聊天、探索、心迹）
-//     - renderMomentsUI(): 渲染心迹（朋友圈）列表，包括头部信息（背景、头像、用户名、签名）和动态卡片
+//     - renderMomentsUI() / openMomentProfile() / showMomentsFeed(): 渲染公开动态流与用户/角色个人主页
+//     - maybeGenerateCharacterMoment(): 按可见名单与用户概率设置生成角色动态
+//     - toggleMomentLike() / openMomentCommentComposer(): 处理动态点赞和用户主动评论
 //     - loadMoreMoments(): 加载更多心迹动态，增加可见数量并重新渲染
 //     - openMomentsSettings(): 打开心迹设置弹窗，填充API预设下拉框和允许评论的联系人复选框列表
 //     - saveMomentsSettings(): 保存心迹设置（API预设索引、允许评论的角色列表）到STATE和存储
@@ -680,6 +683,9 @@ const STATE = {
     momentsSettings: JSON.parse(JSON.stringify(CONFIG.DEFAULT.MOMENTS_SETTINGS)), 
     
     visibleMomentsCount: 15,
+    momentsViewMode: 'feed',
+    momentsProfileAuthorId: null,
+    composingMomentCommentId: null,
 
     // 探索 TO DO / 倒数日
     // ★★★ 内容单独存在 IndexedDB；是否注入 AI 由 settings 里的开关控制 ★★★
@@ -3003,6 +3009,11 @@ const UI = {
             
             // 隐藏底栏 (因为心迹页顶部有自己的返回按钮)
             if (bottomTabBar) bottomTabBar.style.display = 'none';
+
+            // ★ 从探索页进入时永远先看公共动态流；个人主页只由头像点击进入。
+            STATE.momentsViewMode = 'feed';
+            STATE.momentsProfileAuthorId = null;
+            STATE.visibleMomentsCount = CONFIG.MOMENTS_PAGE_SIZE;
             
             // 触发心迹数据的渲染
             if (typeof this.renderMomentsUI === 'function') {
@@ -4191,6 +4202,12 @@ const App = {
     async init() {
         // [关键点 1] 加上 await，程序会在这里暂停，直到数据库加载完毕
         await Storage.load();
+        if (this.normalizeMomentsData()) {
+            await Storage.saveMoments();
+        }
+        if (this.normalizeCharacterMomentStats()) {
+            await Storage.saveMomentsSettings();
+        }
         if (this.normalizeTodoPlanIds()) {
             await Storage.saveTodoPlans();
         }
@@ -4224,6 +4241,8 @@ const App = {
         // ★ 后台回复接收：启动时检查本地有没有未完成的 job。
         //   如果页面曾经刷新/切回来，这里会尝试把后端已完成的回复写回聊天记录。
         this.resumePendingChatJobs();
+        // ★ 角色动态只在数据和事件都准备好后检查；延后一拍，不阻塞首页首次绘制。
+        setTimeout(() => this.maybeGenerateCharacterMoment('startup'), 1200);
         
         UI.initStatusBar();
         
@@ -4291,7 +4310,7 @@ const App = {
                             API.forgetPendingJob(pending.jobId);
                             if (applied) await Storage.saveMoments();
                             this.renderMomentsUI();
-                            if (applied && pending.context.type !== 'regenerate_comment') {
+                            if (applied && !['regenerate_comment', 'generate_character_moment'].includes(pending.context.type)) {
                                 this.showMomentReplyNotice(pending.context.charId);
                             }
                             console.info('[AsyncBackend] resume saved moment result', {
@@ -4513,6 +4532,23 @@ const App = {
     // 心迹没有聊天页的 contactId + history，所以必须在 pending context 里记录回填位置。
     // Worker 只负责生成文本；回到前端后，这里根据 context 写回对应动态或评论。
     async applyAsyncMomentJob(context, job, jobId) {
+        // ★ 角色发动态没有预先存在的 momentId，要先解析 JSON 并创建动态，再走其它评论回填分支。
+        if (context?.type === 'generate_character_moment') {
+            try {
+                return await this.saveCharacterMomentFromResponse(
+                    context.charId,
+                    job.result || '',
+                    context.windowStart,
+                    context.windowEnd || Date.now(),
+                    jobId
+                );
+            } catch (error) {
+                // ★ 后台返回了非法 JSON 时直接丢弃本次结果，避免同一个完成任务每次启动都重复解析失败。
+                console.warn('[心迹] 后台角色动态校验失败:', error);
+                return false;
+            }
+        }
+
         const moment = STATE.moments.find(item => item.id === context.momentId);
         if (!moment) return false;
 
@@ -5567,6 +5603,19 @@ const App = {
         const name = contact?.name || options.name || '有人';
         this.showTopNotice(`${name}回复了你的心迹`, {
             type: 'moment-reply',
+            timeout: options.timeout || 6500,
+            targetView: 'moments'
+        });
+    },
+
+    showMomentLikeNotice(charId, options = {}) {
+        // ★ 点赞和评论遵循同一套静默规则：正在心迹页时直接看列表变化，不重复弹横幅。
+        if (options.notice === false || this.isViewingMomentsPage()) return;
+
+        const contact = STATE.contacts.find(c => String(c.id) === String(charId));
+        const name = contact?.name || options.name || '有人';
+        this.showTopNotice(`${name}点赞了你的动态`, {
+            type: 'moment-like',
             timeout: options.timeout || 6500,
             targetView: 'moments'
         });
@@ -11716,129 +11765,291 @@ const App = {
 
 
 
-// 渲染心迹列表与分页
+    // ★★★★★ 朋友圈 2.0：数据兼容、作者资料与页面状态 START ★★★★★
+    normalizeMomentsData() {
+        if (!Array.isArray(STATE.moments)) {
+            STATE.moments = [];
+            return true;
+        }
+
+        let changed = false;
+        STATE.moments.forEach(moment => {
+            if (!moment || typeof moment !== 'object') return;
+            // ★ 旧版本里的动态全部由用户发布；补 authorId 后即可无损进入“我的主页”。
+            if (!moment.authorId) {
+                moment.authorId = 'user';
+                changed = true;
+            }
+            if (!Array.isArray(moment.comments)) {
+                moment.comments = [];
+                changed = true;
+            }
+            if (!Array.isArray(moment.likes)) {
+                moment.likes = [];
+                changed = true;
+            }
+            if (!moment.createdAt) {
+                moment.createdAt = Number(moment.timestamp || Date.now());
+                changed = true;
+            }
+        });
+        return changed;
+    },
+
+    normalizeCharacterMomentStats() {
+        // ★ 升级前已经生成的角色动态也要计入冷却，避免版本更新后立即重复发帖。
+        const settings = STATE.momentsSettings || CONFIG.DEFAULT.MOMENTS_SETTINGS;
+        let changed = false;
+        if (!settings.autoMomentStatsByChar || typeof settings.autoMomentStatsByChar !== 'object') {
+            settings.autoMomentStatsByChar = {};
+            changed = true;
+        }
+        const today = this.getMomentLocalDateKey(Date.now());
+        const characterMoments = (Array.isArray(STATE.moments) ? STATE.moments : [])
+            .filter(moment => String(moment.authorId || 'user') !== 'user');
+
+        characterMoments.forEach(moment => {
+            const key = String(moment.authorId);
+            if (settings.autoMomentStatsByChar[key]) return;
+            const authorMoments = characterMoments.filter(item => String(item.authorId) === key);
+            const createdTimes = authorMoments
+                .map(item => Number(item.createdAt || 0))
+                .filter(Number.isFinite);
+            settings.autoMomentStatsByChar[key] = {
+                lastGeneratedAt: createdTimes.length ? Math.max(...createdTimes) : 0,
+                dailyDate: today,
+                dailyCount: authorMoments.filter(item => this.getMomentLocalDateKey(Number(item.createdAt || 0)) === today).length
+            };
+            changed = true;
+        });
+        return changed;
+    },
+
+    getMomentAuthor(authorId) {
+        if (!authorId || authorId === 'user') {
+            return {
+                id: 'user',
+                name: STATE.momentsSettings?.username || '你的名字',
+                signature: STATE.momentsSettings?.signature || '写下你的此刻心情...',
+                avatar: STATE.momentsSettings?.avatar || 'assets/images/user.jpg',
+                isUser: true
+            };
+        }
+
+        const contact = STATE.contacts.find(item => String(item.id) === String(authorId));
+        return {
+            id: String(authorId),
+            name: contact?.name || '已删除的角色',
+            // ★ 角色主页不使用占位个性签名，只保留用户自己设置的签名。
+            signature: '',
+            avatar: contact?.avatar || '🌼',
+            isUser: false,
+            contact
+        };
+    },
+
+    renderMomentAvatar(author, className = 'moment-author-avatar') {
+        const avatar = String(author?.avatar || '').trim();
+        if (/^(data:image\/|https?:\/\/|blob:|\.\/assets\/|assets\/)/i.test(avatar)) {
+            return `<img class="${className}" src="${this.escapeHtml(avatar)}" alt="">`;
+        }
+        return `<span class="${className} text-avatar">${this.escapeHtml(avatar || '🌼')}</span>`;
+    },
+
+    getCharacterMomentCover(authorId) {
+        const covers = [
+            'assets/images/moments-cover-01.webp',
+            'assets/images/moments-cover-02.webp',
+            'assets/images/moments-cover-03.webp',
+            'assets/images/moments-cover-04.webp',
+            'assets/images/moments-cover-05.webp',
+            'assets/images/moments-cover-06.webp',
+            'assets/images/moments-cover-07.webp',
+            'assets/images/moments-cover-08.webp'
+        ];
+        // ★ 首次进入角色主页时随机分配，之后把索引存入心迹设置，避免每次打开都换封面。
+        const settings = STATE.momentsSettings || CONFIG.DEFAULT.MOMENTS_SETTINGS;
+        if (!settings.characterMomentCoverIndexes || typeof settings.characterMomentCoverIndexes !== 'object') {
+            settings.characterMomentCoverIndexes = {};
+        }
+        const key = String(authorId || '');
+        let coverIndex = Number(settings.characterMomentCoverIndexes[key]);
+        if (!Number.isInteger(coverIndex) || coverIndex < 0 || coverIndex >= covers.length) {
+            coverIndex = Math.floor(Math.random() * covers.length);
+            settings.characterMomentCoverIndexes[key] = coverIndex;
+            Storage.saveMomentsSettings?.().catch(error => console.warn('[心迹] 角色封面分配保存失败:', error));
+        }
+        return covers[coverIndex];
+    },
+
+    openMomentProfile(authorId) {
+        STATE.momentsViewMode = 'profile';
+        STATE.momentsProfileAuthorId = String(authorId || 'user');
+        STATE.visibleMomentsCount = CONFIG.MOMENTS_PAGE_SIZE;
+        this.renderMomentsUI();
+        document.getElementById('moments-scroll-area')?.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+
+    showMomentsFeed() {
+        STATE.momentsViewMode = 'feed';
+        STATE.momentsProfileAuthorId = null;
+        STATE.visibleMomentsCount = CONFIG.MOMENTS_PAGE_SIZE;
+        this.renderMomentsUI();
+        document.getElementById('moments-scroll-area')?.scrollTo({ top: 0, behavior: 'smooth' });
+    },
+
+    // 渲染公共动态流或某一个人的主页；公屏不显示编号，个人主页按作者动态重排编号。
     renderMomentsUI() {
-        // 1. 获取 DOM 元素
-        const bgImg = document.getElementById('moments-bg');
-        const avatarImg = document.getElementById('moments-avatar');
-        const username = document.getElementById('moments-username'); // <-- 获取元素
-        const signature = document.getElementById('moments-signature');
         const feed = document.getElementById('moments-feed');
         const loadMoreBtn = document.getElementById('btn-load-more-moments');
+        if (!feed) return;
 
-        // 2. 安全获取设置 (防止 undefined)
-        // 假设 CONFIG 存在，加了一点容错处理
-        const defaultSettings = (typeof CONFIG !== 'undefined' && CONFIG.DEFAULT) ? CONFIG.DEFAULT.MOMENTS_SETTINGS : {};
-        const currentSettings = STATE.momentsSettings || defaultSettings;
-
-        // 3. 回显头部信息 (仅当 DOM 存在时才操作)
-        if (bgImg) bgImg.src = currentSettings.bgImage || 'default-bg.jpg';
-        if (avatarImg) avatarImg.src = currentSettings.avatar || 'default-avatar.jpg';
-
-        // <-- 新增用户名回显
-        if (username) username.innerText = currentSettings.username || '你的名字';
-
-        if (signature) signature.innerText = currentSettings.signature || '写下你的个性签名...';
-
-        // 4. 渲染列表
-        if (!feed) return; // 如果列表容器都找不到，直接退出
-        
-        // ★ 优化：声明一个空字符串，不要在循环里使用 innerHTML += 
-        let feedHtml = '';
-
-        // 确保 moments 是数组
-        const momentsList = Array.isArray(STATE.moments) ? STATE.moments :[];
-        
-        // 按时间倒序
-        const sortedMoments = [...momentsList].sort((a, b) => b.timestamp - a.timestamp);
+        const isProfile = STATE.momentsViewMode === 'profile';
+        const profileAuthorId = String(STATE.momentsProfileAuthorId || 'user');
+        const profileAuthor = this.getMomentAuthor(profileAuthorId);
+        const currentSettings = STATE.momentsSettings || CONFIG.DEFAULT.MOMENTS_SETTINGS;
+        const allMoments = Array.isArray(STATE.moments) ? STATE.moments : [];
+        const visibleAuthorIds = new Set(
+            Array.isArray(currentSettings.visibleCharacterAuthors)
+                ? currentSettings.visibleCharacterAuthors.map(String)
+                : []
+        );
+        const showAllCharacterAuthors = visibleAuthorIds.size === 0;
+        const pageMoments = isProfile
+            ? allMoments.filter(moment => String(moment.authorId || 'user') === profileAuthorId)
+            : allMoments.filter(moment => {
+                const authorId = String(moment.authorId || 'user');
+                return authorId === 'user' || showAllCharacterAuthors || visibleAuthorIds.has(authorId);
+            });
+        const sortedMoments = [...pageMoments].sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0));
         const visibleData = sortedMoments.slice(0, STATE.visibleMomentsCount);
-        
-        visibleData.forEach((moment) => {
-            const floorNum = momentsList.length - sortedMoments.indexOf(moment);
-            
-            // 安全处理图片显示
-            const safeMomentId = this.escapeHtml(moment.id || '');
-            const safeMomentText = this.escapeHtml(moment.text || '');
-            const safeMomentTime = this.escapeHtml(typeof formatTimeForMoments === 'function' ? formatTimeForMoments(moment.timestamp) : moment.timestamp);
-            const safeImageSrc = this.sanitizeImageSrc(moment.image);
-            const imgHtml = safeImageSrc ? `<br><img class="moment-img" src="${this.escapeHtml(safeImageSrc)}" alt="">` : '';
-            // ★★★ 修改这里：改用我们专门为心迹定制的 formatTimeForMoments 函数 ★★★         
-            feedHtml += `
-                <div class="moment-card" id="m-${safeMomentId}">
-                    <div class="moment-top">
 
-                        <span>${safeMomentTime}</span>
-                        <span>#${floorNum}</span>
-                    </div>
-                    <div class="moment-content">
-                        ${safeMomentText}
-                        ${imgHtml}
-                    </div>
-                    <div class="moment-comments">
-            `;
-            
-            if (moment.comments && moment.comments.length > 0) {
-                moment.comments.forEach(c => {
-                    // 安全获取发送者名字
-                    let senderName = '未知';
-                    if (c.senderId === 'user') {
-                        senderName = '我';
-                    } else {
-                        const contact = STATE.contacts.find(x => x.id === c.senderId);
-                        senderName = contact ? contact.name : '未知';
-                    }
-                    const safeCommentId = this.escapeHtml(c.id || '');
-                    const safeSenderId = this.escapeHtml(c.senderId || '');
-                    const safeSenderName = this.escapeHtml(senderName);
-                    const safeCommentText = this.escapeHtml(c.text || '');
-                    
-                    // ★★★ 核心修改：去掉onclick，加上 data-* 属性和 comment-sender-name 类名 ★★★
-                    // 同时加了个 title 属性，鼠标悬浮时会提示“点击回复 XXX”
-                    // ★★★ 核心修改：增加 data-comment-id 属性 ★★★
-                    // 在 c.comments.forEach 循环内部，修改生成评论 HTML 的部分：
+        const title = document.getElementById('moments-page-title');
+        const profileHeader = document.getElementById('moments-profile-header');
+        const writeBtn = document.getElementById('btn-write-moment');
+        if (title) title.textContent = isProfile ? profileAuthor.name : '心迹';
+        if (profileHeader) {
+            profileHeader.classList.remove('hidden');
+            profileHeader.classList.toggle('profile-mode', isProfile);
+        }
+        if (writeBtn) writeBtn.classList.toggle('hidden', isProfile && !profileAuthor.isUser);
 
-                    // ---------------- 替换开始 ----------------
-                    // 判断是否是结构化的回复，如果是，生成一个前缀标签（你可以自己加CSS美化，比如设为灰色）
-                    let replyPrefixHtml = '';
-                    if (c.replyToId && c.replyToName) {
-                        // 使用刚才在 CSS 中定义的类名 comment-reply-prefix
-                        replyPrefixHtml = `<span class="comment-reply-prefix">回复 ${this.escapeHtml(c.replyToName)}:</span>`;
-                    }
-
-                    feedHtml += `
-                        <div class="comment-item">
-                            <span class="comment-name comment-sender-name" 
-                                data-moment-id="${safeMomentId}" 
-                                data-comment-id="${safeCommentId}" 
-                                data-char-id="${safeSenderId}" 
-                                data-char-name="${safeSenderName}"
-                                title="点击操作 ${safeSenderName}">${safeSenderName}:</span> 
-                            
-                            ${replyPrefixHtml} <!-- 动态插入回复前缀 -->
-                            <span>${safeCommentText}</span>
-                        </div>
-                    `;
-                    // ---------------- 替换结束 ----------------
-                    });
+        // ★ 公屏复用用户原有封面；进入角色主页后再切换为对应资料。
+        {
+            const headerAuthor = isProfile ? profileAuthor : this.getMomentAuthor('user');
+            const bgImg = document.getElementById('moments-bg');
+            const avatarImg = document.getElementById('moments-avatar');
+            const avatarButton = document.getElementById('moments-avatar-button');
+            const username = document.getElementById('moments-username');
+            const signature = document.getElementById('moments-signature');
+            if (bgImg) {
+                bgImg.src = headerAuthor.isUser
+                    ? (currentSettings.bgImage || 'assets/images/wallpaper.jpg')
+                    : this.getCharacterMomentCover(headerAuthor.id);
+                bgImg.title = headerAuthor.isUser ? '点击更换背景' : `${headerAuthor.name} 的主页背景`;
+                bgImg.classList.toggle('clickable-img', headerAuthor.isUser);
             }
-            
-            // ★★★ 核心修改：原本这行的 <button class="reply-btn"> 已经删掉，实现你的需求 ★★★
-            
-            feedHtml += `</div></div>`;
-        });
-
-        // ★ 优化：循环结束后，一次性将拼好的 HTML 注入页面，性能更好且不会出奇怪BUG
-        feed.innerHTML = feedHtml;
-
-        // 5. 处理“加载更多”按钮
-        if (loadMoreBtn) {
-            if (STATE.visibleMomentsCount < momentsList.length) {
-                loadMoreBtn.style.display = 'block';
-            } else {
-                loadMoreBtn.style.display = 'none';
+            if (avatarImg) {
+                const avatar = String(headerAuthor.avatar || '');
+                avatarImg.src = /^(data:image\/|https?:\/\/|blob:|\.\/assets\/|assets\/)/i.test(avatar)
+                    ? avatar
+                    : 'assets/images/char.jpg';
+                avatarImg.title = !isProfile ? '进入我的主页' : (headerAuthor.isUser ? '点击更换头像' : headerAuthor.name);
+            }
+            if (avatarButton) {
+                avatarButton.setAttribute('aria-label', !isProfile ? '进入我的主页' : (headerAuthor.isUser ? '更换头像' : `${headerAuthor.name} 的头像`));
+                avatarButton.classList.toggle('clickable-img', !isProfile || headerAuthor.isUser);
+            }
+            if (username) username.textContent = headerAuthor.name;
+            if (signature) {
+                signature.textContent = headerAuthor.isUser ? headerAuthor.signature : '';
+                // ★ 公屏与“我的主页”继续显示用户签名，角色主页不留空白占位。
+                signature.classList.toggle('hidden', !headerAuthor.isUser);
             }
         }
+
+        let feedHtml = '';
+        visibleData.forEach((moment, index) => {
+            const author = this.getMomentAuthor(moment.authorId || 'user');
+            const safeMomentId = this.escapeHtml(moment.id || '');
+            const safeAuthorId = this.escapeHtml(author.id);
+            const safeAuthorName = this.escapeHtml(author.name);
+            const safeMomentText = this.escapeHtml(moment.text || '').replace(/\n/g, '<br>');
+            const safeMomentTime = this.escapeHtml(formatTimeForMoments(moment.timestamp));
+            const safeImageSrc = this.sanitizeImageSrc(moment.image);
+            const imgHtml = safeImageSrc
+                ? `<img class="moment-img" src="${this.escapeHtml(safeImageSrc)}" alt="动态图片">`
+                : '';
+            const floorNum = sortedMoments.length - index;
+            const likes = Array.isArray(moment.likes) ? moment.likes : [];
+            const comments = Array.isArray(moment.comments) ? moment.comments : [];
+            const userLiked = likes.includes('user');
+
+            const likeNames = likes.map(likerId => this.getMomentAuthor(likerId).name).filter(Boolean);
+            const likesHtml = likeNames.length
+                ? `<div class="moment-like-panel"><div class="moment-likes"><span aria-hidden="true">♥</span>${this.escapeHtml(likeNames.join('、'))}</div></div>`
+                : '';
+            let commentsHtml = '';
+            comments.forEach(comment => {
+                const sender = this.getMomentAuthor(comment.senderId);
+                const replyPrefix = comment.replyToId && comment.replyToName
+                    ? `<span class="comment-reply-prefix">回复 ${this.escapeHtml(comment.replyToName)}：</span>`
+                    : '';
+                commentsHtml += `
+                    <div class="comment-item">
+                        <button type="button" class="comment-name comment-sender-name"
+                            data-moment-id="${safeMomentId}"
+                            data-comment-id="${this.escapeHtml(comment.id || '')}"
+                            data-char-id="${this.escapeHtml(comment.senderId || '')}"
+                            data-char-name="${this.escapeHtml(sender.name)}">${this.escapeHtml(sender.name)}</button><span>：</span>
+                        ${replyPrefix}<span>${this.escapeHtml(comment.text || '')}</span>
+                    </div>`;
+            });
+            const commentsPanelHtml = commentsHtml
+                ? `<div class="moment-comment-panel"><div class="moment-comments">${commentsHtml}</div></div>`
+                : '';
+            const interactionHtml = likesHtml || commentsPanelHtml
+                ? `<div class="moment-interactions">${likesHtml}${commentsPanelHtml}</div>`
+                : '';
+
+            feedHtml += `
+                <article class="moment-card ${isProfile ? 'profile-moment-card' : 'feed-moment-card'}" id="m-${safeMomentId}" data-moment-id="${safeMomentId}">
+                    <button type="button" class="moment-avatar-button" data-moment-action="profile" data-author-id="${safeAuthorId}" aria-label="查看 ${safeAuthorName} 的主页">
+                        ${this.renderMomentAvatar(author)}
+                    </button>
+                    <div class="moment-card-main">
+                        <!-- ★ 公屏右侧放时间；个人主页右侧放编号，两者都与昵称共用一行。 -->
+                        <div class="moment-card-heading">
+                            <button type="button" class="moment-author-name" data-moment-action="profile" data-author-id="${safeAuthorId}">${safeAuthorName}</button>
+                            ${isProfile
+                                ? `<span class="moment-floor">#${floorNum}</span>`
+                                : `<span class="moment-corner-time">${safeMomentTime}</span>`}
+                        </div>
+                        <div class="moment-content">${safeMomentText}${imgHtml}</div>
+                        ${isProfile ? `<div class="moment-meta-row"><span>${safeMomentTime}</span></div>` : ''}
+                        <div class="moment-action-row">
+                            <button type="button" class="moment-action-btn ${userLiked ? 'active' : ''}" data-moment-action="like" data-moment-id="${safeMomentId}" aria-label="${userLiked ? '取消点赞' : '点赞'}">
+                                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5"></path></svg><span>点赞</span>
+                            </button>
+                            <button type="button" class="moment-action-btn" data-moment-action="comment" data-moment-id="${safeMomentId}" aria-label="评论">
+                                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"></path></svg><span>评论</span>
+                            </button>
+                        </div>
+                        ${interactionHtml}
+                    </div>
+                </article>`;
+        });
+
+        if (!feedHtml) {
+            feedHtml = `<div class="moments-empty-state"><span>◌</span><p>${isProfile ? '这里还没有动态' : '还没有人留下心迹'}</p><small>${isProfile && profileAuthor.isUser ? '写下此刻，第一条就从这里开始。' : '稍后再来看看吧。'}</small></div>`;
+        }
+        feed.innerHTML = feedHtml;
+
+        if (loadMoreBtn) {
+            loadMoreBtn.style.display = STATE.visibleMomentsCount < sortedMoments.length ? 'block' : 'none';
+        }
     },
+    // ★★★★★ 朋友圈 2.0：数据兼容、作者资料与页面状态 END ★★★★★
 
 
     loadMoreMoments() {
@@ -11854,6 +12065,7 @@ const App = {
         const modal = document.getElementById('modal-moments-settings');
         const apiSelect = document.getElementById('m-setting-api-preset');
         const charContainer = document.getElementById('m-setting-allowed-chars');
+        const authorContainer = document.getElementById('m-setting-visible-authors');
         
         // 2. 确保配置对象存在
         if (!STATE.momentsSettings) {
@@ -11878,31 +12090,44 @@ const App = {
             });
         }
 
-        // 4. 填充“谁可以评论”复选框列表
-        // 4. 填充“谁可以评论”复选框列表
-        charContainer.innerHTML = '';
+        // 4. 两份名单沿用旧版的双列文字选择 UI；空选仍代表全部角色。
+        const renderCharacterChoices = (container, selectedIds) => {
+            if (!container) return;
+            container.innerHTML = '';
+            if (STATE.contacts.length === 0) {
+                container.innerHTML = '<p class="no-data-hint">暂无联系人</p>';
+                return;
+            }
 
-        if (STATE.contacts.length === 0) {
-            charContainer.innerHTML = '<p class="no-data-hint">暂无联系人</p>';
-        } else {
             STATE.contacts.forEach(contact => {
-                // 创建容器
                 const label = document.createElement('label');
-                label.className = 'checkbox-item'; // 给一个专门的类名
-
-                // 判定是否勾选
-                const isChecked = STATE.momentsSettings.allowedChars && 
-                                STATE.momentsSettings.allowedChars.includes(contact.id);
-
-                // 使用模板字符串填充 HTML 结构
-                label.innerHTML = `
-                    <input type="checkbox" value="${contact.id}" ${isChecked ? 'checked' : ''}>
-                    <span class="char-name">${contact.name}</span>
-                `;
-                
-                charContainer.appendChild(label);
+                label.className = 'checkbox-item moments-character-choice';
+                const input = document.createElement('input');
+                input.type = 'checkbox';
+                input.value = contact.id;
+                input.checked = Array.isArray(selectedIds) && selectedIds.map(String).includes(String(contact.id));
+                const name = document.createElement('span');
+                name.className = 'char-name';
+                name.textContent = contact.name;
+                label.append(input, name);
+                container.appendChild(label);
             });
-        }
+        };
+        renderCharacterChoices(charContainer, STATE.momentsSettings.allowedChars);
+        renderCharacterChoices(authorContainer, STATE.momentsSettings.visibleCharacterAuthors);
+
+        const autoEnabled = document.getElementById('m-setting-auto-enabled');
+        const probability = Math.max(0, Math.min(100, Number(STATE.momentsSettings.autoCharacterMomentProbability ?? 50)));
+        const likeProbability = Math.max(0, Math.min(100, Number(STATE.momentsSettings.autoCharacterLikeProbability ?? 25)));
+        if (autoEnabled) autoEnabled.checked = STATE.momentsSettings.autoCharacterMomentsEnabled !== false;
+        const probabilityInput = document.getElementById('m-setting-auto-probability');
+        const probabilityRange = document.getElementById('m-setting-auto-probability-range');
+        const likeProbabilityInput = document.getElementById('m-setting-auto-like-probability');
+        const likeProbabilityRange = document.getElementById('m-setting-auto-like-probability-range');
+        if (probabilityInput) probabilityInput.value = probability;
+        if (probabilityRange) probabilityRange.value = probability;
+        if (likeProbabilityInput) likeProbabilityInput.value = likeProbability;
+        if (likeProbabilityRange) likeProbabilityRange.value = likeProbability;
 
         // 5. 显示弹窗
         modal.classList.remove('hidden');
@@ -11915,6 +12140,7 @@ const App = {
     saveMomentsSettings() {
         const apiSelect = document.getElementById('m-setting-api-preset');
         const charContainer = document.getElementById('m-setting-allowed-chars');
+        const authorContainer = document.getElementById('m-setting-visible-authors');
         
         // 获取选中的 API 索引
         const presetIndex = parseInt(apiSelect.value);
@@ -11923,10 +12149,24 @@ const App = {
         const allowed = [];
         const checkboxes = charContainer.querySelectorAll('input[type="checkbox"]:checked');
         checkboxes.forEach(cb => allowed.push(cb.value));
+        const visibleAuthors = [];
+        authorContainer?.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => visibleAuthors.push(cb.value));
+        const probability = Math.max(0, Math.min(100, parseInt(document.getElementById('m-setting-auto-probability')?.value, 10) || 0));
+        const likeProbability = Math.max(0, Math.min(100, parseInt(document.getElementById('m-setting-auto-like-probability')?.value, 10) || 0));
 
         // 更新 STATE
+        const wasAutoEnabled = STATE.momentsSettings.autoCharacterMomentsEnabled !== false;
+        const autoEnabled = document.getElementById('m-setting-auto-enabled')?.checked !== false;
         STATE.momentsSettings.apiPresetIndex = presetIndex;
         STATE.momentsSettings.allowedChars = allowed;
+        STATE.momentsSettings.visibleCharacterAuthors = visibleAuthors;
+        STATE.momentsSettings.autoCharacterMomentsEnabled = autoEnabled;
+        STATE.momentsSettings.autoCharacterMomentProbability = probability;
+        STATE.momentsSettings.autoCharacterLikeProbability = likeProbability;
+        // ★ 总开关重新开启时从当下重新计算时间窗，不会回填到停用期间的日期。
+        if (!wasAutoEnabled && autoEnabled) {
+            STATE.momentsSettings.lastAutoMomentCheckAt = Date.now();
+        }
 
         // 持久化保存
         if (Storage.saveMomentsSettings) {
@@ -11939,7 +12179,42 @@ const App = {
 
         // 关闭弹窗
         document.getElementById('modal-moments-settings').classList.add('hidden');
+        this.renderMomentsUI();
         alert("设置已保存");
+    },
+
+    rollCharacterLikes(allowedIds) {
+        // ★ 点赞是纯本地行为：每个可见角色独立掷一次，不额外消耗 API 和 Token。
+        const probability = Math.max(0, Math.min(100, Number(STATE.momentsSettings?.autoCharacterLikeProbability ?? 25)));
+        const allowedSet = new Set((Array.isArray(allowedIds) ? allowedIds : []).map(String));
+        return STATE.contacts
+            .filter(contact => allowedSet.has(String(contact.id)))
+            .filter(() => Math.random() * 100 < probability)
+            .map(contact => String(contact.id));
+    },
+
+    scheduleCharacterLikes(targetMoment, allowedIds) {
+        const likerIds = this.rollCharacterLikes(allowedIds);
+        likerIds.forEach(charId => {
+            // ★ 每位命中角色独立等待 3～5 秒，再写入点赞，避免发帖瞬间整排亮起。
+            const delay = 3000 + Math.floor(Math.random() * 2001);
+            setTimeout(async () => {
+                const moment = STATE.moments.find(item => String(item.id) === String(targetMoment?.id));
+                if (!moment || String(moment.authorId || 'user') !== 'user') return;
+
+                if (!Array.isArray(moment.likes)) moment.likes = [];
+                if (moment.likes.map(String).includes(String(charId))) return;
+                moment.likes.push(String(charId));
+
+                if (typeof Storage !== 'undefined' && Storage.saveMoments) {
+                    await Storage.saveMoments();
+                } else {
+                    this.saveMoments();
+                }
+                this.renderMomentsUI();
+                this.showMomentLikeNotice(charId);
+            }, delay);
+        });
     },
 
 
@@ -11989,10 +12264,13 @@ const App = {
         // 3. 构造数据
         const newMoment = {
             id: 'm_' + Date.now(),
+            authorId: 'user',
             text: text,
             image: imageBase64,
             timestamp: Date.now(),
+            createdAt: Date.now(),
             comments: [],
+            likes: [],
             // ★★★ 新增字段：用于记录聊天时的注入状态 ★★★
             chatInjectionStatus: injectionStatus,
             // 记录每个角色已经消费过的用户消息轮次，避免重 roll 重复扣轮次。
@@ -12023,6 +12301,7 @@ const App = {
 
         // 6. 刷新列表并触发 AI
         this.renderMomentsUI();
+        this.scheduleCharacterLikes(newMoment, allowedIds);
         
         // 确保 triggerAIComments 函数存在
         if (typeof this.triggerAIComments === 'function') {
@@ -12040,7 +12319,8 @@ const App = {
         // 1. 筛选允许评论的联系人
         let validCommentators = STATE.contacts;
         if (STATE.momentsSettings.allowedChars && STATE.momentsSettings.allowedChars.length > 0) {
-            validCommentators = STATE.contacts.filter(c => STATE.momentsSettings.allowedChars.includes(c.id));
+            const allowedIds = STATE.momentsSettings.allowedChars.map(String);
+            validCommentators = STATE.contacts.filter(c => allowedIds.includes(String(c.id)));
         }
 
         console.log(`[心迹] 触发评论，共 ${validCommentators.length} 个角色参与`);
@@ -12152,6 +12432,350 @@ const App = {
             await new Promise(r => setTimeout(r, 2000)); 
         }
     },
+
+    // ★★★★★ 角色自动动态 START ★★★★★
+    getMomentsApiConfig(maxTokens = 1200) {
+        let config = {
+            API_URL: STATE.settings.API_URL,
+            API_KEY: STATE.settings.API_KEY,
+            MODEL: STATE.settings.MODEL,
+            MAX_TOKENS: maxTokens,
+            TEMPERATURE: 1.1
+        };
+        const presetIndex = STATE.momentsSettings?.apiPresetIndex;
+        if (typeof presetIndex === 'number' && presetIndex >= 0) {
+            const preset = STATE.settings.API_PRESETS?.[presetIndex];
+            if (preset) {
+                config.API_URL = preset.url;
+                config.API_KEY = preset.key;
+                config.MODEL = preset.model;
+                if (preset.max_tokens) config.MAX_TOKENS = Math.min(parseInt(preset.max_tokens, 10), maxTokens);
+                if (preset.temperature) config.TEMPERATURE = parseFloat(preset.temperature);
+            }
+        }
+        return config;
+    },
+
+    extractMomentJson(rawText) {
+        const cleanText = String(rawText || '')
+            .replace(/<(?:think|thinking|thought)[^>]*>[\s\S]*?(?:<\/(?:think|thinking|thought)>|$)/gi, '')
+            .replace(/```(?:json)?/gi, '')
+            .replace(/```/g, '')
+            .trim();
+        try {
+            return JSON.parse(cleanText);
+        } catch (error) {
+            // ★ 允许模型在 JSON 前后多说一句，但提取出的对象本身仍必须是合法 JSON。
+            const start = cleanText.indexOf('{');
+            const end = cleanText.lastIndexOf('}');
+            if (start >= 0 && end > start) {
+                try {
+                    return JSON.parse(cleanText.slice(start, end + 1));
+                } catch (nestedError) {}
+            }
+            throw new Error('角色动态返回的 JSON 无法解析');
+        }
+    },
+
+    normalizeCharacterMomentResponse(rawText, windowStart, windowEnd) {
+        const data = this.extractMomentJson(rawText);
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
+            throw new Error('角色动态返回的 JSON 不是对象');
+        }
+        const text = typeof data.text === 'string' ? data.text.trim().slice(0, 1200) : '';
+        if (!text) throw new Error('角色动态内容为空');
+
+        const now = Date.now();
+        const rawEnd = Number(windowEnd);
+        const safeEnd = Number.isFinite(rawEnd) ? Math.min(rawEnd, now) : now;
+        const rawStart = Number(windowStart);
+        const safeStart = Number.isFinite(rawStart) && rawStart <= safeEnd
+            ? rawStart
+            : safeEnd - 12 * 60 * 60 * 1000;
+        const parsedTime = new Date(data.timestamp || '').getTime();
+        const fallbackTime = safeStart + Math.floor(Math.random() * Math.max(1, safeEnd - safeStart + 1));
+        const timestamp = Number.isFinite(parsedTime) && parsedTime >= safeStart && parsedTime <= safeEnd
+            ? parsedTime
+            : fallbackTime;
+        return { text, timestamp: Math.trunc(timestamp) };
+    },
+
+    getMomentLocalDateKey(timestamp = Date.now()) {
+        const date = new Date(timestamp);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    },
+
+    getCharacterAutoMomentStats(charId, now = Date.now()) {
+        const settings = STATE.momentsSettings || CONFIG.DEFAULT.MOMENTS_SETTINGS;
+        if (!settings.autoMomentStatsByChar || typeof settings.autoMomentStatsByChar !== 'object') {
+            settings.autoMomentStatsByChar = {};
+        }
+        const key = String(charId);
+        const today = this.getMomentLocalDateKey(now);
+        const saved = settings.autoMomentStatsByChar[key] || {};
+        if (saved.dailyDate !== today) {
+            saved.dailyDate = today;
+            saved.dailyCount = 0;
+        }
+        const lastGeneratedAt = Number(saved.lastGeneratedAt || 0);
+        const dailyCount = Number(saved.dailyCount || 0);
+        saved.lastGeneratedAt = Number.isFinite(lastGeneratedAt) ? lastGeneratedAt : 0;
+        saved.dailyCount = Number.isFinite(dailyCount) ? Math.max(0, Math.floor(dailyCount)) : 0;
+        settings.autoMomentStatsByChar[key] = saved;
+        return saved;
+    },
+
+    isCharacterMomentEligible(charId, now = Date.now()) {
+        const stats = this.getCharacterAutoMomentStats(charId, now);
+        const cooldownMs = 4 * 60 * 60 * 1000;
+        return stats.dailyCount < 3 && (!stats.lastGeneratedAt || now - stats.lastGeneratedAt >= cooldownMs);
+    },
+
+    async registerCharacterMomentCreated(charId, createdAt = Date.now()) {
+        // ★ 冷却使用真实生成时间，不使用 AI 回填的展示时间，否则回填到几小时前会绕过冷却。
+        const stats = this.getCharacterAutoMomentStats(charId, createdAt);
+        stats.lastGeneratedAt = createdAt;
+        stats.dailyCount += 1;
+        await Storage.saveMomentsSettings();
+    },
+
+    async saveCharacterMomentFromResponse(charId, rawText, windowStart, windowEnd, asyncJobId = null) {
+        if (asyncJobId && STATE.moments.some(moment => moment.asyncJobId === asyncJobId)) return false;
+        const contact = STATE.contacts.find(item => String(item.id) === String(charId));
+        if (!contact) return false;
+
+        const generated = this.normalizeCharacterMomentResponse(rawText, windowStart, windowEnd);
+        const createdAt = Date.now();
+        const newMoment = {
+            id: 'm_char_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+            authorId: contact.id,
+            text: generated.text,
+            image: null,
+            timestamp: generated.timestamp,
+            createdAt,
+            comments: [],
+            likes: []
+        };
+        if (asyncJobId) newMoment.asyncJobId = asyncJobId;
+        STATE.moments.unshift(newMoment);
+        await Storage.saveMoments();
+        try {
+            await this.registerCharacterMomentCreated(contact.id, createdAt);
+        } catch (error) {
+            console.warn('[心迹] 角色动态冷却记录保存失败:', error);
+        }
+        this.renderMomentsUI();
+        return true;
+    },
+
+    async maybeGenerateCharacterMoment(reason = 'startup') {
+        // ★ 一次页面生命周期只掷一次；pageshow 和延时启动同时触发也不会重复请求 API。
+        if (this._autoMomentGenerationChecked || this._autoMomentGenerationRunning) return false;
+        this._autoMomentGenerationChecked = true;
+        const settings = STATE.momentsSettings || CONFIG.DEFAULT.MOMENTS_SETTINGS;
+        if (settings.autoCharacterMomentsEnabled === false || !STATE.contacts.length) return false;
+
+        const selectedIds = Array.isArray(settings.visibleCharacterAuthors)
+            ? settings.visibleCharacterAuthors.map(String)
+            : [];
+        const selectedContacts = selectedIds.length
+            ? STATE.contacts.filter(contact => selectedIds.includes(String(contact.id)))
+            : [...STATE.contacts];
+
+        // ★ 后台已有角色发帖任务时不要再开第二条，避免网络切换后重复生成。
+        const hasPendingGeneration = typeof API.loadPendingJobs === 'function'
+            && API.loadPendingJobs().some(job => job.status !== 'failed'
+                && job.context?.scope === 'moments'
+                && job.context?.type === 'generate_character_moment');
+        if (hasPendingGeneration) return false;
+
+        const now = Date.now();
+        this._autoMomentGenerationRunning = true;
+        try {
+            // ★ 先保留上一次检查时间作为窗口起点，再把本轮检查时间推进到 now。
+            const previousCheckAt = Number(settings.lastAutoMomentCheckAt || 0);
+            const windowStart = previousCheckAt > 0 && previousCheckAt < now
+                ? previousCheckAt
+                : now - 12 * 60 * 60 * 1000;
+            settings.lastAutoMomentCheckAt = now;
+            let candidates = selectedContacts.filter(contact => this.isCharacterMomentEligible(contact.id, now));
+            await Storage.saveMomentsSettings();
+
+            if (!candidates.length) return false;
+
+            const probability = Math.max(0, Math.min(100, Number(settings.autoCharacterMomentProbability ?? 50)));
+            if (Math.random() * 100 >= probability) return false;
+
+            // ★ 有多个候选时避开最新一条角色动态的作者，让公屏不会总被同一个人刷满。
+            const latestCharacterMoment = [...STATE.moments]
+                .filter(moment => String(moment.authorId || 'user') !== 'user')
+                .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0))[0];
+            if (latestCharacterMoment && candidates.length > 1) {
+                const alternatives = candidates.filter(contact => String(contact.id) !== String(latestCharacterMoment.authorId));
+                if (alternatives.length) candidates = alternatives;
+            }
+            const contact = candidates[Math.floor(Math.random() * candidates.length)];
+
+            const directions = [
+                '近期对话相关，但不复述聊天原句',
+                '自己的日常片段',
+                '突然想到的一句话',
+                '情绪或内心感受',
+                '类似歌词、诗句气质的原创表达',
+                '对周围环境或时间的感受'
+            ];
+            const direction = directions[Math.floor(Math.random() * directions.length)];
+            const visibleHistory = HistoryVisibility.collectVisibleMessages(contact, {
+                limit: 5,
+                preserveTimestamp: true,
+                includeImageDescription: true
+            });
+            const historyText = visibleHistory.length
+                ? HistoryVisibility.formatForRoleLines(contact, visibleHistory, { assistantName: '你', userName: '用户' })
+                : '无';
+            const recentMoments = [...STATE.moments]
+                .filter(moment => String(moment.authorId || 'user') === String(contact.id))
+                .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0))
+                .slice(0, 3)
+                .map(moment => `- ${formatTimeForMoments(moment.timestamp)}：${moment.text}`)
+                .join('\n') || '无';
+            const worldInfoPrompt = WorldInfoEngine.scan(`${direction}\n${historyText}`, [], contact.id, contact.name);
+            const worldInfoSection = worldInfoPrompt ? `\n【世界知识/环境信息】\n${worldInfoPrompt}\n` : '';
+            const startText = new Date(windowStart).toLocaleString('zh-CN', { hour12: false });
+            const endText = new Date(now).toLocaleString('zh-CN', { hour12: false });
+            const promptText = `【系统设定】\n${contact.prompt || ''}\n${worldInfoSection}\n【近期聊天】\n${historyText}\n\n【你最近的三条动态】\n${recentMoments}\n\n【本次内容方向】\n${direction}\n\n【可用发帖时间】\n${startText} 至 ${endText}\n\n【任务】\n你是 ${contact.name}。像真人使用朋友圈一样，发布一条自然、独立的文字动态。可以联系近期聊天，也可以写自己的生活和心情。不要提到你是 AI，不要写动作括号，不要解释，不要重复最近动态，不要凭空创造会改变人物关系的重大事件。正文建议 10～180 字。\n只输出严格 JSON：{"text":"动态正文","timestamp":"带时区的 ISO 8601 时间"}`;
+
+            let apiConfig = this.getMomentsApiConfig(1200);
+            apiConfig = this.applyAsyncBackendToMomentConfig(
+                apiConfig,
+                this.buildMomentsAsyncContext('generate_character_moment', {
+                    charId: contact.id,
+                    windowStart,
+                    windowEnd: now,
+                    reason
+                })
+            );
+            const rawText = await API.chat([{ role: 'user', content: promptText }], apiConfig);
+            const asyncJobId = API.lastAsyncBackendResult?.jobId || null;
+            return await this.saveCharacterMomentFromResponse(contact.id, rawText, windowStart, now, asyncJobId);
+        } catch (error) {
+            if (error.isAsyncBackendPending) {
+                this.scheduleAsyncBackendResumeCheck(1200);
+                return false;
+            }
+            console.warn('[心迹] 角色自动动态生成失败:', error);
+            return false;
+        } finally {
+            this._autoMomentGenerationRunning = false;
+        }
+    },
+    // ★★★★★ 角色自动动态 END ★★★★★
+
+    // ★★★★★ 朋友圈点赞与主动评论 START ★★★★★
+    async toggleMomentLike(momentId) {
+        const moment = STATE.moments.find(item => item.id === momentId);
+        if (!moment) return;
+        if (!Array.isArray(moment.likes)) moment.likes = [];
+        const index = moment.likes.indexOf('user');
+        if (index >= 0) moment.likes.splice(index, 1);
+        else moment.likes.push('user');
+        await Storage.saveMoments();
+        this.renderMomentsUI();
+    },
+
+    openMomentCommentComposer(momentId) {
+        const moment = STATE.moments.find(item => item.id === momentId);
+        if (!moment) return;
+        STATE.composingMomentCommentId = momentId;
+        const author = this.getMomentAuthor(moment.authorId || 'user');
+        const title = document.getElementById('moment-comment-modal-title');
+        const textarea = document.getElementById('m-comment-text');
+        if (title) title.textContent = author.isUser ? '写评论' : `评论 ${author.name}`;
+        if (textarea) textarea.value = '';
+        document.getElementById('modal-write-moment-comment')?.classList.remove('hidden');
+        textarea?.focus();
+    },
+
+    async publishMomentComment() {
+        const moment = STATE.moments.find(item => item.id === STATE.composingMomentCommentId);
+        const textarea = document.getElementById('m-comment-text');
+        const text = String(textarea?.value || '').trim();
+        if (!moment || !text) {
+            if (!text) alert('写点什么吧');
+            return;
+        }
+
+        const userComment = {
+            id: 'c_user_' + Date.now(),
+            senderId: 'user',
+            text,
+            timestamp: Date.now()
+        };
+        if (!Array.isArray(moment.comments)) moment.comments = [];
+        moment.comments.push(userComment);
+        document.getElementById('modal-write-moment-comment')?.classList.add('hidden');
+        STATE.composingMomentCommentId = null;
+        await Storage.saveMoments();
+        this.renderMomentsUI();
+
+        // ★ 评论角色动态时只让动态作者回复；第一版不触发其他角色互评。
+        if (String(moment.authorId || 'user') !== 'user') {
+            this.triggerCharacterMomentAuthorReply(moment, userComment);
+        }
+    },
+
+    async triggerCharacterMomentAuthorReply(moment, userComment) {
+        const contact = STATE.contacts.find(item => String(item.id) === String(moment.authorId));
+        if (!contact) return;
+        const threadText = (moment.comments || []).slice(-8).map(comment => {
+            const sender = this.getMomentAuthor(comment.senderId);
+            return `${sender.name}：${comment.text}`;
+        }).join('\n');
+        const worldInfoPrompt = WorldInfoEngine.scan(`${moment.text}\n${userComment.text}`, [], contact.id, contact.name);
+        const worldInfoSection = worldInfoPrompt ? `\n【世界知识/环境信息】\n${worldInfoPrompt}\n` : '';
+        const promptText = `【系统设定】\n${contact.prompt || ''}\n${worldInfoSection}\n【你的动态】\n${moment.text}\n\n【评论区】\n${threadText}\n\n【任务】\n用户刚刚评论了你的动态。请以 ${contact.name} 的身份自然回复用户，像朋友圈评论一样简短。不要输出动作描写、括号或解释，直接输出回复正文。`;
+
+        try {
+            let apiConfig = this.getMomentsApiConfig(700);
+            apiConfig = this.applyAsyncBackendToMomentConfig(
+                apiConfig,
+                this.buildMomentsAsyncContext('reply_to_character_moment', {
+                    momentId: moment.id,
+                    charId: contact.id,
+                    replyToId: 'user',
+                    replyToName: STATE.momentsSettings?.username || '我'
+                })
+            );
+            let replyText = await API.chat([{ role: 'user', content: promptText }], apiConfig);
+            const asyncJobId = API.lastAsyncBackendResult?.jobId || null;
+            replyText = String(replyText || '').replace(/<(?:think|thinking|thought)[^>]*>[\s\S]*?(?:<\/(?:think|thinking|thought)>|$)/gi, '').trim();
+            if (!replyText) return;
+            if (!asyncJobId || !moment.comments.some(comment => comment.asyncJobId === asyncJobId)) {
+                moment.comments.push({
+                    id: 'c_char_' + Date.now(),
+                    senderId: contact.id,
+                    text: replyText,
+                    replyToId: 'user',
+                    replyToName: STATE.momentsSettings?.username || '我',
+                    timestamp: Date.now(),
+                    ...(asyncJobId ? { asyncJobId } : {})
+                });
+                this.showMomentReplyNotice(contact.id);
+            }
+            await Storage.saveMoments();
+            this.renderMomentsUI();
+        } catch (error) {
+            if (error.isAsyncBackendPending) {
+                this.scheduleAsyncBackendResumeCheck(1200);
+                return;
+            }
+            console.warn(`[心迹] ${contact.name} 回复角色动态评论失败:`, error);
+        }
+    },
+    // ★★★★★ 朋友圈点赞与主动评论 END ★★★★★
 
 
 
@@ -12290,8 +12914,12 @@ const App = {
                 return;
             }
 
-            const targetChar = STATE.contacts.find(c => c.id === ctx.charId);
+            const targetChar = STATE.contacts.find(c => String(c.id) === String(ctx.charId));
             if (!targetChar) return;
+            const momentAuthor = this.getMomentAuthor(momentData.authorId || 'user');
+            const momentScene = momentAuthor.isUser
+                ? `用户发布了一条动态：“${momentData.text}”`
+                : `你自己发布了一条动态：“${momentData.text}”`;
 
             console.log(`[心迹] 重新生成 ${ctx.charName} 的评论`);
 
@@ -12345,10 +12973,10 @@ const App = {
                     ? HistoryVisibility.formatForRoleLines(targetChar, visibleHistoryForMoment, { assistantName: '你', userName: '用户' })
                     : "无";
 
-                promptText = `【系统设定】\n${targetChar.prompt}\n${wiSection}\n【历史参考】\n${historyContext}\n【当前情境】\n用户发布了一条动态：“${momentData.text}”\n【任务要求】\n请根据系统设定，以社交平台上的互动方式，对用户的这条动态进行评论。请按照社交软件上的语言习惯，简短回复，50字以下。不需要括号描述任何环境、动作，直接输出你要说的内容即可。`;
+                promptText = `【系统设定】\n${targetChar.prompt}\n${wiSection}\n【历史参考】\n${historyContext}\n【当前情境】\n${momentScene}\n【任务要求】\n重新生成你在这条动态下的评论。按照社交软件的语言习惯简短回复，50 字以下。不要用括号描述环境或动作，直接输出评论正文。`;
             } else {
                 // 这是追问回复
-                promptText = `【系统设定】\n${targetChar.prompt}\n${wiSection}\n【动态内容】\n用户发布的动态：${momentData.text}\n【评论区对话流】\n${threadContext}\n【任务】\n用户刚刚在评论区专门回复了你。请根据你的人设，继续在评论区回复用户。保持简短，像朋友圈评论一样自然。不要输出动作描写。`;
+                promptText = `【系统设定】\n${targetChar.prompt}\n${wiSection}\n【动态内容】\n${momentScene}\n【评论区对话流】\n${threadContext}\n【任务】\n用户刚刚在评论区专门回复了你。请根据你的人设，继续在评论区回复用户。保持简短，像朋友圈评论一样自然。不要输出动作描写。`;
             }
 
             // 先把界面改成加载中
@@ -12460,7 +13088,7 @@ const App = {
         document.getElementById('modal-reply-comment').classList.add('hidden');
 
         const targetMoment = STATE.moments.find(m => m.id === ctx.momentId);
-        const targetChar = STATE.contacts.find(c => c.id === ctx.charId);
+        const targetChar = STATE.contacts.find(c => String(c.id) === String(ctx.charId));
         if (!targetMoment || !targetChar) return;
 
         // 1. 存入用户回复
@@ -12514,13 +13142,17 @@ const App = {
         const scanText = targetMoment.text + "\n" + userReplyText;
         const worldInfoPrompt = WorldInfoEngine.scan(scanText, [], targetChar.id, targetChar.name);
         let wiSection = worldInfoPrompt ? `\n【世界知识/环境信息】\n${worldInfoPrompt}\n` : "";
+        const momentAuthor = this.getMomentAuthor(targetMoment.authorId || 'user');
+        const momentScene = momentAuthor.isUser
+            ? `用户发布的动态：${targetMoment.text}`
+            : `你自己发布的动态：${targetMoment.text}`;
 
         const promptText = `
     【系统设定】
     ${targetChar.prompt}
     ${wiSection}
     【动态内容】
-    用户发布的动态：${targetMoment.text}
+    ${momentScene}
 
     【评论区对话流】
     ${threadContext}
@@ -12717,10 +13349,13 @@ const App = {
         // 手机浏览器切后台后，JS 定时器/fetch 经常会被暂停或中断；
         // 切回页面时主动查一次 pending job，避免回复已经生成但聊天页还停在旧状态。
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) this.scheduleAsyncBackendResumeCheck(300);
+            if (!document.hidden) {
+                this.scheduleAsyncBackendResumeCheck(300);
+            }
         });
         window.addEventListener('pageshow', () => {
             this.scheduleAsyncBackendResumeCheck(300);
+            this.maybeGenerateCharacterMoment('pageshow');
         });
         // ★★★★★ 后台回复接收：切回前台自动补查 END ★★★★★
 
@@ -14258,6 +14893,10 @@ const App = {
 
         // ================= 3. 心迹页面 -> 返回探索 =================
         document.getElementById('moments-back-btn')?.addEventListener('click', () => {
+            if (STATE.momentsViewMode === 'profile') {
+                this.showMomentsFeed();
+                return;
+            }
             safeSwitchView(this.getReturnView('moments', 'explore'));
         });
 
@@ -14309,12 +14948,28 @@ const App = {
             if(modal) modal.classList.add('hidden');
         });
 
+        // ★ 发帖和点赞概率共用同一套滑块/数字框同步逻辑，保存时再做最终夹取。
+        const bindMomentProbabilityPair = (rangeId, inputId) => {
+            const range = document.getElementById(rangeId);
+            const input = document.getElementById(inputId);
+            range?.addEventListener('input', () => {
+                if (input) input.value = range.value;
+            });
+            input?.addEventListener('input', () => {
+                const value = Math.max(0, Math.min(100, parseInt(input.value, 10) || 0));
+                if (range) range.value = value;
+            });
+        };
+        bindMomentProbabilityPair('m-setting-auto-probability-range', 'm-setting-auto-probability');
+        bindMomentProbabilityPair('m-setting-auto-like-probability-range', 'm-setting-auto-like-probability');
+
         // ==========================================
         // 心迹头部交互 (修改背景、头像、签名)
         // ==========================================
 
         // 1. 点击背景图 -> 触发隐藏的文件选择框
         document.getElementById('moments-bg')?.addEventListener('click', () => {
+            if (String(STATE.momentsProfileAuthorId || 'user') !== 'user') return;
             console.log("[调试] 点击了背景图");
             document.getElementById('m-bg-upload-input').click();
         });
@@ -14340,10 +14995,15 @@ const App = {
             e.target.value = ''; 
         });
 
-        // 3. 点击头像 -> 触发隐藏的文件选择框
-        document.getElementById('moments-avatar')?.addEventListener('click', () => {
+        // 3. 公屏大头像进入我的主页；在我的主页内再点击才更换头像。
+        document.getElementById('moments-avatar-button')?.addEventListener('click', () => {
+            if (STATE.momentsViewMode !== 'profile') {
+                this.openMomentProfile('user');
+                return;
+            }
+            if (String(STATE.momentsProfileAuthorId || 'user') !== 'user') return;
             console.log("[调试] 点击了头像");
-            document.getElementById('m-avatar-upload-input').click();
+            document.getElementById('m-avatar-upload-input')?.click();
         });
 
         // 4. 监听头像文件选择完成 -> 读取并替换图片
@@ -14367,6 +15027,7 @@ const App = {
 
         // 5. 点击个性签名 -> 弹出浏览器原生输入框修改
         document.getElementById('moments-signature')?.addEventListener('click', () => {
+            if (String(STATE.momentsProfileAuthorId || 'user') !== 'user') return;
             console.log("[调试] 点击了签名");
             const currentSig = STATE.momentsSettings.signature || "写下你的个性签名...";
             const newSig = prompt("请输入新的个性签名：", currentSig);
@@ -14384,6 +15045,7 @@ const App = {
 
         // 5-2. 点击用户名 -> 弹出修改框
         document.getElementById('moments-username')?.addEventListener('click', () => {
+            if (String(STATE.momentsProfileAuthorId || 'user') !== 'user') return;
             console.log("[调试] 点击了用户名");
             // 获取当前名字，如果没有则用默认值
             const currentName = STATE.momentsSettings.username || "你的名字";
@@ -14482,11 +15144,21 @@ const App = {
         if (momentsFeed) {
             // ★ 核心替换：改为存入上下文并弹出菜单
             momentsFeed.addEventListener('click', (e) => {
-                if (e.target.classList.contains('comment-sender-name')) {
-                    const momentId = e.target.getAttribute('data-moment-id');
-                    const commentId = e.target.getAttribute('data-comment-id');
-                    const charId = e.target.getAttribute('data-char-id');
-                    const charName = e.target.getAttribute('data-char-name');
+                const momentAction = e.target.closest('[data-moment-action]');
+                if (momentAction) {
+                    const action = momentAction.dataset.momentAction;
+                    if (action === 'profile') this.openMomentProfile(momentAction.dataset.authorId);
+                    if (action === 'like') this.toggleMomentLike(momentAction.dataset.momentId);
+                    if (action === 'comment') this.openMomentCommentComposer(momentAction.dataset.momentId);
+                    return;
+                }
+
+                const senderButton = e.target.closest('.comment-sender-name');
+                if (senderButton) {
+                    const momentId = senderButton.getAttribute('data-moment-id');
+                    const commentId = senderButton.getAttribute('data-comment-id');
+                    const charId = senderButton.getAttribute('data-char-id');
+                    const charName = senderButton.getAttribute('data-char-name');
 
                     console.log(`[调试] 点击了评论者: ${charName} (ID: ${charId})`);
 
@@ -14549,6 +15221,14 @@ const App = {
             else if (typeof App !== 'undefined' && typeof App.executeCommentReply === 'function') App.executeCommentReply();
         });
 
+        document.getElementById('btn-close-m-comment')?.addEventListener('click', () => {
+            document.getElementById('modal-write-moment-comment')?.classList.add('hidden');
+            STATE.composingMomentCommentId = null;
+        });
+        document.getElementById('btn-publish-m-comment')?.addEventListener('click', () => {
+            this.publishMomentComment();
+        });
+
 
         // ================= 7. 心迹内容长按操作 (编辑/复制/删除) =================
         let momentPressTimer = null;
@@ -14583,6 +15263,10 @@ const App = {
                     
                     // 2. 记录当前被选中的心迹ID到全局状态
                     STATE.selectedMomentId = momentId;
+
+                    // ★ 用户对自己和角色动态都使用同一套编辑/复制/删除面板。
+                    document.getElementById('btn-m-action-edit')?.classList.remove('hidden');
+                    document.getElementById('btn-m-action-delete')?.classList.remove('hidden');
                     
                     // 3. 弹出操作菜单
                     const actionModal = document.getElementById('modal-moment-actions');

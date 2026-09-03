@@ -265,7 +265,11 @@ const Storage = {
 
             const mSettings = await DB.get(CONFIG.MOMENTS_SETTINGS_KEY);
             if (mSettings) {
-                STATE.momentsSettings = mSettings;
+                // ★ 心迹设置允许平滑加字段：老备份没有角色动态开关/概率时，补默认值而不是整份覆盖。
+                STATE.momentsSettings = {
+                    ...JSON.parse(JSON.stringify(CONFIG.DEFAULT.MOMENTS_SETTINGS)),
+                    ...mSettings
+                };
             } else {
                 // 【修复点 1】：必须从 CONFIG.DEFAULT.MOMENTS_SETTINGS 获取
                 // 并且建议深拷贝，防止引用污染

@@ -89,7 +89,15 @@ const CONFIG = {
             username: '你的名字', // <-- 新增这一行
             signature: '写下你的此刻心情...',
             apiPresetIndex: -1, 
-            allowedChars: [] 
+            allowedChars: [],
+            // ★ 可见名单与原评论名单一样，空数组代表全部角色；真正停用由总开关负责。
+            visibleCharacterAuthors: [],
+            autoCharacterMomentsEnabled: true,
+            autoCharacterMomentProbability: 50,
+            autoCharacterLikeProbability: 25,
+            lastAutoMomentCheckAt: 0,
+            autoMomentStatsByChar: {},
+            characterMomentCoverIndexes: {}
         },
 
         MAX_TOKENS: 32700, 
