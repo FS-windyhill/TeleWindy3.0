@@ -3687,11 +3687,13 @@ body.dark-mode .menu-gap {
     unicode-bidi: isolate;
 }
 
-h3#modal-title.bianjixiaoxi{
+h3#modal-title.bianjixiaoxi,
+h3#moment-comment-modal-title.bianjixiaoxi{
     color: #333;
 }
 
-body.dark-mode h3#modal-title.bianjixiaoxi{
+body.dark-mode h3#modal-title.bianjixiaoxi,
+body.dark-mode h3#moment-comment-modal-title.bianjixiaoxi{
     color: #ddd;
 }
 
@@ -6429,7 +6431,8 @@ body.custom-dark #custom-css-panel {
 
 }
 
-body.custom-dark h3#modal-title.bianjixiaoxi{
+body.custom-dark h3#modal-title.bianjixiaoxi,
+body.custom-dark h3#moment-comment-modal-title.bianjixiaoxi{
     color: #ddd;
 }
 
@@ -8314,7 +8317,9 @@ body.dark-mode button#btn-save-m-settings.save-btn{
 
 }
 
-#m-write-text{
+/* ★ 发布动态与写评论都是 edit modal，输入区必须共用相同尺寸，避免评论框退回浏览器默认窄宽度。 */
+#m-write-text,
+#m-comment-text{
     width: 93%;
     height: 150px;
     padding: 10px;
