@@ -4981,9 +4981,6 @@ body.custom-dark .explore-list li .arrow { color: #aaa; font-size: 0.9rem; font-
 
 
 body.custom-dark .moment-content { 
-    margin-bottom: 12px; 
-    line-height: 1.6; 
-    font-size: 1rem;
     color: #ffffff;
 }
 
@@ -6538,7 +6535,7 @@ body.custom-dark .moments-empty-state p {
 }
 
 body.custom-dark .moment-action-row {
-    border-top-color: rgba(255, 255, 255, 0.08);
+    border-top-color: rgba(255, 255, 255, 0.18);
 }
 
 body.custom-dark .moment-action-btn {
@@ -7349,7 +7346,7 @@ body.dark-mode .moment-card {
     justify-content: space-between; 
     color: #999; 
     font-size: 0.8rem; 
-    margin-bottom: 6px; 
+
 }
 
 
@@ -7359,22 +7356,12 @@ body.dark-mode .moment-top {
     color: #b0b0b0;
 
     font-size: 0.8rem; 
-    margin-bottom: 12px; 
+
     padding: 0px 5px;
 }
 
-.moment-content { 
-    margin-bottom: 12px; 
-    line-height: 1.6; 
-    font-size: 1rem;
-    color: #1a1a1a;
-    padding: 0px 5px;
-}
 
 body.dark-mode .moment-content { 
-    margin-bottom: 12px; 
-    line-height: 1.6; 
-    font-size: 1rem;
     color: #ffffff;
 }
 
@@ -7624,7 +7611,7 @@ body.dark-mode .momment-btn.cancel {
 }
 
 .moment-card-heading {
-    margin: 1px 0 7px;
+    margin: 1px 0 6px;
     display: flex;
     align-items: baseline;
     justify-content: space-between;
@@ -7654,8 +7641,9 @@ body.dark-mode .moment-author-name {
     padding: 0;
     color: #25272c;
     font-size: 0.96rem;
-    line-height: 1.65;
+    line-height: 1.6;
     overflow-wrap: anywhere;
+    margin-bottom: 10px;
 }
 
 .moment-content .moment-img {
@@ -7987,7 +7975,7 @@ body.dark-mode .moments-empty-state p {
 }
 
 body.dark-mode .moment-action-row {
-    border-top-color: rgba(255, 255, 255, 0.08);
+    border-top-color: rgba(255, 255, 255, 0.18);
 }
 
 body.dark-mode .moment-action-btn {
