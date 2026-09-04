@@ -3021,6 +3021,10 @@ const UI = {
             } else if (typeof App.renderMomentsUI === 'function') {
                 App.renderMomentsUI();
             }
+            // ★ 只有真正进入心迹页才算已读；停留在探索页不会提前消掉提示。
+            if (typeof App !== 'undefined' && typeof App.markCharacterMomentsSeen === 'function') {
+                App.markCharacterMomentsSeen();
+            }
         }
     },
 
@@ -4223,6 +4227,7 @@ const App = {
         this.syncAsyncBackendToggle();
         this.syncWorldSenseToggle();
         this.syncTodoContextToggles();
+        this.updateCharacterMomentUnreadDot();
         await this.renderDesktop();
         // ★ 角色日程按“当天一次”补生成：打开页面后排队处理，当前聊天角色会在发送前优先补。
         setTimeout(() => this.ensureEnabledCharacterSchedules({ silent: true }), 0);
@@ -11825,6 +11830,42 @@ const App = {
         return changed;
     },
 
+    getLatestCharacterMomentCreatedAt() {
+        return (Array.isArray(STATE.moments) ? STATE.moments : [])
+            .filter(moment => String(moment?.authorId || 'user') !== 'user')
+            .reduce((latest, moment) => {
+                const createdAt = Number(moment.createdAt || moment.timestamp || 0);
+                return Number.isFinite(createdAt) ? Math.max(latest, createdAt) : latest;
+            }, 0);
+    },
+
+    updateCharacterMomentUnreadDot() {
+        const dot = document.getElementById('explore-moments-unread-dot');
+        if (!dot) return;
+
+        const latestCreatedAt = this.getLatestCharacterMomentCreatedAt();
+        const lastSeenAt = Number(STATE.momentsSettings?.lastSeenCharacterMomentAt || 0);
+        // ★ 只提示角色新发的动态；用户自己发布、点赞和评论都不点亮这里。
+        dot.classList.toggle('hidden', !(latestCreatedAt > lastSeenAt));
+    },
+
+    async markCharacterMomentsSeen() {
+        const latestCreatedAt = this.getLatestCharacterMomentCreatedAt();
+        const settings = STATE.momentsSettings || CONFIG.DEFAULT.MOMENTS_SETTINGS;
+        const lastSeenAt = Number(settings.lastSeenCharacterMomentAt || 0);
+
+        settings.lastSeenCharacterMomentAt = Math.max(lastSeenAt, latestCreatedAt);
+        STATE.momentsSettings = settings;
+        this.updateCharacterMomentUnreadDot();
+        if (settings.lastSeenCharacterMomentAt !== lastSeenAt) {
+            try {
+                await Storage.saveMomentsSettings();
+            } catch (error) {
+                console.warn('[心迹] 未读状态保存失败:', error);
+            }
+        }
+    },
+
     getMomentAuthor(authorId) {
         if (!authorId || authorId === 'user') {
             return {
@@ -11987,7 +12028,7 @@ const App = {
 
             const likeNames = likes.map(likerId => this.getMomentAuthor(likerId).name).filter(Boolean);
             const likesHtml = likeNames.length
-                ? `<div class="moment-like-panel"><div class="moment-likes"><span aria-hidden="true">♥</span>${this.escapeHtml(likeNames.join('、'))}</div></div>`
+                ? `<div class="moment-like-panel"><div class="moment-likes"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5"></path></svg>${this.escapeHtml(likeNames.join('、'))}</div></div>`
                 : '';
             let commentsHtml = '';
             comments.forEach(comment => {
@@ -12557,7 +12598,12 @@ const App = {
             timestamp: generated.timestamp,
             createdAt,
             comments: [],
-            likes: []
+            likes: [],
+            // ★ 角色发帖只通知作者本人；独立常量方便以后与用户动态分别调整轮次。
+            chatInjectionStatus: {
+                [String(contact.id)]: CONFIG.CHARACTER_MOMENT_INJECT_COUNT
+            },
+            chatInjectionActiveTurn: {}
         };
         if (asyncJobId) newMoment.asyncJobId = asyncJobId;
         STATE.moments.unshift(newMoment);
@@ -12568,6 +12614,11 @@ const App = {
             console.warn('[心迹] 角色动态冷却记录保存失败:', error);
         }
         this.renderMomentsUI();
+        if (this.isViewingMomentsPage()) {
+            await this.markCharacterMomentsSeen();
+        } else {
+            this.updateCharacterMomentUnreadDot();
+        }
         return true;
     },
 
@@ -12619,6 +12670,12 @@ const App = {
             }
             const contact = candidates[Math.floor(Math.random() * candidates.length)];
 
+            // ★ 角色日程已开启且今天有缓存时，发动态也复用聊天里的“当前 / 上一段 / 下一段”格式。
+            const characterSchedulePrompt = CharacterSchedule.buildChatPrompt(contact.id, new Date(now));
+            const characterScheduleSection = characterSchedulePrompt
+                ? `\n【角色日程】\n${characterSchedulePrompt}\n`
+                : '';
+
             const directions = [
                 '近期对话相关，但不复述聊天原句',
                 '自己的日常片段',
@@ -12646,7 +12703,7 @@ const App = {
             const worldInfoSection = worldInfoPrompt ? `\n【世界知识/环境信息】\n${worldInfoPrompt}\n` : '';
             const startText = new Date(windowStart).toLocaleString('zh-CN', { hour12: false });
             const endText = new Date(now).toLocaleString('zh-CN', { hour12: false });
-            const promptText = `【系统设定】\n${contact.prompt || ''}\n${worldInfoSection}\n【近期聊天】\n${historyText}\n\n【你最近的三条动态】\n${recentMoments}\n\n【本次内容方向】\n${direction}\n\n【可用发帖时间】\n${startText} 至 ${endText}\n\n【任务】\n你是 ${contact.name}。像真人使用朋友圈一样，发布一条自然、独立的文字动态。可以联系近期聊天，也可以写自己的生活和心情，也可以分享你喜欢的诗句、歌词或书摘。不要提到你是 AI，不要写动作括号，不要解释，不要重复最近动态，不要凭空创造会改变人物关系的重大事件。正文建议 10～180 字。\n只输出严格 JSON：{"text":"动态正文","timestamp":"带时区的 ISO 8601 时间"}`;
+            const promptText = `【系统设定】\n${contact.prompt || ''}\n${characterScheduleSection}${worldInfoSection}\n【近期聊天】\n${historyText}\n\n【你最近的三条动态】\n${recentMoments}\n\n【本次内容方向】\n${direction}\n\n【可用发帖时间】\n${startText} 至 ${endText}\n\n【任务】\n你是 ${contact.name}。像真人使用朋友圈一样，发布一条自然、独立的文字动态。可以联系近期聊天，也可以写自己的生活和心情，也可以分享你喜欢的诗句、歌词或书摘。不要提到你是 AI，不要写动作括号，不要解释，不要重复最近动态，不要凭空创造会改变人物关系的重大事件。正文建议 10～180 字。\n只输出严格 JSON：{"text":"动态正文","timestamp":"带时区的 ISO 8601 时间"}`;
 
             let apiConfig = this.getMomentsApiConfig(1200);
             apiConfig = this.applyAsyncBackendToMomentConfig(
@@ -13237,7 +13294,7 @@ const App = {
 
         if (relevantMoments.length === 0) return null;
 
-        let contextText = "【近期朋友圈同步(System Info)】\n用户发布了以下新动态（包含你们在评论区的互动）。请将其作为当前对话的背景知识，**无需刻意复述**，但在回复时请保持对此事的记忆。\n";
+        let contextText = "【近期朋友圈同步(System Info)】\n以下是与你有关的新动态（包含你和用户在评论区的互动）。请将其作为当前对话的背景知识，**无需刻意复述**，但在回复时请保持对此事的记忆。\n";
         let idsToUpdate = [];
 
         relevantMoments.forEach((m, index) => {
@@ -13279,8 +13336,13 @@ const App = {
             }).join('\n');
 
             const hasImage = m.image ? "[附带了一张图片]" : "";
-            
-            contextText += `\n--- 动态 ${index + 1} ---\n用户：“${m.text}” ${hasImage}\n`;
+            const isCharacterOwnMoment = String(m.authorId || 'user') === String(contactId);
+            const momentDescription = isCharacterOwnMoment
+                ? `这是你自己此前发布的动态：“${m.text}”`
+                : `用户此前发布的动态：“${m.text}”`;
+
+            // ★ 角色动态与用户动态共用注入计数，但明确作者身份，避免模型把自己的帖子认成用户发言。
+            contextText += `\n--- 动态 ${index + 1} ---\n${momentDescription} ${hasImage}\n`;
             if (chatThread) {
                 contextText += `[评论区互动]:\n${chatThread}\n`;
             } else {
@@ -15284,6 +15346,13 @@ const App = {
             momentsFeed.addEventListener('touchmove', clearMomentPressTimer, { passive: true });
             momentsFeed.addEventListener('mouseup', clearMomentPressTimer);
             momentsFeed.addEventListener('mouseleave', clearMomentPressTimer);
+            // ★ 卡片长按统一交给自定义操作面板，屏蔽浏览器自己的选中/复制菜单。
+            momentsFeed.addEventListener('contextmenu', (event) => {
+                if (event.target.closest('.moment-card')) event.preventDefault();
+            });
+            momentsFeed.addEventListener('selectstart', (event) => {
+                if (event.target.closest('.moment-card')) event.preventDefault();
+            });
         }
 
         // ================= 操作菜单的按钮点击事件 =================

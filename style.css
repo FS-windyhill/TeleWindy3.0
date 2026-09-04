@@ -7177,6 +7177,21 @@ body.dark-mode .explore-list li .arrow { color: #aaa; font-size: 0.9rem; font-we
 .explore-list li .text { flex-grow: 1; font-size: 1rem; font-weight: 600; color: #333; }
 .explore-list li .arrow { color: #aaa; font-size: 0.9rem; font-weight: bold; }
 
+/* ★ 心迹未读红点紧跟探索页“心迹”文字，红点本身复用桌面最近联系人的视觉。 */
+#explore-moments-btn .text {
+    flex-grow: 0;
+}
+
+.desktop-recent-unread-dot.explore-moments-unread-dot {
+    position: static;
+    margin-left: 16px;
+    flex: 0 0 auto;
+}
+
+#explore-moments-btn .arrow {
+    margin-left: auto;
+}
+
 /* ================== 心迹页面 ================ */
 #moments-scroll-area {
     height: calc(100vh - 55px);
@@ -7505,6 +7520,14 @@ button#btn-load-more-moments:active {
     animation: slideUpAction 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); /* 极其丝滑的弹出动画 */
 }
 
+/* ★ 心迹与评论操作菜单只负责接收按钮点击，不允许长按选中文字或弹出浏览器复制菜单。 */
+#modal-moment-actions,
+#modal-comment-actions {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+
 /* 底部弹出面板容器 */
 body.dark-mode .action-sheet {
     /* 核心质感：高级毛玻璃效果 */
@@ -7572,6 +7595,10 @@ body.dark-mode .momment-btn.cancel {
     align-items: flex-start;
     gap: 12px;
     box-shadow: 0 8px 24px rgba(25, 34, 49, 0.055);
+    /* ★ 自定义长按菜单接管整张卡片，避免手机浏览器同时弹出选中/复制菜单。 */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
 }
 
 .moment-avatar-button,
@@ -7738,6 +7765,14 @@ body.dark-mode .moment-author-name {
     align-items: flex-start;
     color: #536b98;
     line-height: 1.45;
+}
+
+/* ★ 点赞名单使用与上方“点赞”按钮完全相同的心形 SVG。 */
+.moment-likes svg {
+    width: 1em;
+    height: 1em;
+    margin-top: 0.2em;
+    flex: 0 0 1em;
 }
 
 body.dark-mode .moment-likes {
@@ -12293,8 +12328,8 @@ body.dark-mode .desktop-todo-empty {
     position: absolute;
     top: 1px;
     right: 1px;
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     background: #ff3b30;
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.92);
