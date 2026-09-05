@@ -105,16 +105,16 @@
 //     - showDesktopActivityTip(cell) / hideDesktopActivityTip(): 手机端点击热力图方块时显示/收起小浮窗
 //     - renderDesktopAsyncStatus(): 渲染后台回复接收状态
 //     - escapeHtml(text): 渲染 innerHTML 前统一转义可控文本，防止备份/AI内容触发 XSS
-//     - sanitizeImageSrc(src): 过滤心迹图片地址，只允许 http/https/blob 和常见图片 data URL
+//     - sanitizeImageSrc(src): 过滤朋友圈图片地址，只允许 http/https/blob 和常见图片 data URL
 //     - rememberReturnView(pageName, fallback): 记录二级页面从哪个主入口进入
 //     - getReturnView(pageName, fallback): 获取二级页面返回时应该回到的主入口
 //     - getTopNoticeTargetHandler(options): 生成顶部通知点击后的跳转/执行处理
 //     - showTodoTopNotice(message, options): 弹出默认跳转到 TO DO 的顶部通知
 //     - isViewingContactChat(contactId): 判断用户是否真的正在查看某个角色聊天窗口
 //     - markContactIncomingMessage(contact, options): 统一处理非当前窗口 AI 新消息的红点和顶部通知
-//     - showMomentReplyNotice(charId, options): 心迹收到新 AI 回复时累计未读并弹顶部通知，当前就在心迹页则静默
-//     - markMomentReplyUnread(): 累计并保存探索页心迹入口的未读回复条数
-//     - showMomentLikeNotice(charId, options): 角色延迟点赞后弹顶部通知，当前就在心迹页则静默
+//     - showMomentReplyNotice(charId, options): 朋友圈收到新 AI 回复时累计未读并弹顶部通知，当前就在朋友圈页则静默
+//     - markMomentReplyUnread(): 累计并保存探索页朋友圈入口的未读回复条数
+//     - showMomentLikeNotice(charId, options): 角色延迟点赞后弹顶部通知，当前就在朋友圈页则静默
 //     - showTopNotice(message, options): 通用顶部通知栈，支持多条并发、按钮和上划关闭
 //     - isDynamicContextSystemRoleError(error): 判断错误是否像多 system / system role 兼容问题
 //     - getDynamicContextWarnKey(contact, requestSettings): 生成兼容提示的会话内去重 key
@@ -128,7 +128,7 @@
 //
 // 发送消息主链路
 //   - handleSend() 会先拼稳定 system / 角色 prompt，再追加历史消息
-//   - handleSend() 会把世界感知、用户计划、角色日程、世界书和心迹收集成本轮背景
+//   - handleSend() 会把世界感知、用户计划、角色日程、世界书和朋友圈收集成本轮背景
 //   - handleSend() 会在 auto 模式下拆分日级稳定背景和本轮触发世界书：前者前置为 system，后者并入当前 user
 //   - DYNAMIC_CONTEXT_INSERT_MODE 控制本轮触发背景作为前置 system、全部合并到当前 user，或自动把触发世界书并入 user
 // =========================================
@@ -147,16 +147,16 @@
 //   - STORAGE_KEY: IndexedDB/localStorage 中存储角色/联系人数据的键名
 //   - SETTINGS_KEY: 存储用户设置的键名
 //   - WORLD_INFO_KEY: 存储世界书数据的键名
-//   - MOMENTS_KEY: 存储心迹列表数据的键名
-//   - MOMENTS_SETTINGS_KEY: 存储心迹设置的键名
+//   - MOMENTS_KEY: 存储朋友圈列表数据的键名
+//   - MOMENTS_SETTINGS_KEY: 存储朋友圈设置的键名
 //   - TODO_PLANS_KEY: 存储探索页 TO DO 计划列表的键名
 //   - COUNTDOWN_DAYS_KEY: 存储探索页倒数日 / 正数日列表的键名
 //   - CHARACTER_SCHEDULES_KEY: 存储探索页角色日程的键名
 //   - CHARACTER_MEMORIES_KEY: 存储探索页角色记忆的键名
 //   - CHAT_PAGE_SIZE: 聊天记录分页加载数量
-//   - MOMENTS_PAGE_SIZE: 心迹分页加载数量
+//   - MOMENTS_PAGE_SIZE: 朋友圈分页加载数量
 //   - GIST_ID_KEY: localStorage 中保存 Gist ID 的键名
-//   - MOMENTS_INJECT_COUNT: AI 在聊天中感知新心迹的聊天轮次
+//   - MOMENTS_INJECT_COUNT: AI 在聊天中感知新朋友圈的聊天轮次
 //   - DEFAULT: 应用默认设置
 //     - API_URL: 默认文本模型 API 地址
 //     - MODEL: 默认文本模型名称
@@ -176,13 +176,13 @@
 //     - FONT_SIZE: 默认字体大小
 //     - API_PRESETS: API 预设列表
 //     - VISION_PRESETS: 视觉模型预设列表
-//     - MOMENTS_SETTINGS: 心迹页面默认设置
-//       - bgImage: 心迹背景图
-//       - avatar: 心迹头像
-//       - username: 心迹用户名
-//       - signature: 心迹签名
-//       - apiPresetIndex: 心迹使用的 API 预设索引
-//       - allowedChars: 允许参与心迹的角色列表
+//     - MOMENTS_SETTINGS: 朋友圈页面默认设置
+//       - bgImage: 朋友圈背景图
+//       - avatar: 朋友圈头像
+//       - username: 朋友圈用户名
+//       - signature: 朋友圈签名
+//       - apiPresetIndex: 朋友圈使用的 API 预设索引
+//       - allowedChars: 允许参与朋友圈的角色列表
 //     - MAX_TOKENS: 默认最大输出 token
 //     - TEMPERATURE: 默认温度参数
 //     - CONTEXT_LIMIT: 缓存友好模式的最短上下文；严格模式下就是最近 N 条
@@ -212,9 +212,9 @@
 //   - isSelectMode: 当前是否处于多选模式
 //   - selectedBubbles: 已选中的消息气泡集合
 //   - pendingImage: 用户待发送图片的 Base64 暂存
-//   - moments: 心迹列表
-//   - momentsSettings: 心迹页面设置
-//   - visibleMomentsCount: 当前可见心迹数量
+//   - moments: 朋友圈列表
+//   - momentsSettings: 朋友圈页面设置
+//   - visibleMomentsCount: 当前可见朋友圈数量
 //   - todoPlans: 探索页 TO DO 计划列表
 //   - countdownDays: 探索页倒数日 / 正数日列表
 //   - characterSchedules: 探索页角色日程列表，每个角色一份开关和当天 entries
@@ -265,14 +265,14 @@
 // =========================================
 
 // Storage: 负责应用数据加载、保存、导入和导出
-//   - load(): 初始化加载设置、联系人、世界书和心迹数据，并处理旧版 localStorage 数据迁移
+//   - load(): 初始化加载设置、联系人、世界书和朋友圈数据，并处理旧版 localStorage 数据迁移
 //   - saveContacts(): 保存 STATE.contacts 联系人列表
 //   - saveSettings(): 保存 STATE.settings 用户设置
 //   - saveWorldInfo(): 保存 STATE.worldInfoBooks 世界书数据
 //   - exportAllForBackup(): 从 IndexedDB 导出完整备份数据，并对 GIST_TOKEN 做安全处理
 //   - importFromBackup(rawData): 导入手动备份或云同步备份，清库后写入新数据，并兼容 JSON 字符串格式
-//   - saveMoments(): 保存 STATE.moments 心迹列表
-//   - saveMomentsSettings(): 保存 STATE.momentsSettings 心迹设置
+//   - saveMoments(): 保存 STATE.moments 朋友圈列表
+//   - saveMomentsSettings(): 保存 STATE.momentsSettings 朋友圈设置
 //   - saveTodoPlans(): 保存 STATE.todoPlans TO DO 计划列表
 //   - saveCountdownDays(): 保存 STATE.countdownDays 倒数日 / 正数日列表
 //   - saveCharacterSchedules(): 保存 STATE.characterSchedules 角色日程列表
@@ -427,7 +427,7 @@
 //   - applyAppearance(): 应用壁纸、主题、字体大小、主题色和自定义 CSS，并同步主题控件状态
 //   - renderCssPresetMenu(): 渲染 CSS 样式预设下拉菜单
 //   - toggleTheme(newTheme): 切换主题并保存设置
-//   - switchView(viewName): 在桌面、联系人列表、聊天页、探索页、心迹页等视图之间切换，并记录二级页返回来源
+//   - switchView(viewName): 在桌面、联系人列表、聊天页、探索页、朋友圈页等视图之间切换，并记录二级页返回来源
 //   - renderVisionPresetMenu(): 渲染视觉模型预设下拉菜单
 //   - renderContacts(): 渲染联系人列表，包括头像、消息预览、未读红点、置顶金边和排序箭头
 //   - renderBookSelect(): 渲染世界书大分类下拉框，并同步当前选中的世界书
@@ -500,14 +500,14 @@
 //     - moveContactInList(contactId, direction): 在置顶组或普通组内部把联系人上移/下移一格并保存
 //     - hideMessageContextMenu(): 隐藏消息的右键上下文菜单
 //     - showMessageContextMenu(msgIndex, rect): 在指定位置显示消息的右键上下文菜单，并设置防误触锁
-//     - resumePendingChatJobs(): 启动或回前台时检查未完成的后台生成任务，并把结果写回聊天/心迹
+//     - resumePendingChatJobs(): 启动或回前台时检查未完成的后台生成任务，并把结果写回聊天/朋友圈
 //     - isAsyncBackendJobStale(pending): 判断本地 pending job 是否超过 30 分钟，避免无限轮询
-//     - markAsyncBackendJobStale(pending): 把卡住的后台任务标记为停止，并在聊天/心迹里做善后
+//     - markAsyncBackendJobStale(pending): 把卡住的后台任务标记为停止，并在聊天/朋友圈里做善后
 //     - scheduleAsyncBackendResumeCheck(delayMs): 手机切回前台后，轻量补查后台 pending job
-//     - applyAsyncMomentJob(context, job, jobId): 将心迹后台任务结果写回对应动态或评论
-//     - markAsyncMomentJobFailed(context): 心迹后台任务失败时恢复“重新生成中”的旧评论
-//     - buildMomentsAsyncContext(type, data): 为心迹后台任务生成回填定位信息
-//     - applyAsyncBackendToMomentConfig(config, context): 给心迹 API 配置补上后台接收参数
+//     - applyAsyncMomentJob(context, job, jobId): 将朋友圈后台任务结果写回对应动态或评论
+//     - markAsyncMomentJobFailed(context): 朋友圈后台任务失败时恢复“重新生成中”的旧评论
+//     - buildMomentsAsyncContext(type, data): 为朋友圈后台任务生成回填定位信息
+//     - applyAsyncBackendToMomentConfig(config, context): 给朋友圈 API 配置补上后台接收参数
 //     - loadAsyncBackendSettings(): 打开后台回复接收页面时填充启用状态、URL、Token、TTL 和 pending 状态
 //     - saveAsyncBackendSettings(): 保存后台回复接收启用状态、URL、Token、TTL 到设置
 //     - syncAsyncBackendToggle(): 同步探索页胶囊开关状态
@@ -527,8 +527,8 @@
 //     - runAgentPostAgents(contact, assistantText, assistantMessage): 只在角色回复含『动作意图』时触发 Agent，不再每轮跑总路由
 //     - runAgentTodoIntentOperations(contact, intentTexts, assistantMessage): 把『』内自然语言意图交给 TODO Agent 翻译成待确认建议
 //     - executeAgentTodoSkill(routerResult, contact): 旧 pre-agent 直接落地入口，根据 TODO Agent 输出的操作包新增/完成/取消/改期
-//     - escapeHtml(text): 渲染 innerHTML 前做 HTML 转义，TO DO、心迹、搜索结果等都会复用
-//     - sanitizeImageSrc(src): 过滤心迹图片地址，拦截 javascript: / SVG data 等危险来源
+//     - escapeHtml(text): 渲染 innerHTML 前做 HTML 转义，TO DO、朋友圈、搜索结果等都会复用
+//     - sanitizeImageSrc(src): 过滤朋友圈图片地址，拦截 javascript: / SVG data 等危险来源
 //     - renderTodoDatePicker(scope): 渲染 TO DO / 倒数日弹窗的 7 天日期条
 //     - getTodoMonthPickerState(scope): 获取年月快选面板临时状态
 //     - renderTodoMonthPanel(scope): 渲染年月快选面板
@@ -591,24 +591,24 @@
 //     - toggleDesktopTodo(id, checked): 在桌面直接勾选 TO DO 完成状态
 //     - clearDesktopAsyncStatus(): 清理桌面显示的后台接收状态
 //     - escapeHtml(text): 渲染 innerHTML 前统一转义可控文本，防止备份/AI内容触发 XSS
-//     - sanitizeImageSrc(src): 过滤心迹图片地址，只允许 http/https/blob 和常见图片 data URL
+//     - sanitizeImageSrc(src): 过滤朋友圈图片地址，只允许 http/https/blob 和常见图片 data URL
 //     - rememberReturnView(pageName, fallback): 记录二级页面从哪个主入口进入
 //     - getReturnView(pageName, fallback): 获取二级页面返回时应该回到的主入口
-//     - switchMainTab(tab): 切换底部导航栏的主视图（聊天、探索、心迹）
+//     - switchMainTab(tab): 切换底部导航栏的主视图（聊天、探索、朋友圈）
 //     - renderMomentsUI() / openMomentProfile() / showMomentsFeed(): 渲染公开动态流与用户/角色个人主页
 //     - maybeGenerateCharacterMoment(): 按可见名单与用户概率设置生成角色动态
 //     - toggleMomentLike() / openMomentCommentComposer(): 处理动态点赞和用户主动评论
-//     - loadMoreMoments(): 加载更多心迹动态，增加可见数量并重新渲染
-//     - openMomentsSettings(): 打开心迹设置弹窗，填充API预设下拉框和允许评论的联系人复选框列表
-//     - saveMomentsSettings(): 保存心迹设置（API预设索引、允许评论的角色列表）到STATE和存储
-//     - publishMoment(): 异步发布新的心迹动态，处理文本和图片，并触发AI评论
-//     - triggerAIComments(targetMoment): 异步为新建的心迹动态触发所有允许角色的AI评论生成
-//     - handleMomentAction(action): 处理心迹动态的右键菜单动作（复制、编辑、删除）
-//     - saveAndRenderMoments(): 辅助函数，保存心迹数据到存储并刷新心迹列表视图
-//     - handleCommentAction(action): 处理心迹评论的右键菜单动作（复制、编辑、重新生成、删除）
+//     - loadMoreMoments(): 加载更多朋友圈动态，增加可见数量并重新渲染
+//     - openMomentsSettings(): 打开朋友圈设置弹窗，填充API预设下拉框和允许评论的联系人复选框列表
+//     - saveMomentsSettings(): 保存朋友圈设置（API预设索引、允许评论的角色列表）到STATE和存储
+//     - publishMoment(): 异步发布新的朋友圈动态，处理文本和图片，并触发AI评论
+//     - triggerAIComments(targetMoment): 异步为新建的朋友圈动态触发所有允许角色的AI评论生成
+//     - handleMomentAction(action): 处理朋友圈动态的右键菜单动作（复制、编辑、删除）
+//     - saveAndRenderMoments(): 辅助函数，保存朋友圈数据到存储并刷新朋友圈列表视图
+//     - handleCommentAction(action): 处理朋友圈评论的右键菜单动作（复制、编辑、重新生成、删除）
 //     - openReplyModal(): 打开回复评论的输入弹窗
 //     - executeCommentReply(): 异步执行对特定评论的回复，保存用户回复并触发AI的进一步回复
-//     - getMomentsContextForChat(contactId): 为聊天生成关于未读心迹动态的上下文Prompt，用于注入到AI对话中
+//     - getMomentsContextForChat(contactId): 为聊天生成关于未读朋友圈动态的上下文Prompt，用于注入到AI对话中
 //     - bindEvents(): 绑定应用程序中所有的用户交互事件（点击、输入、长按、文件上传等），是事件监听器的核心注册中心
 //     - readFile(file): 读取文件并返回Promise，结果为文件的Base64编码字符串
 //     - handleTestConnection(): 异步测试API连接，根据设置的URL、密钥和模型发送测试请求
@@ -636,8 +636,8 @@
 
 
 //   - formatTimestamp(): 为聊天消息生成标准时间戳，格式为 YYYY-MM-DD HH:MM
-//   - formatTimeForMoments(ts): 为心迹（朋友圈）动态生成友好的时间显示格式，如 "1月20日 14:30"
-//   - window.exportData(): 全局函数，异步导出所有应用程序数据（联系人、设置、世界书、心迹等）为JSON备份文件并触发下载
+//   - formatTimeForMoments(ts): 为朋友圈（朋友圈）动态生成友好的时间显示格式，如 "1月20日 14:30"
+//   - window.exportData(): 全局函数，异步导出所有应用程序数据（联系人、设置、世界书、朋友圈等）为JSON备份文件并触发下载
 //   - window.importData(input): 全局函数，从用户选择的JSON备份文件中导入并恢复所有数据，包含数据完整性检查和容量警告
 //   - parseCustomMarkdown(text): 终极Markdown解析器，支持数学公式（KaTeX）、表格容器化包装、引用处理，并通过DOMPurify进行安全过滤
 //   - cleanMarkdownForCopy(text): 纯文本清洗函数，用于复制操作时移除Markdown格式符号、引用标记和数学公式定界符
@@ -677,7 +677,7 @@ const STATE = {
     selectedBubbles: new Set(),  // 存储选中的气泡DOM元素
     pendingImage: null, // ★★★ 新增：暂存用户选择的图片 (Base64)
 
-    // 心迹
+    // 朋友圈
     // ★★★ 这里必须初始化为空数组和默认对象 ★★★
     moments: [], 
     // 直接引用 CONFIG 里的默认值，防止 undefined
@@ -2618,7 +2618,7 @@ const UI = {
     },
 
 
-    // 切换窗口+心迹版
+    // 切换窗口+朋友圈版
     switchView(viewName) {
         const appContainer = document.getElementById('app-container');
         
@@ -2987,7 +2987,7 @@ const UI = {
 
         } else if (viewName === 'moments') {
             // ===========================
-            // 4. 进入心迹页面 (朋友圈)
+            // 4. 进入朋友圈页面 (朋友圈)
             // ===========================
             if (typeof App !== 'undefined' && typeof App.rememberReturnView === 'function') {
                 App.rememberReturnView('moments', STATE.currentMainView || 'explore');
@@ -2995,7 +2995,7 @@ const UI = {
             
             appContainer.classList.remove('in-chat-mode'); // 确保不在聊天界面
             
-            // 控制其他页面隐藏，显示心迹页
+            // 控制其他页面隐藏，显示朋友圈页
             if (viewDesktop) viewDesktop.style.display = 'none';
             if (viewContact) viewContact.style.display = 'none';
             if (viewExplore) viewExplore.style.display = 'none';
@@ -3008,7 +3008,7 @@ const UI = {
             if (viewWorldSense) viewWorldSense.style.display = 'none';
             if (viewMoments) viewMoments.style.display = 'flex';
             
-            // 隐藏底栏 (因为心迹页顶部有自己的返回按钮)
+            // 隐藏底栏 (因为朋友圈页顶部有自己的返回按钮)
             if (bottomTabBar) bottomTabBar.style.display = 'none';
 
             // ★ 从探索页进入时永远先看公共动态流；个人主页只由头像点击进入。
@@ -3016,13 +3016,13 @@ const UI = {
             STATE.momentsProfileAuthorId = null;
             STATE.visibleMomentsCount = CONFIG.MOMENTS_PAGE_SIZE;
             
-            // 触发心迹数据的渲染
+            // 触发朋友圈数据的渲染
             if (typeof this.renderMomentsUI === 'function') {
                 this.renderMomentsUI();
             } else if (typeof App.renderMomentsUI === 'function') {
                 App.renderMomentsUI();
             }
-            // ★ 只有真正进入心迹页才算已读；停留在探索页不会提前消掉提示。
+            // ★ 只有真正进入朋友圈页才算已读；停留在探索页不会提前消掉提示。
             if (typeof App !== 'undefined' && typeof App.markCharacterMomentsSeen === 'function') {
                 App.markCharacterMomentsSeen();
             }
@@ -4306,8 +4306,8 @@ const App = {
                         continue;
                     }
 
-                    // ★★★★★ 心迹后台任务恢复 START ★★★★★
-                    // 聊天 pending job 用 contactId 回填；心迹没有 contactId，
+                    // ★★★★★ 朋友圈后台任务恢复 START ★★★★★
+                    // 聊天 pending job 用 contactId 回填；朋友圈没有 contactId，
                     // 所以这里改用创建 job 时保存的 context，知道结果该写回哪条动态/评论。
                     if (pending.context && pending.context.scope === 'moments') {
                         if (job.status === 'done') {
@@ -4331,7 +4331,7 @@ const App = {
                         }
                         continue;
                     }
-                    // ★★★★★ 心迹后台任务恢复 END ★★★★★
+                    // ★★★★★ 朋友圈后台任务恢复 END ★★★★★
 
                     const contact = STATE.contacts.find(c => c.id === pending.contactId);
                     if (!contact) {
@@ -4534,8 +4534,8 @@ const App = {
         // ★★★★★ 后台回复接收：回前台补轮询 END ★★★★★
     },
 
-    // ★★★★★ 心迹后台回复接收 START ★★★★★
-    // 心迹没有聊天页的 contactId + history，所以必须在 pending context 里记录回填位置。
+    // ★★★★★ 朋友圈后台回复接收 START ★★★★★
+    // 朋友圈没有聊天页的 contactId + history，所以必须在 pending context 里记录回填位置。
     // Worker 只负责生成文本；回到前端后，这里根据 context 写回对应动态或评论。
     async applyAsyncMomentJob(context, job, jobId) {
         // ★ 角色发动态没有预先存在的 momentId，要先解析 JSON 并创建动态，再走其它评论回填分支。
@@ -4550,7 +4550,7 @@ const App = {
                 );
             } catch (error) {
                 // ★ 后台返回了非法 JSON 时直接丢弃本次结果，避免同一个完成任务每次启动都重复解析失败。
-                console.warn('[心迹] 后台角色动态校验失败:', error);
+                console.warn('[朋友圈] 后台角色动态校验失败:', error);
                 return false;
             }
         }
@@ -4619,7 +4619,7 @@ const App = {
             ASYNC_BACKEND_CONTEXT: context
         };
     },
-    // ★★★★★ 心迹后台回复接收 END ★★★★★
+    // ★★★★★ 朋友圈后台回复接收 END ★★★★★
 
     // ★★★★★ 桌面 START：页面渲染与小组件交互 ★★★★★
     // 桌面只做“看一眼今天”的聚合展示；
@@ -5555,7 +5555,7 @@ const App = {
         if (!options.targetView) return null;
 
         // ★ 通知路由：
-        // 简单功能只需要 targetView；以后如果要跳到某条心迹/某个 TODO，
+        // 简单功能只需要 targetView；以后如果要跳到某条朋友圈/某个 TODO，
         // 可以继续在 options 里带 targetId，或直接传 onClick 做精确定位。
         return () => {
             if (typeof UI !== 'undefined' && typeof UI.switchView === 'function') {
@@ -5597,18 +5597,18 @@ const App = {
 
     isViewingMomentsPage() {
         const viewMoments = document.getElementById('view-moments');
-        // ★ currentMainView 会保留“从哪个主入口进来”，所以心迹页用实际显示状态判断。
+        // ★ currentMainView 会保留“从哪个主入口进来”，所以朋友圈页用实际显示状态判断。
         return !!viewMoments && getComputedStyle(viewMoments).display !== 'none';
     },
 
     showMomentReplyNotice(charId, options = {}) {
-        // ★ 用户正在心迹列表里看回复时不打扰；历史加载也不会走这个入口。
+        // ★ 用户正在朋友圈列表里看回复时不打扰；历史加载也不会走这个入口。
         if (options.notice === false || this.isViewingMomentsPage()) return;
 
         this.markMomentReplyUnread();
         const contact = STATE.contacts.find(c => c.id === charId);
         const name = contact?.name || options.name || '有人';
-        this.showTopNotice(`${name}回复了你的心迹`, {
+        this.showTopNotice(`${name}回复了你的朋友圈`, {
             type: 'moment-reply',
             timeout: options.timeout || 6500,
             targetView: 'moments'
@@ -5616,7 +5616,7 @@ const App = {
     },
 
     showMomentLikeNotice(charId, options = {}) {
-        // ★ 点赞和评论遵循同一套静默规则：正在心迹页时直接看列表变化，不重复弹横幅。
+        // ★ 点赞和评论遵循同一套静默规则：正在朋友圈页时直接看列表变化，不重复弹横幅。
         if (options.notice === false || this.isViewingMomentsPage()) return;
 
         const contact = STATE.contacts.find(c => String(c.id) === String(charId));
@@ -5781,7 +5781,7 @@ const App = {
             .replace(/'/g, '&#039;');
     },
 
-    // 心迹和搜索结果走 innerHTML 拼装时，所有可控文本都先从这里过一遍。
+    // 朋友圈和搜索结果走 innerHTML 拼装时，所有可控文本都先从这里过一遍。
     // 图片只允许常见安全来源，避免 javascript: / svg data 等地址被塞进 src。
     sanitizeImageSrc(src) {
         const raw = String(src || '').trim();
@@ -8941,7 +8941,7 @@ const App = {
         const pendingHtml = jobs.slice(0, 6).map(job => {
             const ageMs = now - Number(job.createdAt || now);
             const isStale = job.status !== 'failed' && ageMs > 30 * 60 * 1000;
-            const label = job.context?.scope === 'moments' ? '心迹' : '聊天';
+            const label = job.context?.scope === 'moments' ? '朋友圈' : '聊天';
             const statusText = job.status === 'failed' ? '已停止' : (isStale ? '可能卡住' : '接收中');
             return `
                 <div class="async-backend-pending-item ${isStale ? 'is-stale' : ''}">
@@ -9571,7 +9571,7 @@ const App = {
             const lastUserMsg = [...contact.history].reverse().find(m => m.role === 'user');
             if (!lastUserMsg) return;
             agentUserMessage = lastUserMsg;
-            // 心迹按“用户消息轮次”消费；重 roll 复用同一个 turnId，不再额外扣次数。
+            // 朋友圈按“用户消息轮次”消费；重 roll 复用同一个 turnId，不再额外扣次数。
             if (!lastUserMsg.momentInjectionTurnId) {
                 lastUserMsg.momentInjectionTurnId = `moment_turn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
             }
@@ -9752,7 +9752,7 @@ const App = {
             await Storage.saveContacts();
         }
 
-        // 预处理 History：统一走 AI 可见历史清洗，避免聊天、心迹、记忆各写一套隐藏规则。
+        // 预处理 History：统一走 AI 可见历史清洗，避免聊天、朋友圈、记忆各写一套隐藏规则。
         const recentHistory = historyWindow.records
             .map(record => record.msg)
             .map(msg => HistoryVisibility.buildVisibleMessage(msg, {
@@ -9860,7 +9860,7 @@ const App = {
         }
 
 
-        // ★★★ 【核心修改】检查心迹并注入 ★★★
+        // ★★★ 【核心修改】检查朋友圈并注入 ★★★
         let momentsUpdateInfo = null;
         try {
             // 调用我们刚才写的辅助函数
@@ -9873,12 +9873,12 @@ const App = {
             }
 
             if (momentsUpdateInfo && momentsUpdateInfo.prompt) {
-                console.log(`[Chat] 注入心迹动态 context (${momentsUpdateInfo.momentIds.length}条)`);
-                // 心迹是本轮通知型背景，不混进“今日稳定背景”；auto 下随本轮触发世界书并入当前 user。
+                console.log(`[Chat] 注入朋友圈动态 context (${momentsUpdateInfo.momentIds.length}条)`);
+                // 朋友圈是本轮通知型背景，不混进“今日稳定背景”；auto 下随本轮触发世界书并入当前 user。
                 volatileDynamicContextPrompts.push(momentsUpdateInfo.prompt);
             }
         } catch (e) {
-            console.warn("心迹注入失败:", e);
+            console.warn("朋友圈注入失败:", e);
         }
 
         let dynamicContextContent = '';
@@ -10102,7 +10102,7 @@ const App = {
                 }
             }
 
-            // ★★★ 【核心修改】AI回复成功后，按聊天轮次扣除心迹通知 ★★★
+            // ★★★ 【核心修改】AI回复成功后，按聊天轮次扣除朋友圈通知 ★★★
             if (momentsUpdateInfo && momentsUpdateInfo.momentIds) {
                 const consumedTurnId = momentsUpdateInfo.turnId || currentMomentTurnId;
                 let anyChanged = false;
@@ -10120,10 +10120,10 @@ const App = {
                         m.chatInjectionStatus[contact.id] = remainingTurns - 1;
                         m.chatInjectionActiveTurn[contact.id] = consumedTurnId;
                         anyChanged = true;
-                        console.log(`[Chat] 心迹 ${mid} 对角色 ${contact.name} 的剩余通知轮次: ${m.chatInjectionStatus[contact.id]}`);
+                        console.log(`[Chat] 朋友圈 ${mid} 对角色 ${contact.name} 的剩余通知轮次: ${m.chatInjectionStatus[contact.id]}`);
                     }
                 });
-                // 如果数据变了，记得保存心迹数据库
+                // 如果数据变了，记得保存朋友圈数据库
                 if (anyChanged) {
                     if (typeof Storage.saveMoments === 'function') await Storage.saveMoments();
                     else if (typeof this.saveMoments === 'function') await this.saveMoments();
@@ -11757,7 +11757,7 @@ const App = {
     },
 
 
-    /* =================== 心迹 ===========================*/
+    /* =================== 朋友圈 ===========================*/
 
     // 在 App 对象中添加
     switchMainTab(tab) {
@@ -11855,7 +11855,7 @@ const App = {
         dot.textContent = unreadReplyCount > 0 ? String(unreadReplyCount) : '';
         dot.classList.toggle('has-reply-count', unreadReplyCount > 0);
         dot.classList.toggle('hidden', !hasNewCharacterMoment && unreadReplyCount === 0);
-        dot.setAttribute('aria-label', unreadReplyCount > 0 ? `${unreadReplyCount} 条未读心迹回复` : '有新心迹');
+        dot.setAttribute('aria-label', unreadReplyCount > 0 ? `${unreadReplyCount} 条未读朋友圈回复` : '有新朋友圈');
     },
 
     markMomentReplyUnread() {
@@ -11868,7 +11868,7 @@ const App = {
 
         // ★ 回复可能来自同步或后台恢复链路，这里独立落库，刷新页面后数量也能保留。
         Storage.saveMomentsSettings?.().catch(error => {
-            console.warn('[心迹] 未读回复条数保存失败:', error);
+            console.warn('[朋友圈] 未读回复条数保存失败:', error);
         });
     },
 
@@ -11887,7 +11887,7 @@ const App = {
             try {
                 await Storage.saveMomentsSettings();
             } catch (error) {
-                console.warn('[心迹] 未读状态保存失败:', error);
+                console.warn('[朋友圈] 未读状态保存失败:', error);
             }
         }
     },
@@ -11934,7 +11934,7 @@ const App = {
             'assets/images/moments-cover-07.webp',
             'assets/images/moments-cover-08.webp'
         ];
-        // ★ 首次进入角色主页时随机分配，之后把索引存入心迹设置，避免每次打开都换封面。
+        // ★ 首次进入角色主页时随机分配，之后把索引存入朋友圈设置，避免每次打开都换封面。
         const settings = STATE.momentsSettings || CONFIG.DEFAULT.MOMENTS_SETTINGS;
         if (!settings.characterMomentCoverIndexes || typeof settings.characterMomentCoverIndexes !== 'object') {
             settings.characterMomentCoverIndexes = {};
@@ -11944,7 +11944,7 @@ const App = {
         if (!Number.isInteger(coverIndex) || coverIndex < 0 || coverIndex >= covers.length) {
             coverIndex = Math.floor(Math.random() * covers.length);
             settings.characterMomentCoverIndexes[key] = coverIndex;
-            Storage.saveMomentsSettings?.().catch(error => console.warn('[心迹] 角色封面分配保存失败:', error));
+            Storage.saveMomentsSettings?.().catch(error => console.warn('[朋友圈] 角色封面分配保存失败:', error));
         }
         return covers[coverIndex];
     },
@@ -11994,7 +11994,7 @@ const App = {
         const title = document.getElementById('moments-page-title');
         const profileHeader = document.getElementById('moments-profile-header');
         const writeBtn = document.getElementById('btn-write-moment');
-        if (title) title.textContent = isProfile ? profileAuthor.name : '心迹';
+        if (title) title.textContent = isProfile ? profileAuthor.name : '朋友圈';
         if (profileHeader) {
             profileHeader.classList.remove('hidden');
             profileHeader.classList.toggle('profile-mode', isProfile);
@@ -12108,7 +12108,7 @@ const App = {
         });
 
         if (!feedHtml) {
-            feedHtml = `<div class="moments-empty-state"><span>◌</span><p>${isProfile ? '这里还没有动态' : '还没有人留下心迹'}</p><small>${isProfile && profileAuthor.isUser ? '写下此刻，第一条就从这里开始。' : '稍后再来看看吧。'}</small></div>`;
+            feedHtml = `<div class="moments-empty-state"><span>◌</span><p>${isProfile ? '这里还没有动态' : '还没有人留下朋友圈'}</p><small>${isProfile && profileAuthor.isUser ? '写下此刻，第一条就从这里开始。' : '稍后再来看看吧。'}</small></div>`;
         }
         feed.innerHTML = feedHtml;
 
@@ -12125,7 +12125,7 @@ const App = {
     },
 
     // ===========================================
-    // 1. 打开心迹设置弹窗 (填充数据)
+    // 1. 打开朋友圈设置弹窗 (填充数据)
     // ===========================================
     openMomentsSettings() {
         // 1. 获取 DOM
@@ -12202,7 +12202,7 @@ const App = {
 
 
     // ===========================================
-    // 2. 保存心迹设置
+    // 2. 保存朋友圈设置
     // ===========================================
     saveMomentsSettings() {
         const apiSelect = document.getElementById('m-setting-api-preset');
@@ -12285,7 +12285,7 @@ const App = {
     },
 
 
-    // 发布心迹并触发 AI 评论 (核心引擎逻辑)
+    // 发布朋友圈并触发 AI 评论 (核心引擎逻辑)
     async publishMoment() {
         const textInput = document.getElementById('m-write-text');
         const imgPreview = document.getElementById('m-write-img-preview');
@@ -12310,7 +12310,7 @@ const App = {
 
 
 
-        // ★★★ 新增逻辑：计算哪些人有权限看到这条心迹，并初始化计数器 ★★★
+        // ★★★ 新增逻辑：计算哪些人有权限看到这条朋友圈，并初始化计数器 ★★★
         const injectionStatus = {};
         // 1. 获取允许名单
         let allowedIds = [];
@@ -12323,7 +12323,7 @@ const App = {
         
         // 2. 给每个能看到的人，设置初始计数为 2，可以看到两条2条
         allowedIds.forEach(cid => {
-            injectionStatus[cid] = CONFIG.MOMENTS_INJECT_COUNT;  // AI在聊天中感知新心迹的聊天轮次/心迹注入 在config.js里
+            injectionStatus[cid] = CONFIG.MOMENTS_INJECT_COUNT;  // AI在聊天中感知新朋友圈的聊天轮次/朋友圈注入 在config.js里
         });
 
 
@@ -12390,13 +12390,13 @@ const App = {
             validCommentators = STATE.contacts.filter(c => allowedIds.includes(String(c.id)));
         }
 
-        console.log(`[心迹] 触发评论，共 ${validCommentators.length} 个角色参与`);
+        console.log(`[朋友圈] 触发评论，共 ${validCommentators.length} 个角色参与`);
 
         // 2. 逐个角色生成评论
         for (const char of validCommentators) {
 
             // 2.1 构造 Prompt
-            // ★★★ 心迹评论也走统一 AI 可见历史：隐藏消息会顺延补足最近 5 条。★★★
+            // ★★★ 朋友圈评论也走统一 AI 可见历史：隐藏消息会顺延补足最近 5 条。★★★
             const visibleHistoryForMoment = HistoryVisibility.collectVisibleMessages(char, {
                 limit: 5,
                 preserveTimestamp: true,
@@ -12436,12 +12436,12 @@ const App = {
                     TEMPERATURE: 1.1 
                 };
 
-                // 检查是否使用了心迹专属预设
+                // 检查是否使用了朋友圈专属预设
                 const presetIndex = STATE.momentsSettings.apiPresetIndex;
                 if (typeof presetIndex === 'number' && presetIndex >= 0) {
                     const preset = STATE.settings.API_PRESETS[presetIndex];
                     if (preset) {
-                        console.log(`[心迹] 角色 ${char.name} 使用预设: ${preset.name}`);
+                        console.log(`[朋友圈] 角色 ${char.name} 使用预设: ${preset.name}`);
                         targetApiConfig.API_URL = preset.url;
                         targetApiConfig.API_KEY = preset.key;
                         targetApiConfig.MODEL = preset.model;
@@ -12462,7 +12462,7 @@ const App = {
                 let aiReplyText = await API.chat(messages, targetApiConfig);
                 const asyncJobId = API.lastAsyncBackendResult?.jobId || null;
 
-                // ★★★ 新增：在存入心迹数组前，从源头剔除 AI 的思考过程 ★★★
+                // ★★★ 新增：在存入朋友圈数组前，从源头剔除 AI 的思考过程 ★★★
                 aiReplyText = aiReplyText.replace(/<(?:think|thinking|thought)>[\s\S]*?<\/(?:think|thinking|thought)>/gi, '').trim();
 
                 // 2.3 写入评论
@@ -12488,11 +12488,11 @@ const App = {
 
             } catch (err) {
                 if (err.isAsyncBackendPending) {
-                    // ★ 心迹评论已经交给 Worker 继续跑了：前端回来后按 context 回填，不按失败处理。
+                    // ★ 朋友圈评论已经交给 Worker 继续跑了：前端回来后按 context 回填，不按失败处理。
                     this.scheduleAsyncBackendResumeCheck(1200);
                     continue;
                 }
-                console.error(`[心迹] 角色 ${char.name} 评论失败:`, err);
+                console.error(`[朋友圈] 角色 ${char.name} 评论失败:`, err);
             }
             
             // 简单的防并发延迟
@@ -12637,7 +12637,7 @@ const App = {
         try {
             await this.registerCharacterMomentCreated(contact.id, createdAt);
         } catch (error) {
-            console.warn('[心迹] 角色动态冷却记录保存失败:', error);
+            console.warn('[朋友圈] 角色动态冷却记录保存失败:', error);
         }
         this.renderMomentsUI();
         if (this.isViewingMomentsPage()) {
@@ -12749,7 +12749,7 @@ const App = {
                 this.scheduleAsyncBackendResumeCheck(1200);
                 return false;
             }
-            console.warn('[心迹] 角色自动动态生成失败:', error);
+            console.warn('[朋友圈] 角色自动动态生成失败:', error);
             return false;
         } finally {
             this._autoMomentGenerationRunning = false;
@@ -12855,7 +12855,7 @@ const App = {
                 this.scheduleAsyncBackendResumeCheck(1200);
                 return;
             }
-            console.warn(`[心迹] ${contact.name} 回复角色动态评论失败:`, error);
+            console.warn(`[朋友圈] ${contact.name} 回复角色动态评论失败:`, error);
         }
     },
     // ★★★★★ 朋友圈点赞与主动评论 END ★★★★★
@@ -12864,13 +12864,13 @@ const App = {
 
 
     // ===========================================
-    // 执行心迹操作 (复制、编辑、删除)
+    // 执行朋友圈操作 (复制、编辑、删除)
     // ===========================================
     handleMomentAction(action) {
         const momentId = STATE.selectedMomentId;
         if (!momentId) return;
 
-        // 1. 查找心迹数据
+        // 1. 查找朋友圈数据
         const momentIndex = STATE.moments.findIndex(m => m.id === momentId);
         if (momentIndex === -1) return;
         
@@ -12884,7 +12884,7 @@ const App = {
         if (action === 'copy') {
             let contentToCopy = momentData.text || "";
             
-            // 如果这条心迹带图，给复制内容加个提示
+            // 如果这条朋友圈带图，给复制内容加个提示
             if (momentData.image) {
                 contentToCopy += "\n[图片]";
             }
@@ -12911,7 +12911,7 @@ const App = {
                     }
                 });
             } else {
-                const newText = prompt("编辑心迹内容：", cleanContent);
+                const newText = prompt("编辑朋友圈内容：", cleanContent);
                 if (newText !== null && newText.trim() !== "" && newText !== cleanContent) {
                     momentData.text = newText;
                     this.saveAndRenderMoments();
@@ -12919,7 +12919,7 @@ const App = {
             }
         } 
         else if (action === 'delete') {
-            if (confirm("确定要彻底删除这条心迹吗？")) {
+            if (confirm("确定要彻底删除这条朋友圈吗？")) {
                 // 删掉数据
                 STATE.moments.splice(momentIndex, 1);
                 this.saveAndRenderMoments();
@@ -13006,7 +13006,7 @@ const App = {
                 ? `用户发布了一条动态：“${momentData.text}”`
                 : `你自己发布了一条动态：“${momentData.text}”`;
 
-            console.log(`[心迹] 重新生成 ${ctx.charName} 的评论`);
+            console.log(`[朋友圈] 重新生成 ${ctx.charName} 的评论`);
 
             // 提取对话流：只截取这条评论【之前】的评论作为上下文，不包括要重生成的这条本身
                     let threadContext = momentData.comments.slice(0, commentIndex)
@@ -13190,7 +13190,7 @@ const App = {
         this.saveAndRenderMoments();
 
         // 2. 触发 AI 追问
-        console.log(`[心迹] 触发追问回复: ${targetChar.name}`);
+        console.log(`[朋友圈] 触发追问回复: ${targetChar.name}`);
 
         // 提取对话流 (这里以 executeCommentReply 中的那段为例，regen 里的同理替换)
         let threadContext = targetMoment.comments
@@ -13306,10 +13306,10 @@ const App = {
 
 
     // ===========================================
-    // ★★★ 新增：【聊天中】生成心迹上下文 Prompt ★★★
+    // ★★★ 新增：【聊天中】生成朋友圈上下文 Prompt ★★★
     // ===========================================
     getMomentsContextForChat(contactId, currentTurnId = null) {
-        // 1. 找到该角色“本轮该看”的心迹：剩余轮次 > 0，或已经绑定到当前用户消息轮次。
+        // 1. 找到该角色“本轮该看”的朋友圈：剩余轮次 > 0，或已经绑定到当前用户消息轮次。
         // 重 roll 会复用同一个 currentTurnId，所以不会因为反复生成而提前耗尽。
         const relevantMoments = STATE.moments
             .filter(m => {
@@ -13392,7 +13392,7 @@ const App = {
 
 
 
-    /* ----------------------- 心迹结束 --------------- */
+    /* ----------------------- 朋友圈结束 --------------- */
 
 
 
@@ -14275,7 +14275,7 @@ const App = {
 
 
         // ==========================================
-        // 探索与心迹 (Moments) 相关事件绑定
+        // 探索与朋友圈 (Moments) 相关事件绑定
         // ==========================================
 
         // 请把这段代码放在你的 bindEvents 函数里
@@ -14394,11 +14394,11 @@ const App = {
         });
         // ★★★★★ 桌面 END：小组件点击与开关事件 ★★★★★
 
-        // ================= 2. 探索页面 -> 点击进入心迹 =================
+        // ================= 2. 探索页面 -> 点击进入朋友圈 =================
         const exploreMomentsBtn = document.getElementById('explore-moments-btn');
         if (exploreMomentsBtn) {
             exploreMomentsBtn.addEventListener('click', () => {
-                console.log("[调试] 点击了心迹入口！");
+                console.log("[调试] 点击了朋友圈入口！");
                 safeSwitchView('moments');
             });
         } else {
@@ -14583,7 +14583,7 @@ const App = {
         });
 
         // 点击弹窗外部空白处，相当于点“取消”。
-        // 和心迹操作菜单一样，只在点到遮罩层本身时关闭，点弹窗内容不受影响。
+        // 和朋友圈操作菜单一样，只在点到遮罩层本身时关闭，点弹窗内容不受影响。
         document.getElementById('modal-todo-plan')?.addEventListener('click', (event) => {
             if (event.target === document.getElementById('modal-todo-plan')) {
                 this.closeTodoPlanModal();
@@ -14981,7 +14981,7 @@ const App = {
             safeSwitchView('desktop');
         });
 
-        // ================= 3. 心迹页面 -> 返回探索 =================
+        // ================= 3. 朋友圈页面 -> 返回探索 =================
         document.getElementById('moments-back-btn')?.addEventListener('click', () => {
             if (STATE.momentsViewMode === 'profile') {
                 this.showMomentsFeed();
@@ -14990,7 +14990,7 @@ const App = {
             safeSwitchView(this.getReturnView('moments', 'explore'));
         });
 
-        // ================= 4. 心迹弹窗和交互 =================
+        // ================= 4. 朋友圈弹窗和交互 =================
 
         // 图片 先不要
         document.getElementById('btn-write-moment')?.addEventListener('click', () => {
@@ -15054,7 +15054,7 @@ const App = {
         bindMomentProbabilityPair('m-setting-auto-like-probability-range', 'm-setting-auto-like-probability');
 
         // ==========================================
-        // 心迹头部交互 (修改背景、头像、签名)
+        // 朋友圈头部交互 (修改背景、头像、签名)
         // ==========================================
 
         // 1. 点击背景图 -> 触发隐藏的文件选择框
@@ -15157,7 +15157,7 @@ const App = {
         });
 
         // ==========================================
-        // 发布心迹弹窗：上传图片与预览
+        // 发布朋友圈弹窗：上传图片与预览
         // ==========================================
 
         // 点击"添加图片"按钮 -> 触发隐藏的文件框
@@ -15196,7 +15196,7 @@ const App = {
             document.getElementById('btn-m-upload-img').innerText = "添加图片";
         });
 
-        // ================= 5. 加载更多心迹 =================
+        // ================= 5. 加载更多朋友圈 =================
         const loadMoreBtn = document.getElementById('btn-load-more-moments');
         if (loadMoreBtn) {
             loadMoreBtn.addEventListener('click', () => {
@@ -15320,7 +15320,7 @@ const App = {
         });
 
 
-        // ================= 7. 心迹内容长按操作 (编辑/复制/删除) =================
+        // ================= 7. 朋友圈内容长按操作 (编辑/复制/删除) =================
         let momentPressTimer = null;
 
         const clearMomentPressTimer = () => {
@@ -15334,11 +15334,11 @@ const App = {
             
             // 处理长按开始
             const handleTouchStart = (e) => {
-                // 确保点击的是“心迹内容区域”，而不是评论区
+                // 确保点击的是“朋友圈内容区域”，而不是评论区
                 const contentEl = e.target.closest('.moment-content');
                 if (!contentEl) return;
 
-                // 向上找到这条心迹的父级卡片，提取 ID (假设渲染时带有 id="m-xxxxx")
+                // 向上找到这条朋友圈的父级卡片，提取 ID (假设渲染时带有 id="m-xxxxx")
                 const cardEl = contentEl.closest('.moment-card');
                 if (!cardEl) return;
                 
@@ -15351,7 +15351,7 @@ const App = {
                     // 1. 触发震动反馈（如果浏览器/手机支持）
                     // if (navigator.vibrate) navigator.vibrate(50);
                     
-                    // 2. 记录当前被选中的心迹ID到全局状态
+                    // 2. 记录当前被选中的朋友圈ID到全局状态
                     STATE.selectedMomentId = momentId;
 
                     // ★ 用户对自己和角色动态都使用同一套编辑/复制/删除面板。
@@ -15416,7 +15416,7 @@ const App = {
 
 
 
-        /* ==================结束心迹============= */
+        /* ==================结束朋友圈============= */
 
 
 
@@ -16420,7 +16420,7 @@ function formatTimestamp() {
 }
 
 // =========================================
-// 专门给心迹（朋友圈）用的时间格式化函数
+// 专门给朋友圈（朋友圈）用的时间格式化函数
 // 它接受一个参数 ts (timestamp)
 // =========================================
 function formatTimeForMoments(ts) {

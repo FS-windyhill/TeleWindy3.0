@@ -5606,7 +5606,7 @@ body.custom-dark details.thought-process {
 
 }
 
-/* 心迹评论：回复某人的前缀样式 */
+/* 朋友圈评论：回复某人的前缀样式 */
 body.custom-dark .comment-reply-prefix {
     color: #8ea4d1; /* 微信朋友圈名字的经典蓝色 */
 
@@ -6521,7 +6521,7 @@ body.custom-dark button#restore-default-system-prompt-btn.icon-btn {
     border: 0.7px solid #a9a9a9;
 }
 
-/* ==================== 自定义主题：心迹 2.0 ==================== */
+/* ==================== 自定义主题：朋友圈 2.0 ==================== */
 body.custom-dark .moment-card {
     border-color: rgba(255, 255, 255, 0.08);
     background: #3f3f3f;
@@ -6588,7 +6588,7 @@ body.custom-dark #modal-moments-settings .moments-auto-switch-cell {
 
 }
 
-/* ==================== 自定义主题：心迹 2.0 结束 ==================== */
+/* ==================== 自定义主题：朋友圈 2.0 结束 ==================== */
 
 /* ==================== 自定义主题：世界感知补充 ==================== */
 body.custom-dark .world-sense-professional-api {
@@ -7063,7 +7063,7 @@ select#system-prompt-preset-select.setting-input{
 }
 /* =============svg结束 ==============*/
 
-/* ================== 探索与心迹 ================ */
+/* ================== 探索与朋友圈 ================ */
 
 /* 底部导航栏 */
 .tab-bar {
@@ -7177,7 +7177,7 @@ body.dark-mode .explore-list li .arrow { color: #aaa; font-size: 0.9rem; font-we
 .explore-list li .text { flex-grow: 1; font-size: 1rem; font-weight: 600; color: #333; }
 .explore-list li .arrow { color: #aaa; font-size: 0.9rem; font-weight: bold; }
 
-/* ★ 心迹未读徽标紧跟“心迹”文字；仅复刻联系人徽标视觉，不共用类名。 */
+/* ★ 朋友圈未读徽标紧跟“朋友圈”文字；仅复刻联系人徽标视觉，不共用类名。 */
 #explore-moments-btn .text {
     flex-grow: 0;
 }
@@ -7214,7 +7214,7 @@ body.dark-mode .explore-list li .arrow { color: #aaa; font-size: 0.9rem; font-we
     margin-left: auto;
 }
 
-/* ================== 心迹页面 ================ */
+/* ================== 朋友圈页面 ================ */
 #moments-scroll-area {
     height: calc(100vh - 55px);
     overflow-y: auto;
@@ -7233,7 +7233,7 @@ body.dark-mode #moments-scroll-area {
 
 
 
-/* 心迹头部 (类似朋友圈的优雅布局) */
+/* 朋友圈头部 (类似朋友圈的优雅布局) */
 .moments-header { 
     position: relative; 
     height: 300px; /* 稍微增加高度，更有空间感 */
@@ -7346,8 +7346,8 @@ body.dark-mode #moments-scroll-area {
     transform: translateY(0) scale(0.95);
 }
 
-/* 心迹卡片流 */
-/* 心迹卡片流 */
+/* 朋友圈卡片流 */
+/* 朋友圈卡片流 */
 .moment-card {
     padding: 15px 15px;
     
@@ -7515,7 +7515,7 @@ button#btn-load-more-moments:active {
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
 }
 
-/* ================= 心迹长按操作菜单样式 (现代悬浮底部菜单) ================= */
+/* ================= 朋友圈长按操作菜单样式 (现代悬浮底部菜单) ================= */
 
 /* 底部弹出面板容器 */
 .action-sheet {
@@ -7542,7 +7542,7 @@ button#btn-load-more-moments:active {
     animation: slideUpAction 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); /* 极其丝滑的弹出动画 */
 }
 
-/* ★ 心迹与评论操作菜单只负责接收按钮点击，不允许长按选中文字或弹出浏览器复制菜单。 */
+/* ★ 朋友圈与评论操作菜单只负责接收按钮点击，不允许长按选中文字或弹出浏览器复制菜单。 */
 #modal-moment-actions,
 #modal-comment-actions {
     -webkit-user-select: none;
@@ -7590,7 +7590,7 @@ body.dark-mode .momment-btn.cancel {
 
 /* =========================================================
    ★★★★★ 朋友圈 2.0 START：公共动态流 / 个人主页 / 互动区 ★★★★★
-   旧版心迹样式仍保留给弹窗和动作菜单使用，这里只收口新版卡片层级。
+   旧版朋友圈样式仍保留给弹窗和动作菜单使用，这里只收口新版卡片层级。
    ========================================================= */
 .moments-header {
     overflow: visible;
@@ -7871,7 +7871,7 @@ body.dark-mode .moment-likes {
     align-items: center;
 }
 
-/* ★ 心迹设置沿用旧版的单层结构：只有滚动内容区是一块面板。 */
+/* ★ 朋友圈设置沿用旧版的单层结构：只有滚动内容区是一块面板。 */
 .moments-settings-panel {
     width: 90%;
     max-width: 600px;
@@ -8017,7 +8017,7 @@ body.dark-mode #modal-moments-settings .moments-auto-switch-cell {
     padding: 0;
     border: 0;
     background: transparent;
-    /* ★ 跟随“主设置 → 外观”保存的主题色，不再使用心迹自己的固定蓝色。 */
+    /* ★ 跟随“主设置 → 外观”保存的主题色，不再使用朋友圈自己的固定蓝色。 */
     accent-color: var(--primary-btn-text, #876eff);
 }
 
@@ -8164,7 +8164,7 @@ body.dark-mode .action-divider {
 
 
 
-/* ==================心迹设置============ */
+/* ==================朋友圈设置============ */
 
 /* 下拉框美化 (Select) */
 #m-setting-api-preset {
@@ -8313,14 +8313,14 @@ body.dark-mode .m-modal-scroll-container{
     -webkit-backdrop-filter: blur(8px);
 }
 
-/* 心迹评论：回复某人的前缀样式 */
+/* 朋友圈评论：回复某人的前缀样式 */
 .comment-reply-prefix {
     color: #7585a9; /* 微信朋友圈名字的经典蓝色 */
     margin: 0 4px;
     font-weight: 500; /* 可选：让名字稍微加粗一点点，更好看 */
 }
 
-/* 心迹评论：回复某人的前缀样式 */
+/* 朋友圈评论：回复某人的前缀样式 */
 body.dark-mode .comment-reply-prefix {
     color: #8ea4d1; /* 微信朋友圈名字的经典蓝色 */
 
@@ -8329,7 +8329,7 @@ body.dark-mode .comment-reply-prefix {
 
 
 
-/* ==================心迹设置结束============ */
+/* ==================朋友圈设置结束============ */
 
 button#btn-close-m-settings.cancel-btn{
     border: 0.7px solid var(--btn-border-color);
@@ -8392,7 +8392,7 @@ body.dark-mode button#btn-save-m-settings.save-btn{
 
 }
 
-/* 心迹设置  针对标题的样式优化 */
+/* 朋友圈设置  针对标题的样式优化 */
 #modal-title {
     text-align: center;
     color: #fff;
@@ -10166,7 +10166,7 @@ body.dark-mode .countdown-item {
     cursor: not-allowed;
 }
 
-/* ★ 复刻心迹可见好友的 SVG 白色对勾，但只作用于 TODO / 倒数日完成框。 */
+/* ★ 复刻朋友圈可见好友的 SVG 白色对勾，但只作用于 TODO / 倒数日完成框。 */
 .todo-item.done .todo-check-btn::after,
 .countdown-item.done .todo-check-btn::after {
     content: '';

@@ -82,7 +82,7 @@
 
                 
         <!-- ================================================= -->
-        <!-- 新增模块：探索与心迹 -->
+        <!-- 新增模块：探索与朋友圈 -->
         <!-- ================================================= -->
 
         <!-- ================= 1. 底部导航栏 ================= -->
@@ -232,8 +232,8 @@
                             <path d="M10 6C10 10.5 13.5 14 18 14C13.5 14 10 17.5 10 22C10 17.5 6.5 14 2 14C6.5 14 10 10.5 10 6ZM18 1C18 3.5 19.5 5 22 5C19.5 5 18 6.5 18 9C18 6.5 16.5 5 14 5C16.5 5 18 3.5 18 1ZM5 2C5 3.5 6 4.5 7.5 4.5C6 4.5 5 5.5 5 7C5 5.5 4 4.5 2.5 4.5C4 4.5 5 3.5 5 2Z" />
                         </svg>
                     </span>
-                    <span class="text">心迹</span>
-                    <!-- ★ 心迹使用自己的未读徽标：新动态显示小圆点，有新回复时改为数字。 -->
+                    <span class="text">朋友圈</span>
+                    <!-- ★ 朋友圈使用自己的未读徽标：新动态显示小圆点，有新回复时改为数字。 -->
                     <span id="explore-moments-unread-dot" class="explore-moments-unread-indicator hidden" aria-hidden="true"></span>
                     <span class="arrow">
                         <!-- 替换 > (Greater-than) -->
@@ -889,7 +889,7 @@
         </div>
         <!-- ★★★★★ 世界书生效范围弹窗 END ★★★★★ -->
 
-        <!-- ================= 3. 心迹主界面 (默认隐藏) ================= -->
+        <!-- ================= 3. 朋友圈主界面 (默认隐藏) ================= -->
         <!-- ★★★★★ 世界感知页面 START：天气感知 + 星期和节日 + 保存取消 ★★★★★ -->
         <div id="view-world-sense" class="page-view" style="display: none;">
             <header class="app-header">
@@ -997,9 +997,9 @@
                     </svg>
                 </button>
                 
-                <h1 id="moments-page-title">心迹</h1>
+                <h1 id="moments-page-title">朋友圈</h1>
 
-                <button id="moments-settings-btn" class="header-icon-btn right" title="心迹设置">
+                <button id="moments-settings-btn" class="header-icon-btn right" title="朋友圈设置">
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="3"></circle>
                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
@@ -1008,14 +1008,14 @@
             </header>
 
             <!-- ★★★ 新增：悬浮在右下角的撰写按钮 ★★★ -->
-            <button id="btn-write-moment" class="floating-write-btn" title="发布心迹">
+            <button id="btn-write-moment" class="floating-write-btn" title="发布朋友圈">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
                 </svg>
             </button>
             
-            <!-- 心迹滚动区域 -->
+            <!-- 朋友圈滚动区域 -->
             <div id="moments-scroll-area" class="moments-scroll">
 
                 <!-- ★★★ 新增：两个隐藏的文件输入框，用于更换背景和头像 ★★★ -->
@@ -1043,7 +1043,7 @@
 
 
 
-                <!-- 心迹流 -->
+                <!-- 朋友圈流 -->
                 <div id="moments-feed"></div>
                 
                 <!-- 加载更多 -->
@@ -1051,11 +1051,11 @@
             </div>
         </div>
 
-        <!-- ================= 4. 心迹设置 Modal ================= -->
+        <!-- ================= 4. 朋友圈设置 Modal ================= -->
         <div id="modal-moments-settings" class="modal-overlay moments-bg hidden">
             <!-- ★ 设置页沿用旧版单层内容框，不再在滚动区外重复套毛玻璃卡片。 -->
             <div class="moments-settings-panel">
-                <h3 id="modal-title">心迹设置</h3>
+                <h3 id="modal-title">朋友圈设置</h3>
                 <div class="m-modal-scroll-container">
                     <div class="input-group">
                         <label>评论 API 预设 (节省Token用):</label>
@@ -1129,11 +1129,11 @@
             </div>
         </div>
 
-        <!-- ================= 5. 撰写心迹 Modal ================= -->
+        <!-- ================= 5. 撰写朋友圈 Modal ================= -->
         <div id="modal-write-moment" class="modal-overlay moments-bg hidden">
             <div class="edit-box glass-panel"> 
                 <!-- 保留原本的 ID，同时加上新的 class 保证样式 -->
-                <h3 id="modal-title" class="bianjixiaoxi">发布心迹</h3>
+                <h3 id="modal-title" class="bianjixiaoxi">发布朋友圈</h3>
                 
                 <textarea id="m-write-text" placeholder="这一刻的想法..." rows="5"></textarea>
                 
@@ -2290,19 +2290,19 @@
     </div>
 
 
-    <!-- ================= 6. 心迹本身的长按操作菜单 Modal ================= -->
+    <!-- ================= 6. 朋友圈本身的长按操作菜单 Modal ================= -->
         <div id="modal-moment-actions" class="modal-overlay hidden">
             <!-- 这里用了一个底部弹出的样式结构 -->
             <div class="action-sheet glass-panel">
                 <button id="btn-m-action-copy" class="momment-btn">复制内容</button>
-                <button id="btn-m-action-edit" class="momment-btn">编辑心迹</button>
-                <button id="btn-m-action-delete" class="momment-btn danger">删除心迹</button>
+                <button id="btn-m-action-edit" class="momment-btn">编辑朋友圈</button>
+                <button id="btn-m-action-delete" class="momment-btn danger">删除朋友圈</button>
                 <div class="action-divider"></div>
                 <button id="btn-m-action-cancel" class="momment-btn cancel">取消</button>
             </div>
         </div>
 
-<!-- ================= 7. 心迹评论操作菜单 Modal (新增删除按钮) ================= -->
+<!-- ================= 7. 朋友圈评论操作菜单 Modal (新增删除按钮) ================= -->
     <div id="modal-comment-actions" class="modal-overlay moments-bg hidden">
         <div class="action-sheet glass-panel">
             <button id="btn-c-action-reply" class="momment-btn">回复</button>
@@ -2317,7 +2317,7 @@
     </div>
 
 
-    <!-- ================= 8. 评论回复输入框 Modal撰写心迹 ================= -->
+    <!-- ================= 8. 评论回复输入框 Modal撰写朋友圈 ================= -->
     <div id="modal-reply-comment" class="modal-overlay hidden">
         <div class="edit-box glass-panel">
             <!-- 保留原本的 ID -->
