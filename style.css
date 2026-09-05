@@ -7552,7 +7552,7 @@ button#btn-load-more-moments:active {
 
 /* ★ 与聊天气泡的点击反馈统一：按住卡片时轻微降低透明度。 */
 .moment-card:active {
-    opacity: 0.9;
+    opacity: 0.85;
 }
 
 /* 底部弹出面板容器 */
