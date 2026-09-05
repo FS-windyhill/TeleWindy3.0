@@ -262,6 +262,21 @@
                 </li>
                 <!-- ★★★★★ 角色记忆：探索页入口 END ★★★★★ -->
 
+                <!-- ★★★★★ 心笺：探索页入口 START ★★★★★ -->
+                <li id="explore-heart-note-btn">
+                    <span class="icon">
+                        <svg width="0.95em" height="0.95em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path>
+                            <path d="M8 8h8M8 12h8M8 16h5"></path>
+                        </svg>
+                    </span>
+                    <span class="text">心笺</span>
+                    <span class="arrow">
+                        <svg width="1.5em" height="1.5em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: -0.125em;"><path d="M9 6L16 12L9 18" /></svg>
+                    </span>
+                </li>
+                <!-- ★★★★★ 心笺：探索页入口 END ★★★★★ -->
+
 
                 <!-- ★★★★★ 角色日程：探索页入口 START ★★★★★ -->
                 <li id="explore-character-schedule-btn">
@@ -626,6 +641,46 @@
             </main>
         </div>
         <!-- ★★★★★ 角色记忆页面 END ★★★★★ -->
+
+        <!-- ★★★★★ 心笺页面 START ★★★★★ -->
+        <div id="view-heart-note" class="page-view" style="display: none;">
+            <header class="app-header">
+                <button id="heart-note-back-btn" class="header-icon-btn left" title="返回探索">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+                <h1>心笺</h1>
+            </header>
+            <main class="heart-note-page">
+                <div class="heart-note-intro">ta的记事本，ta可以在这里记录ta想记下的东西。按照类艾宾浩斯曲线的记忆机制注入上下文。</div>
+                <div id="heart-note-contact-list" class="heart-note-contact-list"></div>
+                <div id="heart-note-contact-empty" class="todo-empty-hint">还没有角色，先去通讯录创建一个吧。</div>
+            </main>
+        </div>
+
+        <div id="view-heart-note-detail" class="page-view" style="display: none;">
+            <header class="app-header">
+                <button id="heart-note-detail-back-btn" class="header-icon-btn left" title="返回心笺">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+                <h1 id="heart-note-detail-title">心笺</h1>
+                <button id="heart-note-add-btn" class="header-icon-btn right heart-note-add-btn" title="添加心笺" aria-label="添加心笺">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+                </button>
+            </header>
+            <main class="heart-note-page">
+                <div class="heart-note-tabs" role="tablist" aria-label="心笺视图">
+                    <button type="button" class="heart-note-tab active" data-mode="all" role="tab" aria-selected="true">全部心笺</button>
+                    <button type="button" class="heart-note-tab" data-mode="injected" role="tab" aria-selected="false">注入的心笺</button>
+                </div>
+                <div class="heart-note-setting-pill">
+                    <div class="heart-note-setting-row"><span>注入</span><input type="number" id="heart-note-inject-days" min="1" step="1" inputmode="numeric"><span>天的心笺至上下文</span></div>
+                    <div id="heart-note-status" class="heart-note-status"></div>
+                </div>
+                <div id="heart-note-detail-list" class="heart-note-detail-list"></div>
+                <div id="heart-note-detail-empty" class="todo-empty-hint">还没有心笺，点右上角加一条吧。</div>
+            </main>
+        </div>
+        <!-- ★★★★★ 心笺页面 END ★★★★★ -->
 
         <!-- ★★★★★ Agent 页面 START ★★★★★ -->
         <div id="view-agent" class="page-view" style="display: none;">
@@ -1351,6 +1406,19 @@
             </div>
         </div>
         <!-- ★★★★★ 角色记忆：编辑单条内容弹窗 END ★★★★★ -->
+
+        <!-- ★★★★★ 心笺：新增/编辑弹窗 START ★★★★★ -->
+        <div id="modal-heart-note-item" class="modal-overlay todo-modal-bg hidden">
+            <div class="todo-edit-box glass-panel heart-note-edit-box">
+                <h3 id="heart-note-item-modal-title" class="bianjixiaoxi">添加心笺</h3>
+                <textarea id="heart-note-item-text" class="todo-editor-textarea heart-note-editor-textarea" placeholder="写下这条心笺..." rows="4"></textarea>
+                <div class="modal-buttons">
+                    <button id="heart-note-item-cancel-btn" class="cancel-btn">取消</button>
+                    <button id="heart-note-item-save-btn" class="primary">保存</button>
+                </div>
+            </div>
+        </div>
+        <!-- ★★★★★ 心笺：新增/编辑弹窗 END ★★★★★ -->
 
         <!-- ================================================= -->
         <!-- TEMPLATES (模板区，不在页面直接显示，供JS调用) -->
@@ -2589,6 +2657,7 @@
     <script src="./js/agent-skill-router.js"></script>
     <script src="./js/agent-runtime.js"></script>
     <script src="./js/agent-todo-manager.js"></script>
+    <script src="./js/agent-heart-note-manager.js"></script>
     <script src="./script.js"></script>
 </body>
 </html>

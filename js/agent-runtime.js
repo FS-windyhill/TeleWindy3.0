@@ -6,6 +6,7 @@
 // 函数目录：
 //   - runBeforeMainModel(context): 旧 pre-agent 入口；默认关闭，保留给以后显式恢复
 //   - runTodoManager(context): 旧 TODO pre-agent 调度入口
+//   - runHeartNoteManager(context): 心笺 post-agent 调度入口
 // =========================================
 
 // ★★★★★ Agent Runtime START：通用调度层 ★★★★★
@@ -42,6 +43,17 @@ const AgentRuntime = {
         return app.runAgentTodoManager(contact, userText, userMessage, {
             allowLegacyPreAgent: context.allowLegacyPreAgent === true
         });
+    },
+
+    async runHeartNoteManager(context = {}) {
+        const app = context.app;
+        if (!app || typeof app.runAgentHeartNoteIntentOperations !== 'function') return null;
+        if (typeof AgentHeartNoteManager === 'undefined') return null;
+        return app.runAgentHeartNoteIntentOperations(
+            context.contact,
+            context.intentTexts || [],
+            context.assistantMessage || null
+        );
     }
 };
 // ★★★★★ Agent Runtime END：通用调度层 ★★★★★

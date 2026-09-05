@@ -6306,6 +6306,86 @@ body.custom-dark .character-memory-pin-btn.active {
     color: #ffc247;
 }
 
+/* ★ 心笺自定义深色：与角色记忆保持同一套玻璃层次，类名仍完全独立。 */
+body.custom-dark .heart-note-intro,
+body.custom-dark .heart-note-contact,
+body.custom-dark .heart-note-card {
+    border-color: rgba(245, 245, 245, 0.3);
+    background: rgba(36, 36, 36, 0.28);
+    color: #f4f4f4;
+}
+
+body.custom-dark .heart-note-tabs {
+    background: rgb(118 118 118 / 15%);
+    border: 1px solid rgb(197 197 197 / 75%);
+}
+
+body.custom-dark .heart-note-tabs::before {
+    background: rgb(30 30 30 / 40%);
+    border: 1px solid rgba(245, 245, 245, 0.5);
+}
+
+body.custom-dark .heart-note-tab.active {
+    background: transparent;
+    border-color: transparent;
+    color: #ffffff;
+}
+
+body.custom-dark .heart-note-setting-pill {
+    background: rgba(0, 0, 0, 0.25);
+    border-color: rgba(245, 245, 245, 0.3);
+    color: #d5d5d5;
+}
+
+body.custom-dark .heart-note-setting-pill .heart-note-status {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(245, 245, 245, 0.3);
+    color: #cdcdcdc8;
+}
+
+body.custom-dark .heart-note-setting-row input {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(245, 245, 245, 0.35);
+    color: #f4f4f4;
+}
+
+body.custom-dark .heart-note-text {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(245, 245, 245, 0.2);
+}
+
+body.custom-dark .heart-note-intro,
+body.custom-dark .heart-note-contact-status,
+body.custom-dark .heart-note-time {
+    color: rgba(244, 244, 244, 0.7);
+}
+
+body.custom-dark .heart-note-icon-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(245, 245, 245, 0.3);
+    color: #adadad;
+}
+
+body.custom-dark .heart-note-pin-btn.active {
+    color: #ffc247;
+}
+
+body.custom-dark .heart-note-icon-btn.danger {
+    color: #d93838;
+}
+
+body.custom-dark button#heart-note-item-cancel-btn.cancel-btn {
+    background: var(--btn-color);
+    color: #ffffff;
+    border: 0.7px solid #a9a9a9;
+}
+
+body.custom-dark button#heart-note-item-save-btn.primary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border: 2px solid var(--primary-btn-text) !important;
+}
+
 body.custom-dark .wi-scope-summary-box {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(245,245,245,0.3);
@@ -11422,6 +11502,9 @@ body.dark-mode .agent-api-select {
     display: flex;
     flex-direction: column;
     gap: 7px;
+    /* ★ Agent 不限制心笺数量，超过屏幕高度后只让选项区内部滚动。 */
+    max-height: min(42vh, 360px);
+    overflow-y: auto;
 }
 
 .agent-suggestion-option span {
@@ -12793,6 +12876,25 @@ button#character-memory-item-save-btn.primary {
     border-radius: 6px;
 }
 
+/* ★ 心笺编辑弹窗按钮沿用角色记忆的视觉规格，选择器保持独立。 */
+button#heart-note-item-cancel-btn.cancel-btn {
+    background: var(--btn-color);
+    color: #333;
+    border: 0.7px solid #a9a9a9;
+    min-width: 120px;
+    padding: 11px 16px;
+    border-radius: 6px;
+}
+
+button#heart-note-item-save-btn.primary {
+    background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.1);
+    color: var(--primary-btn-text);
+    border: 0.7px solid var(--primary-btn-text);
+    min-width: 120px;
+    padding: 11px 16px;
+    border-radius: 6px;
+}
+
 
 
 button#character-schedule-entry-save-btn.primary {
@@ -12843,8 +12945,195 @@ body.dark-mode button#character-memory-item-save-btn.primary {
     border: 2px solid var(--primary-btn-text) !important;
 }
 
+body.dark-mode button#heart-note-item-cancel-btn.cancel-btn {
+    background: var(--btn-color);
+    color: #ffffff;
+    border: 0.7px solid #a9a9a9;
+}
+
+body.dark-mode button#heart-note-item-save-btn.primary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border: 2px solid var(--primary-btn-text) !important;
+}
+
 
 /* =============记忆等等确认取消按钮End==================== */
+
+/* ★★★★★ 心笺 START：独立玻璃卡片与详情排版 ★★★★★ */
+.heart-note-page {
+    flex: 1;
+    min-height: 0;
+    padding: 16px;
+    overflow-y: auto;
+}
+
+.heart-note-intro,
+.heart-note-contact,
+.heart-note-card {
+    border: 1px solid rgba(255, 255, 255, 0.68);
+    background: rgba(255, 255, 255, 0.42);
+    box-shadow: 0 10px 28px rgba(39, 42, 55, 0.12);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.heart-note-intro {
+    margin-bottom: 14px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    color: rgba(38, 40, 48, 0.78);
+    font-size: 0.9rem;
+    line-height: 1.55;
+}
+
+.heart-note-contact-list,
+.heart-note-detail-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.heart-note-contact {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 68px;
+    padding: 10px 14px;
+    border-radius: 18px;
+    cursor: pointer;
+}
+
+.heart-note-contact-info { min-width: 0; }
+.heart-note-contact-name { font-weight: 700; }
+.heart-note-contact-status { margin-top: 4px; color: rgba(57, 60, 70, 0.62); font-size: 0.82rem; }
+.heart-note-contact-arrow { display: inline-flex; width: 24px; color: #aaa; }
+.heart-note-contact-arrow svg { width: 24px; height: 24px; }
+.heart-note-avatar { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; }
+.heart-note-text-avatar { display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.35); font-size: 1.35rem; }
+
+.heart-note-tabs {
+    position: relative;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px;
+    margin: 3px 0 10px;
+    border-radius: 999px;
+    background: rgb(255 255 255 / 15%);
+    border: 1px solid rgb(245 245 245 / 75%);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    overflow: hidden;
+}
+
+/* ★ 心笺视图滑块复刻角色记忆的动效，但不共用任何角色记忆类名。 */
+.heart-note-tabs::before {
+    content: "";
+    position: absolute;
+    z-index: 0;
+    top: 4px;
+    bottom: 4px;
+    left: 4px;
+    width: calc((100% - 12px) / 2);
+    border-radius: 999px;
+    background: rgb(230 230 230 / 70%);
+    border: 1px solid rgb(255 255 255);
+    box-sizing: border-box;
+    transition: transform 0.22s ease, opacity 0.18s ease;
+}
+
+.heart-note-tabs.is-injected::before { transform: translateX(calc(100% + 4px)); }
+.heart-note-tab { position: relative; z-index: 1; min-height: 34px; border: 0; border-radius: 999px; background: transparent; color: #aeaeae; font-size: 0.9rem; line-height: 1.2; cursor: pointer; transition: color 0.18s ease; }
+.heart-note-tab.active { background: transparent; border-color: transparent; color: #252525; }
+
+.heart-note-setting-pill {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 3px 0 10px;
+    padding: 9px 12px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.42);
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    color: #697384;
+    font-size: 0.9rem;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.heart-note-setting-row { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.heart-note-setting-row input { width: 58px; min-width: 0; padding: 4px 8px; border: 1px solid rgba(120, 120, 120, 0.28); border-radius: 12px; background: rgba(255, 255, 255, 0.76); color: #2f3440; text-align: center; font-size: 0.95rem; box-sizing: border-box; }
+.heart-note-status { margin: 0 0 12px; color: #8a93a3; font-size: 0.84rem; text-align: center; }
+
+.heart-note-setting-pill .heart-note-status {
+    margin: 0;
+    width: 100%;
+    padding: 3px 10px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.05);
+    color: #555;
+    box-sizing: border-box;
+    line-height: 1.35;
+}
+
+.heart-note-card {
+    padding: 13px;
+    border-radius: 18px;
+}
+
+.heart-note-text {
+    min-height: 50px;
+    padding: 11px 12px;
+    border: 1px solid rgba(100, 100, 100, 0.2);
+    border-radius: 8px;
+    background: rgb(255 255 255 / 38%);
+    font-style: italic;
+    line-height: 1.55;
+    text-align: center;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.heart-note-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+.heart-note-time { color: rgba(57, 60, 70, 0.58); font-size: 0.78rem; }
+.heart-note-actions { display: flex; align-items: center; gap: 6px; }
+.heart-note-icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 1px solid rgba(100, 100, 100, 0.3); border-radius: 8px; background: rgba(80, 80, 80, 0.1); color: #707070; cursor: pointer; }
+.heart-note-icon-btn svg { width: 17px; height: 17px; }
+.heart-note-pin-btn .heart-note-pin-shape { fill: transparent; }
+.heart-note-pin-btn.active { color: #ffb21c; }
+.heart-note-pin-btn.active .heart-note-pin-shape { fill: currentColor; }
+.heart-note-icon-btn.danger { color: #d93838; }
+.heart-note-editor-textarea { min-height: 110px; font-style: normal; }
+
+body.dark-mode .heart-note-intro,
+body.dark-mode .heart-note-contact,
+body.dark-mode .heart-note-card {
+    border-color: rgba(245, 245, 245, 0.3);
+    background: rgba(36, 36, 36, 0.28);
+    color: #f4f4f4;
+}
+
+body.dark-mode .heart-note-tabs { background: rgb(118 118 118 / 15%); border: 1px solid rgb(197 197 197 / 75%); }
+body.dark-mode .heart-note-tabs::before { background: rgb(30 30 30 / 40%); border: 1px solid rgba(245, 245, 245, 0.5); }
+body.dark-mode .heart-note-tab.active { background: transparent; border-color: transparent; color: #ffffff; }
+body.dark-mode .heart-note-setting-pill { background: rgba(0, 0, 0, 0.25); border-color: rgba(245, 245, 245, 0.3); color: #d5d5d5; }
+body.dark-mode .heart-note-setting-pill .heart-note-status { background: rgba(255, 255, 255, 0.1); border-color: rgba(245, 245, 245, 0.3); color: #cdcdcdc8; }
+body.dark-mode .heart-note-setting-row input { background: rgba(255, 255, 255, 0.1); border-color: rgba(245, 245, 245, 0.35); color: #f4f4f4; }
+body.dark-mode .heart-note-text { background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(245, 245, 245, 0.2); }
+body.dark-mode .heart-note-intro,
+body.dark-mode .heart-note-contact-status,
+body.dark-mode .heart-note-time { color: rgba(244, 244, 244, 0.7); }
+body.dark-mode .heart-note-icon-btn { background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(245, 245, 245, 0.3); color: #adadad; }
+body.dark-mode .heart-note-pin-btn.active { color: #ffc247; }
+body.dark-mode .heart-note-icon-btn.danger { color: #d93838; }
+/* ★★★★★ 心笺 END：独立玻璃卡片与详情排版 ★★★★★ */
 
 /* Gist 教程按钮：只在 Gist 模式显示，放在 Gist ID 上方给第一次使用的人看。 */
 .gist-tutorial-group {

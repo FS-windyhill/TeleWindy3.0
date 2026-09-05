@@ -35,6 +35,7 @@ const CONFIG = {
     COUNTDOWN_DAYS_KEY: 'teleWindy_countdown_days_v1',
     CHARACTER_SCHEDULES_KEY: 'teleWindy_character_schedules_v1',
     CHARACTER_MEMORIES_KEY: 'teleWindy_character_memories_v1',
+    CHARACTER_HEART_NOTES_KEY: 'teleWindy_character_heart_notes_v1',
     MAIN_CONTEXT_LOG_KEY: 'teleWindy_main_context_log_v1',
     AGENT_CONTEXT_LOG_KEY: 'teleWindy_agent_context_log_v1',
 
@@ -69,6 +70,8 @@ const CONFIG = {
         CHARACTER_SCHEDULE_API_PRESET_INDEX: -1,
         CHARACTER_MEMORY_API_PRESET_INDEX: -1,
         AGENT_SKILL_ROUTER_ENABLED: false,
+        AGENT_TODO_MANAGER_ENABLED: false,
+        AGENT_HEART_NOTE_MANAGER_ENABLED: false,
         AGENT_SKILL_ROUTER_API_PRESET_INDEX: -1,
         WALLPAPER: 'assets/images/wallpaper.jpg',
         USER_AVATAR: 'assets/images/user.jpg',

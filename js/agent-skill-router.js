@@ -44,8 +44,8 @@ const AgentIntentMarkup = {
 // ★★★★★ Agent Skill Router START：通用 Agent 选择层 ★★★★★
 const AgentSkillRouter = {
     allowedIntents: ['NONE', 'USE_AGENT', 'ASK_CONFIRMATION'],
-    allowedAgents: ['todo_manager'],
-    allowedPostAgents: ['todo_manager_post'],
+    allowedAgents: ['todo_manager', 'heart_note_manager'],
+    allowedPostAgents: ['todo_manager_post', 'heart_note_manager_post'],
 
     buildRouterMessages(contact, userText) {
         const systemPrompt = [
@@ -56,6 +56,7 @@ const AgentSkillRouter = {
             '',
             '可用 Agent：',
             '- todo_manager：用户要求记录、提醒、安排 TODO/计划；或表示某个 TODO/计划 完成、延期、修改、取消、删除。',
+            '- heart_note_manager：角色要增加、修改、删除、星标或取消星标自己的心笺。',
             '',
             '规则：',
             '- 普通聊天，选 NONE。',
@@ -96,6 +97,7 @@ const AgentSkillRouter = {
             '',
             '可用 Agent：',
             '- todo_manager_post：回复里建议用户添加任务/计划，或建议完成、取消、恢复、改期、改名、改时间 等计划管理操作。',
+            '- heart_note_manager_post：回复里用『』提交了心笺管理动作。',
             '',
             '规则：',
             '- 普通聊天，选 NONE。',

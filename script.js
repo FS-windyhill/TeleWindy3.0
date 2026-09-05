@@ -694,6 +694,7 @@ const STATE = {
     countdownDays: [],
     characterSchedules: [],
     characterMemories: [],
+    characterHeartNotes: [],
     todoPlanDraftDateOffset: 0,
     countdownDraftDateOffset: 0,
     editingTodoPlanId: null,
@@ -707,6 +708,9 @@ const STATE = {
     currentMemoryContactId: null,
     characterMemoryViewMode: 'all',
     editingMemoryItem: null,
+    currentHeartNoteContactId: null,
+    heartNoteViewMode: 'all',
+    editingHeartNoteId: null,
     memoryQueueRunning: false,
     memoryLastDateKey: '',
     memoryDateTimer: null,
@@ -2632,6 +2636,8 @@ const UI = {
         const viewCharacterScheduleDetail = document.getElementById('view-character-schedule-detail');
         const viewCharacterMemory = document.getElementById('view-character-memory');
         const viewCharacterMemoryDetail = document.getElementById('view-character-memory-detail');
+        const viewHeartNote = document.getElementById('view-heart-note');
+        const viewHeartNoteDetail = document.getElementById('view-heart-note-detail');
         const viewAgent = document.getElementById('view-agent');
         const viewAsyncBackend = document.getElementById('view-async-backend');
         const viewWorldbook = document.getElementById('view-worldbook');
@@ -2644,6 +2650,9 @@ const UI = {
         // ★ 角色记忆也是探索子页，先统一隐藏，再在对应分支打开。
         if (viewCharacterMemory && viewName !== 'character-memory') viewCharacterMemory.style.display = 'none';
         if (viewCharacterMemoryDetail && viewName !== 'character-memory-detail') viewCharacterMemoryDetail.style.display = 'none';
+        // ★ 心笺也是探索子页，与角色记忆保持相同的显隐收口。
+        if (viewHeartNote && viewName !== 'heart-note') viewHeartNote.style.display = 'none';
+        if (viewHeartNoteDetail && viewName !== 'heart-note-detail') viewHeartNoteDetail.style.display = 'none';
 
         // 先清除底栏的全部高亮状态
         document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -2984,6 +2993,23 @@ const UI = {
             if (typeof App !== 'undefined' && typeof App.renderCharacterMemoryDetail === 'function') {
                 App.renderCharacterMemoryDetail();
             }
+
+        } else if (viewName === 'heart-note') {
+            if (typeof App !== 'undefined' && typeof App.rememberReturnView === 'function') {
+                App.rememberReturnView('heart-note', STATE.currentMainView || 'explore');
+            }
+            appContainer.classList.remove('in-chat-mode');
+            document.querySelectorAll('.page-view').forEach(view => { view.style.display = 'none'; });
+            if (viewHeartNote) viewHeartNote.style.display = 'flex';
+            if (bottomTabBar) bottomTabBar.style.display = 'none';
+            App?.renderHeartNoteContacts?.();
+
+        } else if (viewName === 'heart-note-detail') {
+            appContainer.classList.remove('in-chat-mode');
+            document.querySelectorAll('.page-view').forEach(view => { view.style.display = 'none'; });
+            if (viewHeartNoteDetail) viewHeartNoteDetail.style.display = 'flex';
+            if (bottomTabBar) bottomTabBar.style.display = 'none';
+            App?.renderHeartNoteDetail?.();
 
         } else if (viewName === 'moments') {
             // ===========================
@@ -5097,6 +5123,8 @@ const App = {
             ['character-schedule-detail', 'view-character-schedule-detail'],
             ['character-memory', 'view-character-memory'],
             ['character-memory-detail', 'view-character-memory-detail'],
+            ['heart-note', 'view-heart-note'],
+            ['heart-note-detail', 'view-heart-note-detail'],
             ['agent', 'view-agent'],
             ['async-backend', 'view-async-backend'],
             ['worldbook', 'view-worldbook'],
@@ -5143,6 +5171,8 @@ const App = {
             'character-schedule-detail': 'character-schedule-detail-back-btn',
             'character-memory': 'character-memory-back-btn',
             'character-memory-detail': 'character-memory-detail-back-btn',
+            'heart-note': 'heart-note-back-btn',
+            'heart-note-detail': 'heart-note-detail-back-btn',
             agent: 'agent-back-btn',
             'async-backend': 'async-backend-back-btn',
             worldbook: 'worldbook-back-btn',
@@ -6394,12 +6424,193 @@ const App = {
     },
     // ★★★★★ 探索 TO DO / 倒数日 END：页面逻辑层 ★★★★★
 
+    // ★★★★★ 心笺 START：页面逻辑层 ★★★★★
+    renderHeartNoteAvatar(contact) {
+        if (contact.avatar && (contact.avatar.startsWith('data:') || contact.avatar.startsWith('http'))) {
+            return `<img class="heart-note-avatar" src="${this.escapeHtml(contact.avatar)}" alt="">`;
+        }
+        return `<div class="heart-note-avatar heart-note-text-avatar">${this.escapeHtml(contact.avatar || '🌼')}</div>`;
+    },
+
+    renderHeartNoteContacts() {
+        const list = document.getElementById('heart-note-contact-list');
+        const empty = document.getElementById('heart-note-contact-empty');
+        if (!list || typeof AgentHeartNoteManager === 'undefined') return;
+        const contacts = STATE.contacts || [];
+        list.innerHTML = '';
+        if (empty) empty.style.display = contacts.length ? 'none' : 'block';
+        contacts.forEach(contact => {
+            const notebook = AgentHeartNoteManager.ensureNotebook(contact.id);
+            const injectedCount = AgentHeartNoteManager.getInjectRecords(notebook, new Date()).length;
+            const item = document.createElement('div');
+            item.className = 'heart-note-contact';
+            item.dataset.id = contact.id;
+            item.innerHTML = `
+                ${this.renderHeartNoteAvatar(contact)}
+                <div class="heart-note-contact-info">
+                    <div class="heart-note-contact-name">${this.escapeHtml(contact.name || '未命名角色')}</div>
+                    <div class="heart-note-contact-status">${notebook.records.length}条心笺 · 注入${injectedCount}条</div>
+                </div>
+                <span class="heart-note-contact-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6L16 12L9 18" /></svg></span>
+            `;
+            list.appendChild(item);
+        });
+    },
+
+    openHeartNoteDetail(contactId) {
+        if (!(STATE.contacts || []).some(contact => contact.id === contactId)) return;
+        STATE.currentHeartNoteContactId = contactId;
+        STATE.heartNoteViewMode = 'all';
+        UI.switchView('heart-note-detail');
+    },
+
+    setHeartNoteViewMode(mode) {
+        STATE.heartNoteViewMode = mode === 'injected' ? 'injected' : 'all';
+        this.renderHeartNoteDetail();
+    },
+
+    formatHeartNoteTime(record) {
+        const date = new Date(Number(record?.createdAt) || Date.now());
+        const pad = value => String(value).padStart(2, '0');
+        return `${record?.dateKey || AgentHeartNoteManager.getTodayKey(date)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    },
+
+    renderHeartNoteDetail() {
+        const contact = (STATE.contacts || []).find(item => item.id === STATE.currentHeartNoteContactId);
+        const title = document.getElementById('heart-note-detail-title');
+        const input = document.getElementById('heart-note-inject-days');
+        const status = document.getElementById('heart-note-status');
+        const list = document.getElementById('heart-note-detail-list');
+        const empty = document.getElementById('heart-note-detail-empty');
+        const tabs = document.querySelector('.heart-note-tabs');
+        if (!list || typeof AgentHeartNoteManager === 'undefined') return;
+        if (!contact) {
+            if (title) title.textContent = '心笺';
+            list.innerHTML = '';
+            if (empty) empty.style.display = 'block';
+            return;
+        }
+
+        const notebook = AgentHeartNoteManager.ensureNotebook(contact.id);
+        const injected = AgentHeartNoteManager.getInjectRecords(notebook, new Date());
+        const mode = STATE.heartNoteViewMode === 'injected' ? 'injected' : 'all';
+        const records = (mode === 'injected' ? injected : notebook.records)
+            .filter(record => record && record.text)
+            .sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+        if (title) title.textContent = contact.name || '心笺';
+        if (input) input.value = notebook.injectDays;
+        if (status) status.textContent = `${notebook.records.length}条心笺 · 注入${injected.length}条`;
+        tabs?.classList.toggle('is-injected', mode === 'injected');
+        document.querySelectorAll('.heart-note-tab').forEach(tab => {
+            const active = tab.dataset.mode === mode;
+            tab.classList.toggle('active', active);
+            tab.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+
+        list.innerHTML = '';
+        records.forEach(record => {
+            const card = document.createElement('div');
+            card.className = 'heart-note-card';
+            card.dataset.id = record.id;
+            card.innerHTML = `
+                <div class="heart-note-text">${this.escapeHtml(record.text)}</div>
+                <div class="heart-note-card-foot">
+                    <span class="heart-note-time">${this.escapeHtml(this.formatHeartNoteTime(record))}</span>
+                    <div class="heart-note-actions">
+                        <button type="button" class="heart-note-icon-btn heart-note-pin-btn${record.alwaysInject ? ' active' : ''}" data-action="toggle-heart-note-star" title="${record.alwaysInject ? '取消星标' : '星标'}" aria-pressed="${record.alwaysInject ? 'true' : 'false'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path class="heart-note-pin-shape" d="M12 17v5"></path><path class="heart-note-pin-shape" d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"></path></svg></button>
+                        <button type="button" class="heart-note-icon-btn" data-action="edit-heart-note" title="修改"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+                        <button type="button" class="heart-note-icon-btn danger" data-action="delete-heart-note" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+                    </div>
+                </div>`;
+            list.appendChild(card);
+        });
+        if (empty) {
+            empty.style.display = records.length ? 'none' : 'block';
+            empty.textContent = mode === 'injected' ? '当前没有会注入上下文的心笺。' : '还没有心笺，点右上角加一条吧。';
+        }
+    },
+
+    openHeartNoteModal(noteId = null) {
+        const notebook = AgentHeartNoteManager.getNotebook(STATE.currentHeartNoteContactId);
+        const record = noteId ? (notebook?.records || []).find(item => item.id === noteId) : null;
+        STATE.editingHeartNoteId = record?.id || null;
+        const modal = document.getElementById('modal-heart-note-item');
+        const title = document.getElementById('heart-note-item-modal-title');
+        const input = document.getElementById('heart-note-item-text');
+        if (title) title.textContent = record ? '编辑心笺' : '添加心笺';
+        if (input) input.value = record?.text || '';
+        modal?.classList.remove('hidden');
+        input?.focus();
+    },
+
+    closeHeartNoteModal() {
+        document.getElementById('modal-heart-note-item')?.classList.add('hidden');
+        STATE.editingHeartNoteId = null;
+    },
+
+    async saveHeartNoteItem() {
+        const contactId = STATE.currentHeartNoteContactId;
+        if (!contactId) return;
+        const notebook = AgentHeartNoteManager.ensureNotebook(contactId);
+        const input = document.getElementById('heart-note-item-text');
+        const text = AgentHeartNoteManager.cleanText(input?.value || '');
+        if (!text) return alert('写点心笺内容吧');
+        const now = Date.now();
+        const editing = (notebook.records || []).find(record => record.id === STATE.editingHeartNoteId);
+        const dateKey = editing?.dateKey || AgentHeartNoteManager.getTodayKey(new Date(now));
+        const duplicateKey = AgentHeartNoteManager.buildDuplicateKey(text, dateKey);
+        const duplicate = notebook.records.some(record => record.id !== editing?.id && AgentHeartNoteManager.buildDuplicateKey(record.text, record.dateKey || dateKey) === duplicateKey);
+        if (duplicate) return alert('同一天已经有同名心笺了');
+        if (editing) Object.assign(editing, { text, updatedAt: now });
+        else notebook.records.push({ id: `heart_note_${now}_${Math.random().toString(36).slice(2, 8)}`, text, dateKey, createdAt: now, updatedAt: now, alwaysInject: false, source: 'user' });
+        notebook.updatedAt = now;
+        await Storage.saveCharacterHeartNotes();
+        this.closeHeartNoteModal();
+        this.renderHeartNoteContacts();
+        this.renderHeartNoteDetail();
+    },
+
+    async deleteHeartNoteItem(noteId) {
+        const notebook = AgentHeartNoteManager.getNotebook(STATE.currentHeartNoteContactId);
+        if (!notebook || !confirm('确定要删除这条心笺吗？')) return;
+        notebook.records = notebook.records.filter(record => record.id !== noteId);
+        notebook.updatedAt = Date.now();
+        await Storage.saveCharacterHeartNotes();
+        this.renderHeartNoteContacts();
+        this.renderHeartNoteDetail();
+    },
+
+    async toggleHeartNoteStar(noteId) {
+        const notebook = AgentHeartNoteManager.getNotebook(STATE.currentHeartNoteContactId);
+        const record = (notebook?.records || []).find(item => item.id === noteId);
+        if (!record) return;
+        record.alwaysInject = record.alwaysInject !== true;
+        record.updatedAt = Date.now();
+        notebook.updatedAt = Date.now();
+        await Storage.saveCharacterHeartNotes();
+        this.renderHeartNoteContacts();
+        this.renderHeartNoteDetail();
+    },
+
+    async saveHeartNoteInjectDays() {
+        const notebook = AgentHeartNoteManager.getNotebook(STATE.currentHeartNoteContactId);
+        const input = document.getElementById('heart-note-inject-days');
+        if (!notebook || !input) return;
+        notebook.injectDays = Math.max(1, Number.parseInt(input.value, 10) || AgentHeartNoteManager.defaultInjectDays);
+        notebook.updatedAt = Date.now();
+        await Storage.saveCharacterHeartNotes();
+        this.renderHeartNoteContacts();
+        this.renderHeartNoteDetail();
+    },
+    // ★★★★★ 心笺 END：页面逻辑层 ★★★★★
+
     // ★★★★★ Agent START：TODO 管理设置 + skill 执行 ★★★★★
     renderAgentList() {
         const list = document.getElementById('agent-list');
         if (!list) return;
 
-        const enabled = STATE.settings.AGENT_SKILL_ROUTER_ENABLED === true;
+        const todoEnabled = STATE.settings.AGENT_TODO_MANAGER_ENABLED === true;
+        const heartNoteEnabled = STATE.settings.AGENT_HEART_NOTE_MANAGER_ENABLED === true;
         const presetIndex = Number.isInteger(STATE.settings.AGENT_SKILL_ROUTER_API_PRESET_INDEX)
             ? STATE.settings.AGENT_SKILL_ROUTER_API_PRESET_INDEX
             : -1;
@@ -6428,7 +6639,7 @@ const App = {
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>
                 </span>
             </div>
-            <div class="agent-card ${enabled ? 'enabled' : ''}" data-agent="todo-manager">
+            <div class="agent-card ${todoEnabled ? 'enabled' : ''}" data-agent="todo-manager">
                 <div class="agent-card-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M12 3v4"></path><path d="M12 17v4"></path><path d="M4.22 6.22l2.83 2.83"></path><path d="M16.95 16.95l2.83 2.83"></path><path d="M3 12h4"></path><path d="M17 12h4"></path><circle cx="12" cy="12" r="4"></circle>
@@ -6436,10 +6647,25 @@ const App = {
                 </div>
                 <div class="agent-card-info">
                     <div class="agent-card-name">TODO 管理</div>
-                    <div class="agent-card-status">${this.escapeHtml(enabled ? `已启用 · ${modelText}` : `未启用 · ${modelText}`)}</div>
+                    <div class="agent-card-status">${this.escapeHtml(todoEnabled ? `已启用 · ${modelText}` : `未启用 · ${modelText}`)}</div>
                 </div>
                 <label class="agent-menu-switch" title="启用/关闭 TODO 管理">
-                    <input type="checkbox" id="agent-todo-manager-toggle" ${enabled ? 'checked' : ''}>
+                    <input type="checkbox" id="agent-todo-manager-toggle" ${todoEnabled ? 'checked' : ''}>
+                    <span class="app-switch-slider agent-switch-slider"></span>
+                </label>
+            </div>
+            <div class="agent-card ${heartNoteEnabled ? 'enabled' : ''}" data-agent="heart-note-manager">
+                <div class="agent-card-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path><path d="M8 8h8M8 12h8M8 16h5"></path>
+                    </svg>
+                </div>
+                <div class="agent-card-info">
+                    <div class="agent-card-name">心笺管理</div>
+                    <div class="agent-card-status">${this.escapeHtml(heartNoteEnabled ? `已启用 · ${modelText}` : `未启用 · ${modelText}`)}</div>
+                </div>
+                <label class="agent-menu-switch" title="启用/关闭心笺管理">
+                    <input type="checkbox" id="agent-heart-note-manager-toggle" ${heartNoteEnabled ? 'checked' : ''}>
                     <span class="app-switch-slider agent-switch-slider"></span>
                 </label>
             </div>
@@ -6451,11 +6677,18 @@ const App = {
         // 开启 skill 后向各 skill 收集能力说明；Router 只管分发，不直接塞业务 prompt。
         const capabilities = [];
         if (
-            STATE.settings.AGENT_SKILL_ROUTER_ENABLED === true
+            STATE.settings.AGENT_TODO_MANAGER_ENABLED === true
             && typeof AgentTodoManager !== 'undefined'
             && typeof AgentTodoManager.buildCapabilityPrompt === 'function'
         ) {
             capabilities.push(AgentTodoManager.buildCapabilityPrompt());
+        }
+        if (
+            STATE.settings.AGENT_HEART_NOTE_MANAGER_ENABLED === true
+            && typeof AgentHeartNoteManager !== 'undefined'
+            && typeof AgentHeartNoteManager.buildCapabilityPrompt === 'function'
+        ) {
+            capabilities.push(AgentHeartNoteManager.buildCapabilityPrompt());
         }
         if (!capabilities.length) return '';
         return [
@@ -6591,7 +6824,15 @@ const App = {
     },
 
     async toggleAgentTodoManagerEnabled(enabled) {
+        STATE.settings.AGENT_TODO_MANAGER_ENABLED = !!enabled;
+        // ★ 旧字段暂时镜像 TODO 开关，保持旧后台 pre-agent 入口可回滚。
         STATE.settings.AGENT_SKILL_ROUTER_ENABLED = !!enabled;
+        await Storage.saveSettings();
+        this.renderAgentList();
+    },
+
+    async toggleAgentHeartNoteManagerEnabled(enabled) {
+        STATE.settings.AGENT_HEART_NOTE_MANAGER_ENABLED = !!enabled;
         await Storage.saveSettings();
         this.renderAgentList();
     },
@@ -6770,7 +7011,62 @@ const App = {
         const resultPrompt = String(merged.resultPrompt || '').trim();
         if (resultPrompt) compact.resultPrompt = resultPrompt;
 
+        const confirmationId = String(merged.confirmationId || '').trim();
+        if (confirmationId && status === 'suggested') compact.confirmationId = confirmationId;
+
         return compact;
+    },
+
+    ensureAgentConfirmationId(contact, assistantMessage, skillName) {
+        const state = this.getAgentExecutionState(assistantMessage, skillName) || {};
+        if (state.confirmationId) return state.confirmationId;
+        const confirmationId = `agent_confirm_${skillName}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        this.setAgentExecutionState(contact, assistantMessage, skillName, { confirmationId }).catch(error => {
+            console.warn('[Agent][确认恢复] 保存 confirmationId 失败:', error);
+        });
+        return confirmationId;
+    },
+
+    hasAgentConfirmationNotice(confirmationId) {
+        return !!confirmationId && Array.from(document.querySelectorAll('.app-top-notice[data-agent-confirmation-id]'))
+            .some(notice => notice.dataset.agentConfirmationId === confirmationId);
+    },
+
+    bindAgentConfirmationNotice(notice, confirmationId) {
+        if (notice && confirmationId) notice.dataset.agentConfirmationId = confirmationId;
+        return notice;
+    },
+
+    restorePendingAgentConfirmations(contact) {
+        // ★ 通用恢复入口：页面刷新或重新进入聊天后，TODO/心笺共用同一次扫描。
+        if (!contact || !Array.isArray(contact.history)) return;
+        contact.history.forEach(message => {
+            if (!message || message.role !== 'assistant') return;
+            const todoState = this.getAgentExecutionState(message, 'todo');
+            if (todoState?.status === 'suggested' && Array.isArray(todoState.suggestions) && todoState.suggestions.length) {
+                const id = todoState.confirmationId || this.ensureAgentConfirmationId(contact, message, 'todo');
+                if (!this.hasAgentConfirmationNotice(id)) this.showAgentPostTodoSuggestionNotice(contact, message, todoState.suggestions);
+            }
+            const heartState = this.getAgentExecutionState(message, 'heart_note');
+            if (heartState?.status === 'suggested' && Array.isArray(heartState.suggestions) && heartState.suggestions.length) {
+                const id = heartState.confirmationId || this.ensureAgentConfirmationId(contact, message, 'heart_note');
+                if (!this.hasAgentConfirmationNotice(id)) this.showAgentHeartNoteSuggestionNotice(contact, message, heartState.suggestions);
+            }
+        });
+    },
+
+    discardAgentConfirmationsForMessages(messages = []) {
+        // ★ Reroll 会删掉旧 assistant 消息，它们尚未处理的顶部确认也必须同时作废。
+        const ids = new Set();
+        (messages || []).forEach(message => {
+            ['todo', 'heart_note'].forEach(skillName => {
+                const id = this.getAgentExecutionState(message, skillName)?.confirmationId;
+                if (id) ids.add(id);
+            });
+        });
+        document.querySelectorAll('.app-top-notice[data-agent-confirmation-id]').forEach(notice => {
+            if (ids.has(notice.dataset.agentConfirmationId)) notice.remove();
+        });
     },
 
     async setAgentExecutionState(contact, userMessage, agentName, patch = {}) {
@@ -7151,15 +7447,11 @@ const App = {
     // ★★★★★ Agent：意图括号触发主链路 START ★★★★★
     // 只有角色回复里出现『...』时才触发 Agent；普通对话不再每轮调用 router。
     async runAgentPostAgents(contact, assistantText, assistantMessage = null) {
-        if (STATE.settings.AGENT_SKILL_ROUTER_ENABLED !== true) return null;
+        const todoEnabled = STATE.settings.AGENT_TODO_MANAGER_ENABLED === true;
+        const heartNoteEnabled = STATE.settings.AGENT_HEART_NOTE_MANAGER_ENABLED === true;
+        if (!todoEnabled && !heartNoteEnabled) return null;
         if (typeof AgentIntentMarkup === 'undefined') return null;
         if (!assistantText || !assistantMessage) return null;
-
-        const existingRouteState = this.getAgentExecutionState(assistantMessage, 'todo');
-        if (['pending', 'routed', 'suggested', 'applied', 'dismissed', 'skipped', 'failed'].includes(existingRouteState?.status)) {
-            console.log('[Agent][意图括号] 已有 TODO 状态，本轮跳过:', existingRouteState);
-            return null;
-        }
 
         const actionableText = String(assistantText || '')
             .replace(/<(?:think|thinking|thought)[^>]*>[\s\S]*?(?:<\/(?:think|thinking|thought)>|$)/gi, '')
@@ -7175,8 +7467,20 @@ const App = {
             }
 
             // ★★★★★ Agent：意图括号路由 START ★★★★★
-            // 主模型只留下自然语言动作意图；router 不再单独入库，只把意图交给 TODO 专用 Agent 翻译。
-            return await this.runAgentTodoIntentOperations(contact, intentTexts, assistantMessage);
+            // ★ 明确写出“心笺”的意图本地直达心笺 Agent，其余交给 TODO，避免为明确语法多跑一次小模型。
+            const heartNoteIntents = heartNoteEnabled
+                ? intentTexts.filter(text => /心笺/.test(text))
+                : [];
+            const todoIntents = todoEnabled
+                ? intentTexts.filter(text => !/心笺/.test(text))
+                : [];
+            const results = await Promise.all([
+                todoIntents.length ? this.runAgentTodoIntentOperations(contact, todoIntents, assistantMessage) : null,
+                heartNoteIntents.length && typeof AgentRuntime !== 'undefined'
+                    ? AgentRuntime.runHeartNoteManager({ app: this, contact, intentTexts: heartNoteIntents, assistantMessage })
+                    : null
+            ]);
+            return results.filter(Boolean);
             // ★★★★★ Agent：意图括号路由 END ★★★★★
         } catch (error) {
             console.warn('[Agent][意图括号] failed:', error);
@@ -7191,7 +7495,7 @@ const App = {
     },
 
     async runAgentTodoIntentOperations(contact, intentTexts = [], assistantMessage = null) {
-        if (STATE.settings.AGENT_SKILL_ROUTER_ENABLED !== true) return null;
+        if (STATE.settings.AGENT_TODO_MANAGER_ENABLED !== true) return null;
         if (typeof AgentTodoManager === 'undefined') return null;
         const validIntentTexts = Array.isArray(intentTexts)
             ? intentTexts.map(text => AgentTodoManager.cleanText(text, 200)).filter(Boolean)
@@ -7301,8 +7605,248 @@ const App = {
     },
     // ★★★★★ Agent：意图括号触发主链路 END ★★★★★
 
+    // ★★★★★ Agent 心笺 START：意图解析、确认与撤销 ★★★★★
+    normalizeAgentHeartNoteSuggestions(contact, result = {}) {
+        if (typeof AgentHeartNoteManager === 'undefined') return [];
+        const notebook = AgentHeartNoteManager.ensureNotebook(contact?.id);
+        const todayKey = AgentHeartNoteManager.getTodayKey();
+        const seenCreateKeys = new Set((notebook.records || [])
+            .filter(record => record && record.text)
+            .map(record => AgentHeartNoteManager.buildDuplicateKey(record.text, record.dateKey || todayKey)));
+
+        return (result.operations || []).map(operation => {
+            const normalized = AgentHeartNoteManager.normalizeOperation(operation);
+            if (!normalized) return null;
+            if (normalized.action === 'create') {
+                if (!normalized.text) return null;
+                const duplicateKey = AgentHeartNoteManager.buildDuplicateKey(normalized.text, todayKey);
+                // ★ 心笺与 TODO 一样：同一角色、同一天、同名内容只提交一次。
+                if (seenCreateKeys.has(duplicateKey)) return null;
+                seenCreateKeys.add(duplicateKey);
+                return { action: 'create', text: normalized.text, dateKey: todayKey };
+            }
+
+            const candidates = AgentHeartNoteManager.findCandidates(contact?.id, normalized);
+            if (candidates.length !== 1) return null;
+            const target = candidates[0];
+            if (normalized.action === 'update' && !normalized.newText) return null;
+            if (normalized.action === 'update') {
+                const targetDateKey = target.dateKey || todayKey;
+                const newKey = AgentHeartNoteManager.buildDuplicateKey(normalized.newText, targetDateKey);
+                const duplicate = (notebook.records || []).some(record => record.id !== target.id
+                    && AgentHeartNoteManager.buildDuplicateKey(record.text, record.dateKey || targetDateKey) === newKey);
+                if (duplicate) return null;
+            }
+            return {
+                ...normalized,
+                targetNoteId: target.id,
+                targetText: target.text,
+                before: { ...target }
+            };
+        }).filter(Boolean);
+    },
+
+    buildAgentHeartNoteOperationLabel(operation = {}) {
+        const verb = {
+            create: '添加',
+            update: '修改',
+            delete: '删除',
+            star: '星标',
+            unstar: '取消星标'
+        }[operation.action] || '更新';
+        if (operation.action === 'update') return `${verb} ${operation.targetText} → ${operation.newText}`;
+        return `${verb} ${operation.text || operation.targetText || ''}`;
+    },
+
+    async runAgentHeartNoteIntentOperations(contact, intentTexts = [], assistantMessage = null) {
+        if (STATE.settings.AGENT_HEART_NOTE_MANAGER_ENABLED !== true) return null;
+        if (typeof AgentHeartNoteManager === 'undefined' || !assistantMessage) return null;
+        const validIntents = (intentTexts || []).map(text => AgentHeartNoteManager.cleanText(text, 1200)).filter(Boolean);
+        if (!validIntents.length) return null;
+
+        const existingState = this.getAgentExecutionState(assistantMessage, 'heart_note');
+        if (['pending', 'suggested', 'applied', 'dismissed', 'skipped', 'failed'].includes(existingState?.status)) return null;
+        const settings = this.buildAgentTodoManagerRequestSettings();
+        if (!settings.API_URL || !settings.API_KEY || !settings.MODEL) {
+            this.showTopNotice('心笺管理 API 配置缺失，请在 Agent 设置里选择可用模型。', { type: 'failure' });
+            return null;
+        }
+
+        try {
+            await this.setAgentExecutionState(contact, assistantMessage, 'heart_note', { status: 'pending', intents: validIntents });
+            const messages = AgentHeartNoteManager.buildExecutorMessages(contact, validIntents, new Date());
+            const rawText = await API.chat(messages, {
+                ...settings,
+                AGENT_LOG_PHASE: 'post',
+                AGENT_LOG_LABEL: '心笺意图确认'
+            });
+            const result = AgentHeartNoteManager.parseResult(rawText);
+            if (result.intent === 'NONE') {
+                await this.setAgentExecutionState(contact, assistantMessage, 'heart_note', { status: 'skipped', reason: 'intent_none', intents: validIntents });
+                return null;
+            }
+            if (result.intent === 'ASK_CONFIRMATION') {
+                const message = AgentHeartNoteManager.cleanText(result.confirmation?.message || '这个心笺操作需要说得更具体。', 160);
+                this.showTopNotice(`${contact?.name || '心笺管理'} 没有执行：${message}`, { type: 'pending' });
+                await this.setAgentExecutionState(contact, assistantMessage, 'heart_note', { status: 'skipped', reason: 'ask_confirmation', message, intents: validIntents });
+                return null;
+            }
+
+            const suggestions = this.normalizeAgentHeartNoteSuggestions(contact, result);
+            if (!suggestions.length) {
+                this.showTopNotice(`${contact?.name || '当前角色'} 没有提交心笺：可能已有同日同名内容，或目标不唯一`, { type: 'pending' });
+                await this.setAgentExecutionState(contact, assistantMessage, 'heart_note', { status: 'skipped', reason: 'no_valid_suggestions', intents: validIntents });
+                return null;
+            }
+            await this.setAgentExecutionState(contact, assistantMessage, 'heart_note', { status: 'suggested', intents: validIntents, suggestions });
+            this.showAgentHeartNoteSuggestionNotice(contact, assistantMessage, suggestions);
+            return { suggestions };
+        } catch (error) {
+            console.warn('[Agent][心笺管理] failed:', error);
+            await this.setAgentExecutionState(contact, assistantMessage, 'heart_note', { status: 'failed', error: error?.message || String(error), intents: validIntents });
+            this.showTopNotice('心笺管理没有执行：模型返回格式不正确。', { type: 'failure' });
+            return null;
+        }
+    },
+
+    showAgentHeartNoteSuggestionNotice(contact, assistantMessage, suggestions = []) {
+        const valid = (suggestions || []).filter(Boolean);
+        if (!valid.length) return null;
+        let checkboxList = null;
+        const getSelected = () => checkboxList
+            ? Array.from(checkboxList.querySelectorAll('input:checked')).map(input => valid[Number(input.dataset.index)]).filter(Boolean)
+            : valid;
+        const confirmationId = this.ensureAgentConfirmationId(contact, assistantMessage, 'heart_note');
+        if (this.hasAgentConfirmationNotice(confirmationId)) return null;
+        const notice = this.showTopNotice('', {
+            type: 'pending',
+            layout: 'stacked',
+            timeout: 0,
+            renderContent: () => {
+                const wrap = document.createElement('div');
+                wrap.className = 'agent-suggestion-notice';
+                const title = document.createElement('div');
+                title.className = 'agent-suggestion-title';
+                title.textContent = `${contact?.name || '当前角色'}想操作 ${valid.length} 条心笺：`;
+                checkboxList = document.createElement('div');
+                checkboxList.className = 'agent-suggestion-list';
+                valid.forEach((item, index) => {
+                    const row = document.createElement('label');
+                    row.className = 'agent-suggestion-option desktop-switch-cell';
+                    row.innerHTML = `<input type="checkbox" data-index="${index}" checked><span>${this.escapeHtml(this.buildAgentHeartNoteOperationLabel(item))}</span>`;
+                    checkboxList.appendChild(row);
+                });
+                wrap.append(title, checkboxList);
+                return wrap;
+            },
+            actions: [
+                { label: '执行选中', onAction: () => this.applyAgentHeartNoteSuggestions(contact, assistantMessage, getSelected()) },
+                { label: valid.length === 1 ? '执行' : '全部执行', onAction: () => this.applyAgentHeartNoteSuggestions(contact, assistantMessage, valid) },
+                { label: '忽略', type: 'secondary', onAction: () => this.setAgentExecutionState(contact, assistantMessage, 'heart_note', { status: 'dismissed', reason: 'user_dismissed' }) }
+            ]
+        });
+        return this.bindAgentConfirmationNotice(notice, confirmationId);
+    },
+
+    async applyAgentHeartNoteSuggestions(contact, assistantMessage, suggestions = []) {
+        if (!suggestions.length) {
+            this.showTopNotice('还没有选中要执行的心笺操作。', { type: 'pending' });
+            return null;
+        }
+        const notebook = AgentHeartNoteManager.ensureNotebook(contact?.id);
+        const createdIds = [];
+        const snapshots = [];
+        const applied = [];
+        const originalOrder = (notebook.records || []).map(record => record.id);
+
+        for (const suggestion of suggestions) {
+            if (suggestion.action === 'create') {
+                const now = Date.now();
+                const dateKey = AgentHeartNoteManager.getTodayKey(new Date(now));
+                const duplicateKey = AgentHeartNoteManager.buildDuplicateKey(suggestion.text, dateKey);
+                const duplicate = (notebook.records || []).some(record => AgentHeartNoteManager.buildDuplicateKey(record.text, record.dateKey || dateKey) === duplicateKey);
+                if (duplicate) continue;
+                const record = {
+                    id: `heart_note_${now}_${Math.random().toString(36).slice(2, 8)}`,
+                    text: suggestion.text,
+                    dateKey,
+                    createdAt: now,
+                    updatedAt: now,
+                    alwaysInject: false,
+                    source: 'assistant'
+                };
+                notebook.records.push(record);
+                createdIds.push(record.id);
+                applied.push({ ...suggestion, appliedNoteId: record.id });
+                continue;
+            }
+
+            const index = notebook.records.findIndex(record => record.id === suggestion.targetNoteId);
+            if (index < 0) continue;
+            const record = notebook.records[index];
+            if (suggestion.action === 'update') {
+                const dateKey = record.dateKey || AgentHeartNoteManager.getTodayKey(new Date(record.createdAt || Date.now()));
+                const duplicateKey = AgentHeartNoteManager.buildDuplicateKey(suggestion.newText, dateKey);
+                const duplicate = notebook.records.some(other => other.id !== record.id
+                    && AgentHeartNoteManager.buildDuplicateKey(other.text, other.dateKey || dateKey) === duplicateKey);
+                if (duplicate) continue;
+            }
+            if (!snapshots.some(snapshot => snapshot.record.id === record.id)) {
+                snapshots.push({ record: { ...record }, index: originalOrder.indexOf(record.id) });
+            }
+            if (suggestion.action === 'delete') notebook.records.splice(index, 1);
+            if (suggestion.action === 'update') Object.assign(record, { text: suggestion.newText, updatedAt: Date.now() });
+            if (suggestion.action === 'star') Object.assign(record, { alwaysInject: true, updatedAt: Date.now() });
+            if (suggestion.action === 'unstar') Object.assign(record, { alwaysInject: false, updatedAt: Date.now() });
+            applied.push(suggestion);
+        }
+        if (!applied.length) {
+            this.showTopNotice('心笺没有变化：内容可能已重复或目标已变更。', { type: 'pending' });
+            return null;
+        }
+
+        notebook.updatedAt = Date.now();
+        await Storage.saveCharacterHeartNotes();
+        this.renderHeartNoteContacts();
+        this.renderHeartNoteDetail();
+        await this.setAgentExecutionState(contact, assistantMessage, 'heart_note', { status: 'applied', suggestions: applied });
+        const single = applied[0] || {};
+        const noticeText = applied.length === 1
+            ? ({
+                create: `已添加心笺：${single.text}`,
+                update: `已修改心笺：${single.newText}`,
+                delete: `已删除心笺：${single.targetText}`,
+                star: `已星标心笺：${single.targetText}`,
+                unstar: `已取消星标心笺：${single.targetText}`
+            }[single.action] || '已更新心笺')
+            : `已执行 ${applied.length} 项心笺操作`;
+        this.showTopNotice(`${contact?.name || '当前角色'} ${noticeText}`, {
+            onClick: () => {
+                STATE.currentHeartNoteContactId = contact?.id || STATE.currentHeartNoteContactId;
+                UI.switchView('heart-note-detail');
+            },
+            actionLabel: '撤销',
+            onAction: async () => {
+                const ids = new Set(createdIds);
+                notebook.records = notebook.records.filter(record => !ids.has(record.id));
+                snapshots.sort((a, b) => a.index - b.index).forEach(snapshot => {
+                    const currentIndex = notebook.records.findIndex(record => record.id === snapshot.record.id);
+                    if (currentIndex >= 0) notebook.records.splice(currentIndex, 1, snapshot.record);
+                    else notebook.records.splice(Math.min(snapshot.index, notebook.records.length), 0, snapshot.record);
+                });
+                notebook.updatedAt = Date.now();
+                await Storage.saveCharacterHeartNotes();
+                this.renderHeartNoteContacts();
+                this.renderHeartNoteDetail();
+                await this.setAgentExecutionState(contact, assistantMessage, 'heart_note', { status: 'suggested', reason: 'user_undo_apply', suggestions: applied });
+            }
+        });
+        return applied;
+    },
+    // ★★★★★ Agent 心笺 END：意图解析、确认与撤销 ★★★★★
+
     async runAgentTodoPostSuggestions(contact, assistantText, assistantMessage = null) {
-        if (STATE.settings.AGENT_SKILL_ROUTER_ENABLED !== true) return null;
+        if (STATE.settings.AGENT_TODO_MANAGER_ENABLED !== true) return null;
         if (typeof AgentTodoManager === 'undefined') return null;
         if (!assistantText || !assistantMessage) return null;
 
@@ -7397,6 +7941,9 @@ const App = {
             : [];
         if (!validSuggestions.length) return null;
 
+        const confirmationId = this.ensureAgentConfirmationId(contact, assistantMessage, 'todo');
+        if (this.hasAgentConfirmationNotice(confirmationId)) return null;
+
         const roleName = contact?.name || '当前角色';
         const title = validSuggestions.length === 1
             ? `${roleName} 建议管理 TODO：`
@@ -7412,7 +7959,7 @@ const App = {
                 .filter(Boolean);
         };
 
-        return this.showTopNotice('', {
+        const notice = this.showTopNotice('', {
             type: 'pending',
             layout: 'stacked',
             timeout: 0,
@@ -7468,6 +8015,7 @@ const App = {
                 }
             ]
         });
+        return this.bindAgentConfirmationNotice(notice, confirmationId);
         // ★★★★★ Post Agent：持久确认条 END ★★★★★
     },
 
@@ -9093,6 +9641,7 @@ const App = {
 
         UI.renderChatHistory(contact);
         UI.renderContacts(); 
+        this.restorePendingAgentConfirmations(contact);
     },
 
     clearTransientChatErrors(contact) {
@@ -9589,10 +10138,12 @@ const App = {
                 }
             }
             
-            // 移除最近的 AI 回复
+            // 移除最近的 AI 回复；同时作废绑定在旧回复上的 Agent 待确认操作。
+            const removedAssistantMessages = [];
             while(contact.history.length > 0 && contact.history[contact.history.length-1].role === 'assistant') {
-                contact.history.pop();
+                removedAssistantMessages.push(contact.history.pop());
             }
+            this.discardAgentConfirmationsForMessages(removedAssistantMessages);
             UI.removeLatestAiBubbles();
         } 
 
@@ -9836,6 +10387,14 @@ const App = {
             routineDynamicContextPrompts.push(characterMemoryPrompt);
         }
         // ★★★★★ 角色记忆：收集本轮动态背景 END ★★★★★
+
+        // ★★★★★ 心笺：收集本轮动态背景 START ★★★★★
+        // ★ 心笺允许当天记录立即注入；超出天数后只保留用户/角色星标的内容。
+        const heartNotePrompt = typeof AgentHeartNoteManager !== 'undefined'
+            ? AgentHeartNoteManager.buildChatPrompt(contact.id, new Date())
+            : '';
+        if (heartNotePrompt) routineDynamicContextPrompts.push(heartNotePrompt);
+        // ★★★★★ 心笺：收集本轮动态背景 END ★★★★★
 
         // ★★★★★ Agent：skill 执行结果回注 START ★★★★★
         // 主模型只看到自然语言摘要，不能看到 worker model 的原始 JSON。
@@ -14420,8 +14979,12 @@ const App = {
 
         document.getElementById('agent-list')?.addEventListener('change', (event) => {
             const input = event.target.closest('#agent-todo-manager-toggle');
-            if (!input) return;
-            this.toggleAgentTodoManagerEnabled(input.checked === true);
+            if (input) {
+                this.toggleAgentTodoManagerEnabled(input.checked === true);
+                return;
+            }
+            const heartNoteInput = event.target.closest('#agent-heart-note-manager-toggle');
+            if (heartNoteInput) this.toggleAgentHeartNoteManagerEnabled(heartNoteInput.checked === true);
         });
 
         document.getElementById('agent-list')?.addEventListener('click', (event) => {
@@ -14498,6 +15061,10 @@ const App = {
             safeSwitchView('character-memory');
         });
 
+        document.getElementById('explore-heart-note-btn')?.addEventListener('click', () => {
+            safeSwitchView('heart-note');
+        });
+
         document.getElementById('todo-plan-enable-toggle')?.addEventListener('change', (event) => {
             this.toggleTodoPlanInjectEnabled(event.target.checked);
         });
@@ -14528,6 +15095,39 @@ const App = {
 
         document.getElementById('character-memory-detail-back-btn')?.addEventListener('click', () => {
             safeSwitchView('character-memory');
+        });
+
+        document.getElementById('heart-note-back-btn')?.addEventListener('click', () => {
+            safeSwitchView(this.getReturnView('heart-note', 'explore'));
+        });
+
+        document.getElementById('heart-note-detail-back-btn')?.addEventListener('click', () => {
+            safeSwitchView('heart-note');
+        });
+
+        document.getElementById('heart-note-contact-list')?.addEventListener('click', (event) => {
+            const item = event.target.closest('.heart-note-contact');
+            if (item?.dataset.id) this.openHeartNoteDetail(item.dataset.id);
+        });
+
+        document.querySelectorAll('.heart-note-tab').forEach(btn => {
+            btn.addEventListener('click', () => this.setHeartNoteViewMode(btn.dataset.mode));
+        });
+
+        document.getElementById('heart-note-add-btn')?.addEventListener('click', () => this.openHeartNoteModal());
+        document.getElementById('heart-note-inject-days')?.addEventListener('change', () => this.saveHeartNoteInjectDays());
+        document.getElementById('heart-note-detail-list')?.addEventListener('click', (event) => {
+            const action = event.target.closest('[data-action]');
+            const card = action?.closest('.heart-note-card');
+            if (!action || !card?.dataset.id) return;
+            if (action.dataset.action === 'toggle-heart-note-star') this.toggleHeartNoteStar(card.dataset.id);
+            if (action.dataset.action === 'edit-heart-note') this.openHeartNoteModal(card.dataset.id);
+            if (action.dataset.action === 'delete-heart-note') this.deleteHeartNoteItem(card.dataset.id);
+        });
+        document.getElementById('heart-note-item-cancel-btn')?.addEventListener('click', () => this.closeHeartNoteModal());
+        document.getElementById('heart-note-item-save-btn')?.addEventListener('click', () => this.saveHeartNoteItem());
+        document.getElementById('modal-heart-note-item')?.addEventListener('click', (event) => {
+            if (event.target === document.getElementById('modal-heart-note-item')) this.closeHeartNoteModal();
         });
 
         document.getElementById('character-schedule-settings-btn')?.addEventListener('click', () => {

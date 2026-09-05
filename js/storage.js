@@ -150,6 +150,10 @@ const Storage = {
         }
 
         STATE.settings = { ...CONFIG.DEFAULT, ...loadedSettings };
+        // ★ 旧版只有一个 Agent 总开关；升级后它只迁移给 TODO，心笺保持默认关闭。
+        if (loadedSettings.AGENT_TODO_MANAGER_ENABLED === undefined) {
+            STATE.settings.AGENT_TODO_MANAGER_ENABLED = loadedSettings.AGENT_SKILL_ROUTER_ENABLED === true;
+        }
         if (!Array.isArray(STATE.settings.API_PRESETS)) {
             STATE.settings.API_PRESETS = [];
         }
@@ -310,12 +314,16 @@ const Storage = {
                     });
                 }
             });
+
+            const characterHeartNotes = await DB.get(CONFIG.CHARACTER_HEART_NOTES_KEY);
+            STATE.characterHeartNotes = Array.isArray(characterHeartNotes) ? characterHeartNotes : [];
         } catch (e) {
             console.warn("读取 TO DO / 倒数日 / 角色日程 / 角色记忆数据失败 (可能是第一次运行):", e);
             STATE.todoPlans = [];
             STATE.countdownDays = [];
             STATE.characterSchedules = [];
             STATE.characterMemories = [];
+            STATE.characterHeartNotes = [];
         }
         // ★★★★★ 探索 TO DO / 倒数日 / 角色日程 / 角色记忆 END ★★★★★
 
@@ -546,6 +554,15 @@ const Storage = {
             return;
         }
         await DB.set(CONFIG.CHARACTER_MEMORIES_KEY, STATE.characterMemories);
+    },
+
+    // 保存角色心笺列表
+    async saveCharacterHeartNotes() {
+        if (!CONFIG.CHARACTER_HEART_NOTES_KEY) {
+            console.error("CONFIG.CHARACTER_HEART_NOTES_KEY 未定义！请检查配置。");
+            return;
+        }
+        await DB.set(CONFIG.CHARACTER_HEART_NOTES_KEY, STATE.characterHeartNotes);
     },
 
 
