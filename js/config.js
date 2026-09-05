@@ -100,6 +100,8 @@ const CONFIG = {
             lastAutoMomentCheckAt: 0,
             // ★ 记录最后看过的角色动态创建时间，刷新页面后未读红点也不会反复出现。
             lastSeenCharacterMomentAt: 0,
+            // ★ 单独记录未读回复条数；进入心迹页后清零，新动态提示仍由上面的时间戳负责。
+            unreadMomentReplyCount: 0,
             autoMomentStatsByChar: {},
             characterMomentCoverIndexes: {}
         },

@@ -112,7 +112,8 @@
 //     - showTodoTopNotice(message, options): 弹出默认跳转到 TO DO 的顶部通知
 //     - isViewingContactChat(contactId): 判断用户是否真的正在查看某个角色聊天窗口
 //     - markContactIncomingMessage(contact, options): 统一处理非当前窗口 AI 新消息的红点和顶部通知
-//     - showMomentReplyNotice(charId, options): 心迹收到新 AI 回复时弹顶部通知，当前就在心迹页则静默
+//     - showMomentReplyNotice(charId, options): 心迹收到新 AI 回复时累计未读并弹顶部通知，当前就在心迹页则静默
+//     - markMomentReplyUnread(): 累计并保存探索页心迹入口的未读回复条数
 //     - showMomentLikeNotice(charId, options): 角色延迟点赞后弹顶部通知，当前就在心迹页则静默
 //     - showTopNotice(message, options): 通用顶部通知栈，支持多条并发、按钮和上划关闭
 //     - isDynamicContextSystemRoleError(error): 判断错误是否像多 system / system role 兼容问题
@@ -5604,6 +5605,7 @@ const App = {
         // ★ 用户正在心迹列表里看回复时不打扰；历史加载也不会走这个入口。
         if (options.notice === false || this.isViewingMomentsPage()) return;
 
+        this.markMomentReplyUnread();
         const contact = STATE.contacts.find(c => c.id === charId);
         const name = contact?.name || options.name || '有人';
         this.showTopNotice(`${name}回复了你的心迹`, {
@@ -11845,19 +11847,43 @@ const App = {
 
         const latestCreatedAt = this.getLatestCharacterMomentCreatedAt();
         const lastSeenAt = Number(STATE.momentsSettings?.lastSeenCharacterMomentAt || 0);
-        // ★ 只提示角色新发的动态；用户自己发布、点赞和评论都不点亮这里。
-        dot.classList.toggle('hidden', !(latestCreatedAt > lastSeenAt));
+        const storedReplyCount = Number(STATE.momentsSettings?.unreadMomentReplyCount || 0);
+        const unreadReplyCount = Number.isFinite(storedReplyCount) ? Math.max(0, Math.floor(storedReplyCount)) : 0;
+        const hasNewCharacterMoment = latestCreatedAt > lastSeenAt;
+
+        // ★ 回复优先显示条数；只有新动态时仍保持原来的纯红点。
+        dot.textContent = unreadReplyCount > 0 ? String(unreadReplyCount) : '';
+        dot.classList.toggle('has-reply-count', unreadReplyCount > 0);
+        dot.classList.toggle('hidden', !hasNewCharacterMoment && unreadReplyCount === 0);
+        dot.setAttribute('aria-label', unreadReplyCount > 0 ? `${unreadReplyCount} 条未读心迹回复` : '有新心迹');
+    },
+
+    markMomentReplyUnread() {
+        const settings = STATE.momentsSettings || CONFIG.DEFAULT.MOMENTS_SETTINGS;
+        const storedReplyCount = Number(settings.unreadMomentReplyCount || 0);
+        const oldCount = Number.isFinite(storedReplyCount) ? Math.max(0, Math.floor(storedReplyCount)) : 0;
+        settings.unreadMomentReplyCount = oldCount + 1;
+        STATE.momentsSettings = settings;
+        this.updateCharacterMomentUnreadDot();
+
+        // ★ 回复可能来自同步或后台恢复链路，这里独立落库，刷新页面后数量也能保留。
+        Storage.saveMomentsSettings?.().catch(error => {
+            console.warn('[心迹] 未读回复条数保存失败:', error);
+        });
     },
 
     async markCharacterMomentsSeen() {
         const latestCreatedAt = this.getLatestCharacterMomentCreatedAt();
         const settings = STATE.momentsSettings || CONFIG.DEFAULT.MOMENTS_SETTINGS;
         const lastSeenAt = Number(settings.lastSeenCharacterMomentAt || 0);
+        const storedReplyCount = Number(settings.unreadMomentReplyCount || 0);
+        const unreadReplyCount = Number.isFinite(storedReplyCount) ? Math.max(0, Math.floor(storedReplyCount)) : 0;
 
         settings.lastSeenCharacterMomentAt = Math.max(lastSeenAt, latestCreatedAt);
+        settings.unreadMomentReplyCount = 0;
         STATE.momentsSettings = settings;
         this.updateCharacterMomentUnreadDot();
-        if (settings.lastSeenCharacterMomentAt !== lastSeenAt) {
+        if (settings.lastSeenCharacterMomentAt !== lastSeenAt || unreadReplyCount > 0) {
             try {
                 await Storage.saveMomentsSettings();
             } catch (error) {
@@ -12863,10 +12889,9 @@ const App = {
                 contentToCopy += "\n[图片]";
             }
 
-            navigator.clipboard.writeText(contentToCopy)
+            copyPlainText(contentToCopy)
                 .then(() => {
-                    // 你可以用你的 Toast 提示，这里先简单 log
-                    console.log("心迹复制成功:", contentToCopy);
+                    Toast.show('已复制');
                 })
                 .catch(err => {
                     console.error("复制失败:", err);
@@ -12943,9 +12968,12 @@ const App = {
 
         // 3. 分支执行
         if (action === 'copy') {
-            navigator.clipboard.writeText(commentData.text)
-                .then(() => console.log("评论复制成功:", commentData.text))
-                .catch(err => alert("复制失败，请检查浏览器权限"));
+            copyPlainText(commentData.text)
+                .then(() => Toast.show('已复制'))
+                .catch(err => {
+                    console.error("评论复制失败:", err);
+                    alert("复制失败，请检查浏览器权限");
+                });
         } 
         else if (action === 'edit') {
             const cleanContent = commentData.text;
@@ -16715,8 +16743,8 @@ function splitMessageIntoBubbleParts(text) {
  * 这里集中保留最短、最长、满速字数和随机浮动，后续测试手感时只需要调整这几个值。
  */
 function getWaterfallBubbleDelayMs(text) {
-    const minDelayMs = 1000;
-    const maxDelayMs = 3500;
+    const minDelayMs = 600;
+    const maxDelayMs = 2800;
     const maxLengthChars = 120;
     const jitterMs = 120;
 

@@ -7177,15 +7177,37 @@ body.dark-mode .explore-list li .arrow { color: #aaa; font-size: 0.9rem; font-we
 .explore-list li .text { flex-grow: 1; font-size: 1rem; font-weight: 600; color: #333; }
 .explore-list li .arrow { color: #aaa; font-size: 0.9rem; font-weight: bold; }
 
-/* ★ 心迹未读红点紧跟探索页“心迹”文字，红点本身复用桌面最近联系人的视觉。 */
+/* ★ 心迹未读徽标紧跟“心迹”文字；仅复刻联系人徽标视觉，不共用类名。 */
 #explore-moments-btn .text {
     flex-grow: 0;
 }
 
-.desktop-recent-unread-dot.explore-moments-unread-dot {
-    position: static;
+.explore-moments-unread-indicator {
+    width: 7px;
+    height: 7px;
     margin-left: 16px;
     flex: 0 0 auto;
+    border-radius: 50%;
+    background: #ff3b30;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.92);
+    pointer-events: none;
+}
+
+/* ★ 有未读回复时完整复刻 contactlist 的 .badge-count，但类名保持独立。 */
+.explore-moments-unread-indicator.has-reply-count {
+    background-color: #ff4d4ff0;
+    color: white;
+    font-size: 11px;
+    height: 19px;
+    width: auto;
+    min-width: 18px;
+    line-height: 18px;
+    text-align: center;
+    border-radius: 16px;
+    padding: 0 1px;
+    margin-left: 12px;
+    font-weight: bold;
+    box-shadow: none;
 }
 
 #explore-moments-btn .arrow {
@@ -7326,7 +7348,7 @@ body.dark-mode #moments-scroll-area {
 
 /* 心迹卡片流 */
 /* 心迹卡片流 */
-.moment-card { 
+.moment-card {
     padding: 15px 15px;
     
     /* ★ 核心改动：增加外边距，让它变成独立卡片，两边留白 ★ */
@@ -7526,6 +7548,11 @@ button#btn-load-more-moments:active {
     -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
+}
+
+/* ★ 与聊天气泡的点击反馈统一：按住卡片时轻微降低透明度。 */
+.moment-card:active {
+    opacity: 0.9;
 }
 
 /* 底部弹出面板容器 */
