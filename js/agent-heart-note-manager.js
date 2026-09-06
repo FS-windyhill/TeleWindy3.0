@@ -119,9 +119,8 @@ const AgentHeartNoteManager = {
 
     buildCapabilityPrompt() {
         return [
-            '“心笺”是你自己的记事本。你可以主动记录自己真正在意、希望以后还能想起的想法、感受、承诺、发现或关系变化，也可以修改、删除、星标或取消星标已有心笺。',
-            '当你确实需要操作心笺时，把每个操作分别放进『』内，例如『增加心笺：我发现ta不喜欢被连续追问』、『修改心笺：原内容，修改为：新内容』、『删除心笺：原内容』、『星标心笺：原内容』或『取消星标心笺：原内容』。',
-            '『』只用于提交动作，不要在其中写普通对话；不要为了展示功能而频繁记录临时寒暄或没有长期意义的内容。'
+            '“心笺”是你的记事本。你可以在“心笺”中，记录任何你想记的东西，也可修改、删除、星标（星标=长期记住）或取消星标每条“心笺”。',
+            '当你需要操作心笺时，把你的意图放进『』内，例如『增加心笺：XXX』、『修改心笺：XXX，修改为：YYY』、『删除心笺：XXX』、『星标心笺：XXX』等，系统会为你解析并执行',
         ].join(' ');
     },
 
@@ -169,7 +168,7 @@ const AgentHeartNoteManager = {
 
     buildExecutorMessages(contact, intentTexts = [], now = new Date()) {
         const systemPrompt = [
-            '你是 TeleWindy 的心笺管理 Agent，只把角色的心笺动作意图转成规范 JSON。',
+            '你是一个心笺（记事本）管理 Agent，只把角色的心笺动作意图转成规范 JSON。',
             '不要输出 Markdown，不要解释，只输出 JSON。',
             '',
             'intent 只能选择：NONE、MANAGE_HEART_NOTE、ASK_CONFIRMATION。',

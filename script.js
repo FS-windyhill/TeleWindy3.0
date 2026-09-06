@@ -2700,6 +2700,9 @@ const UI = {
             // 进入聊天时，隐藏底栏
             if (bottomTabBar) bottomTabBar.style.display = 'none'; 
             if (viewDesktop) viewDesktop.style.display = 'none';
+            // ★ 聊天页平时靠 transform 待在屏幕外，但节点本身必须保持 flex。
+            // 心笺等二级页如果曾写入 display:none，只加 in-chat-mode 也无法让它重新出现。
+            if (this.els.viewChat) this.els.viewChat.style.display = 'flex';
             
             // 注意：因为你的聊天界面是靠 CSS 控制盖在上面的，所以这里不需要去改其他界面的 display
             
@@ -2999,14 +3002,20 @@ const UI = {
                 App.rememberReturnView('heart-note', STATE.currentMainView || 'explore');
             }
             appContainer.classList.remove('in-chat-mode');
-            document.querySelectorAll('.page-view').forEach(view => { view.style.display = 'none'; });
+            // ★ 聊天页靠位移动画常驻，不能给它写入 display:none，否则之后只恢复动画类会得到空白页。
+            document.querySelectorAll('.page-view').forEach(view => {
+                if (view !== this.els.viewChat) view.style.display = 'none';
+            });
             if (viewHeartNote) viewHeartNote.style.display = 'flex';
             if (bottomTabBar) bottomTabBar.style.display = 'none';
             App?.renderHeartNoteContacts?.();
 
         } else if (viewName === 'heart-note-detail') {
             appContainer.classList.remove('in-chat-mode');
-            document.querySelectorAll('.page-view').forEach(view => { view.style.display = 'none'; });
+            // ★ 与心笺列表保持同一显隐规则，不破坏聊天页的常驻布局。
+            document.querySelectorAll('.page-view').forEach(view => {
+                if (view !== this.els.viewChat) view.style.display = 'none';
+            });
             if (viewHeartNoteDetail) viewHeartNoteDetail.style.display = 'flex';
             if (bottomTabBar) bottomTabBar.style.display = 'none';
             App?.renderHeartNoteDetail?.();
