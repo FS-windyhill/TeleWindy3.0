@@ -10561,7 +10561,7 @@ body.dark-mode .character-schedule-contact-status {
 .character-schedule-status {
     margin: 3px 0 12px;
     padding: 9px 12px;
-    border-radius: 999px;
+    border-radius: 12px;
     background: rgba(255, 255, 255, 0.42);
     border: 1px solid rgba(255, 255, 255, 0.65);
     color: #7a8391;
@@ -10840,7 +10840,7 @@ body.dark-mode .character-memory-contact-status {
     box-sizing: border-box;
     padding: 4px;
     margin: 3px 0 10px;
-    border-radius: 999px;
+    border-radius: 12px;
     background: rgb(255 255 255 / 15%);
     border: 1px solid rgb(245 245 245 / 75%);
     backdrop-filter: blur(8px);
@@ -10857,7 +10857,7 @@ body.dark-mode .character-memory-contact-status {
     bottom: 4px;
     left: 4px;
     width: calc((100% - 12px) / 2);
-    border-radius: 999px;
+    border-radius: 10px;
     background: rgb(230 230 230 / 70%);
     border: 1px solid rgb(255 255 255);
     box-sizing: border-box;
@@ -11595,7 +11595,7 @@ body.dark-mode .app-top-notice-action.secondary {
     gap: 4px;
     padding: 4px;
     margin: 15px 15px 7px 15px;
-    border-radius: 999px;
+    border-radius: 12px;
     background: rgb(255 255 255 / 15%);
     border: 1px solid rgb(245 245 245 / 75%);
 
@@ -11619,7 +11619,7 @@ body.dark-mode .countdown-tabs {
     bottom: 4px;
     left: 4px;
     width: calc((100% - 12px) / 2);
-    border-radius: 999px;
+    border-radius: 10px;
     background: rgb(230 230 230 / 70%);
     border: 1px solid rgb(255 255 255);
     box-sizing: border-box;
@@ -13064,7 +13064,7 @@ body.dark-mode button#heart-note-item-save-btn.primary {
     box-sizing: border-box;
     padding: 4px;
     margin: 3px 0 10px;
-    border-radius: 999px;
+    border-radius: 12px;
     background: rgb(255 255 255 / 15%);
     border: 1px solid rgb(245 245 245 / 75%);
     backdrop-filter: blur(8px);
@@ -13081,7 +13081,7 @@ body.dark-mode button#heart-note-item-save-btn.primary {
     bottom: 4px;
     left: 4px;
     width: calc((100% - 12px) / 2);
-    border-radius: 999px;
+    border-radius: 10px;
     background: rgb(230 230 230 / 70%);
     border: 1px solid rgb(255 255 255);
     box-sizing: border-box;
