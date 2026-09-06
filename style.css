@@ -2880,7 +2880,7 @@ body.dark-mode {
     --message-bg-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.92), 100%) var(--theme-color-l) / 0.6);
     --message-bg-ai: rgba(50, 50, 50, 0.62);
     --message-border-user: hsl(var(--theme-color-h) clamp(0%, calc(var(--theme-color-s) * 0.88), 100%) clamp(0%, calc(var(--theme-color-l) * 1.15), 100%) / 0.5);
-    --message-border-ai: rgba(110, 110, 110, 0.3);
+    --message-border-ai: rgba(90, 90, 90, 0.3);
     
     --btn-color: #3a3a3a80;          /* 按钮深色背景 */
     --btn-border-color: #555555;   /* 按钮深色边框 */
@@ -6355,9 +6355,30 @@ body.custom-dark .heart-note-text {
 }
 
 body.custom-dark .heart-note-intro,
-body.custom-dark .heart-note-contact-status,
-body.custom-dark .heart-note-time {
+body.custom-dark .heart-note-contact-status {
     color: rgba(244, 244, 244, 0.7);
+}
+
+/* ==================== 心笺按钮 ==================== */
+body.custom-dark .heart-note-time {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(245, 245, 245, 0.3);
+    color: #adadad;
+}
+/* ==================== 心笺按钮结束 ==================== */
+
+/* ★ 心笺联系人沿用角色记忆的头像与文字层级，卡片底色和边框仍保留心笺自己的方案。 */
+body.custom-dark .heart-note-avatar {
+    background: rgba(255, 255, 255, 0.14);
+    color: #f5f5f5;
+}
+
+body.custom-dark .heart-note-contact-name {
+    color: #f4f4f4;
+}
+
+body.custom-dark .heart-note-contact-status {
+    color: #bcbcbc;
 }
 
 body.custom-dark .heart-note-icon-btn {
@@ -6690,6 +6711,17 @@ body.custom-dark .world-sense-location-candidate:focus-visible {
     background: rgba(255, 255, 255, 0.14);
 }
 /* ==================== 自定义主题：世界感知补充结束 ==================== */
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -12991,27 +13023,37 @@ body.dark-mode button#heart-note-item-save-btn.primary {
 .heart-note-detail-list {
     display: flex;
     flex-direction: column;
+}
+
+.heart-note-contact-list {
+    gap: 10px;
+}
+
+.heart-note-detail-list {
     gap: 12px;
 }
 
 .heart-note-contact {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: 42px minmax(0, 1fr) auto;
     align-items: center;
-    gap: 12px;
-    min-height: 68px;
-    padding: 10px 14px;
-    border-radius: 18px;
+    gap: 10px;
+    min-height: 50px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(70, 83, 105, 0.08);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     cursor: pointer;
 }
 
 .heart-note-contact-info { min-width: 0; }
-.heart-note-contact-name { font-weight: 700; }
-.heart-note-contact-status { margin-top: 4px; color: rgba(57, 60, 70, 0.62); font-size: 0.82rem; }
+.heart-note-contact-name { color: #2f3440; font-size: 0.98rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.heart-note-contact-status { margin-top: 3px; color: #8a93a3; font-size: 0.82rem; }
 .heart-note-contact-arrow { display: inline-flex; width: 24px; color: #aaa; }
 .heart-note-contact-arrow svg { width: 24px; height: 24px; }
-.heart-note-avatar { width: 46px; height: 46px; border-radius: 50%; object-fit: cover; }
-.heart-note-text-avatar { display: flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.35); font-size: 1.35rem; }
+.heart-note-avatar { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 9px; object-fit: cover; overflow: hidden; background: rgba(255, 255, 255, 0.75); color: #333; font-size: 1.35rem; }
+.heart-note-text-avatar { display: flex; align-items: center; justify-content: center; }
 
 .heart-note-tabs {
     position: relative;
@@ -13085,7 +13127,7 @@ body.dark-mode button#heart-note-item-save-btn.primary {
 
 .heart-note-card {
     padding: 13px;
-    border-radius: 18px;
+    border-radius: 0px;
 }
 
 .heart-note-text {
@@ -13101,8 +13143,24 @@ body.dark-mode button#heart-note-item-save-btn.primary {
     overflow-wrap: anywhere;
 }
 
-.heart-note-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
-.heart-note-time { color: rgba(57, 60, 70, 0.58); font-size: 0.78rem; }
+.heart-note-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+
+.heart-note-time { 
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    height: 30px;
+    padding: 0px 6px;
+    border: 1px solid rgba(100, 100, 100, 0.3);
+    border-radius: 8px;
+    background: rgba(80, 80, 80, 0.1);
+    color: #707070;
+    cursor: pointer;
+}
+
+
+
 .heart-note-actions { display: flex; align-items: center; gap: 6px; }
 .heart-note-icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 1px solid rgba(100, 100, 100, 0.3); border-radius: 8px; background: rgba(80, 80, 80, 0.1); color: #707070; cursor: pointer; }
 .heart-note-icon-btn svg { width: 17px; height: 17px; }
@@ -13128,11 +13186,18 @@ body.dark-mode .heart-note-setting-pill .heart-note-status { background: rgba(25
 body.dark-mode .heart-note-setting-row input { background: rgba(255, 255, 255, 0.1); border-color: rgba(245, 245, 245, 0.35); color: #f4f4f4; }
 body.dark-mode .heart-note-text { background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(245, 245, 245, 0.2); }
 body.dark-mode .heart-note-intro,
-body.dark-mode .heart-note-contact-status,
-body.dark-mode .heart-note-time { color: rgba(244, 244, 244, 0.7); }
+body.dark-mode .heart-note-contact-status{ color: rgba(244, 244, 244, 0.7); }
+body.dark-mode .heart-note-avatar { background: rgba(255, 255, 255, 0.14); color: #f5f5f5; }
+body.dark-mode .heart-note-contact-name { color: #f4f4f4; }
+body.dark-mode .heart-note-contact-status { color: #bcbcbc; }
 body.dark-mode .heart-note-icon-btn { background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(245, 245, 245, 0.3); color: #adadad; }
 body.dark-mode .heart-note-pin-btn.active { color: #ffc247; }
 body.dark-mode .heart-note-icon-btn.danger { color: #d93838; }
+body.dark-mode .heart-note-time {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(245, 245, 245, 0.3);
+    color: #adadad;
+}
 /* ★★★★★ 心笺 END：独立玻璃卡片与详情排版 ★★★★★ */
 
 /* Gist 教程按钮：只在 Gist 模式显示，放在 Gist ID 上方给第一次使用的人看。 */

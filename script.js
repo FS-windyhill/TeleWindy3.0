@@ -6524,7 +6524,6 @@ const App = {
             card.className = 'heart-note-card';
             card.dataset.id = record.id;
             card.innerHTML = `
-                <div class="heart-note-text">${this.escapeHtml(record.text)}</div>
                 <div class="heart-note-card-foot">
                     <span class="heart-note-time">${this.escapeHtml(this.formatHeartNoteTime(record))}</span>
                     <div class="heart-note-actions">
@@ -6532,7 +6531,9 @@ const App = {
                         <button type="button" class="heart-note-icon-btn" data-action="edit-heart-note" title="修改"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
                         <button type="button" class="heart-note-icon-btn danger" data-action="delete-heart-note" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
                     </div>
-                </div>`;
+                </div>
+                <div class="heart-note-text">${this.escapeHtml(record.text)}</div>
+`;
             list.appendChild(card);
         });
         if (empty) {
