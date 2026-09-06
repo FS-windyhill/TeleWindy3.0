@@ -522,6 +522,7 @@
 //     - toggleTodoPlanInjectEnabled(enabled): 保存 TO DO 注入开关
 //     - toggleCountdownInjectEnabled(enabled): 保存倒数日注入开关
 //     - buildAgentCapabilityPrompt(): 根据已开启 skill 生成注入角色描述末尾的 `# 能力` 模块，没开 skill 时返回空
+//     - syncAgentHeartNoteToggles(): 同步探索页和 Agent 页的心笺管理开关
 //     - buildAgentSkillRouterRequestSettings(baseSettings): 生成 Agent 轻量模型参数，压小输出预算
 //     - buildAgentTodoManagerRequestSettings(): 生成 TODO 管理 Agent 使用的 API 配置
 //     - runAgentPostAgents(contact, assistantText, assistantMessage): 只在角色回复含『动作意图』时触发 Agent，不再每轮跑总路由
@@ -4263,6 +4264,7 @@ const App = {
         this.syncAsyncBackendToggle();
         this.syncWorldSenseToggle();
         this.syncTodoContextToggles();
+        this.syncAgentHeartNoteToggles();
         this.updateCharacterMomentUnreadDot();
         await this.renderDesktop();
         // ★ 角色日程按“当天一次”补生成：打开页面后排队处理，当前聊天角色会在发送前优先补。
@@ -6650,8 +6652,8 @@ const App = {
             </div>
             <div class="agent-card ${todoEnabled ? 'enabled' : ''}" data-agent="todo-manager">
                 <div class="agent-card-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 3v4"></path><path d="M12 17v4"></path><path d="M4.22 6.22l2.83 2.83"></path><path d="M16.95 16.95l2.83 2.83"></path><path d="M3 12h4"></path><path d="M17 12h4"></path><circle cx="12" cy="12" r="4"></circle>
+                    <svg width="0.95em" height="0.95em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M8 6h13"></path><path d="M8 12h13"></path><path d="M8 18h13"></path><path d="m3 6 1 1 2-2"></path><path d="m3 12 1 1 2-2"></path><path d="m3 18 1 1 2-2"></path>
                     </svg>
                 </div>
                 <div class="agent-card-info">
@@ -6665,9 +6667,7 @@ const App = {
             </div>
             <div class="agent-card ${heartNoteEnabled ? 'enabled' : ''}" data-agent="heart-note-manager">
                 <div class="agent-card-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"></path><path d="M8 8h8M8 12h8M8 16h5"></path>
-                    </svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="0.95em" height="0.95em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pencil-sparkles"><path d="M10 3H8"></path><path d="m15.007 5.008 3.987 3.986"></path><path d="M20 15v4"></path><path d="M21.174 6.813a2.82 2.82 0 0 0-3.986-3.987L3.842 16.175a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"></path><path d="M22 17h-4"></path><path d="M4 5v4"></path><path d="M6 7H2"></path><path d="M9 2v2"></path></svg>
                 </div>
                 <div class="agent-card-info">
                     <div class="agent-card-name">心笺管理</div>
@@ -6840,10 +6840,20 @@ const App = {
         this.renderAgentList();
     },
 
+    syncAgentHeartNoteToggles() {
+        // ★ 心笺管理只有一个设置值；探索页和 Agent 页只是同一开关的两个操作入口。
+        const enabled = STATE.settings.AGENT_HEART_NOTE_MANAGER_ENABLED === true;
+        const exploreToggle = document.getElementById('heart-note-enable-toggle');
+        const agentToggle = document.getElementById('agent-heart-note-manager-toggle');
+        if (exploreToggle) exploreToggle.checked = enabled;
+        if (agentToggle) agentToggle.checked = enabled;
+    },
+
     async toggleAgentHeartNoteManagerEnabled(enabled) {
         STATE.settings.AGENT_HEART_NOTE_MANAGER_ENABLED = !!enabled;
         await Storage.saveSettings();
         this.renderAgentList();
+        this.syncAgentHeartNoteToggles();
     },
 
     openAgentSettings() {
@@ -15070,8 +15080,13 @@ const App = {
             safeSwitchView('character-memory');
         });
 
-        document.getElementById('explore-heart-note-btn')?.addEventListener('click', () => {
+        document.getElementById('explore-heart-note-btn')?.addEventListener('click', (event) => {
+            if (event.target.closest('.heart-note-menu-switch')) return;
             safeSwitchView('heart-note');
+        });
+
+        document.getElementById('heart-note-enable-toggle')?.addEventListener('change', (event) => {
+            this.toggleAgentHeartNoteManagerEnabled(event.target.checked === true);
         });
 
         document.getElementById('todo-plan-enable-toggle')?.addEventListener('change', (event) => {

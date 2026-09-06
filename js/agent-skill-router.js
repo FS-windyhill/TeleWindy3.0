@@ -56,7 +56,7 @@ const AgentSkillRouter = {
             '',
             '可用 Agent：',
             '- todo_manager：用户要求记录、提醒、安排 TODO/计划；或表示某个 TODO/计划 完成、延期、修改、取消、删除。',
-            '- heart_note_manager：角色要增加、修改、删除、星标或取消星标自己的心笺。',
+            '- heart_note_manager：用户要增加、修改、删除、星标或取消星标某条心笺。',
             '',
             '规则：',
             '- 普通聊天，选 NONE。',

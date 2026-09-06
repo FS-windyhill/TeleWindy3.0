@@ -3065,7 +3065,7 @@ body.dark-mode .message-wrapper.ai .message-bubble a {
 body.dark-mode pre, 
 body.dark-mode code {
     background: rgba(0, 0, 0, 0.3);
-    color: #e0e0e0;
+    color: #0f0;
     border-radius: 4px;
 }
 
