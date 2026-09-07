@@ -434,6 +434,8 @@
 //   - updateCurrentBookSettingsUI(): 根据当前世界书更新角色绑定下拉框状态
 //   - renderWorldInfoList(): 渲染当前世界书的条目列表，并高亮正在编辑的条目
 //   - initWorldInfoTab(): 初始化世界书编辑 Tab，包括角色下拉框、书列表和条目列表
+//   - buildAgentMessageParts(text): 按原文位置生成正文、分割线和 Agent 调用渲染项
+//   - createAgentCallPanel(markedIntents, contactName, shouldAnimate = false): 创建脱离头像布局的 Agent 调用折叠面板
 //   - createSingleBubble(text, sender, aiAvatarUrl, timestampRaw, historyIndex, shouldAnimate = true, partIndex = 0, imageUrl = null, isThought = false): 创建单个聊天气泡，支持文本、图片、时间、头像、思考内容和动画
 //   - openImageLightbox(src): 打开图片大图预览遮罩，点击后关闭
 //   - showEditModal(oldText, onConfirmCallback): 显示消息编辑弹窗，确认后通过回调返回新文本
@@ -444,7 +446,7 @@
 //   - scrollToBottom(): 将聊天滚动容器滚动到底部
 //   - setLoading(isLoading, contactId): 设置发送按钮/加载状态，并记录哪个联系人正在输入
 //   - updateRerollState(contact): 根据当前联系人和聊天历史更新“重新生成”按钮状态
-//   - playWaterfall(fullText, avatar, timestamp, historyIndex): 将 AI 完整回复按段落瀑布式逐条显示，并处理思考内容和 Agent『动作意图』隐藏
+//   - playWaterfall(fullText, avatar, timestamp, historyIndex, contactName): 将 AI 完整回复按段落瀑布式逐条显示，并处理思考内容和 Agent 调用面板
 //   - initStatusBar(): 初始化顶部状态栏时间、电池信息和相关监听
 //   - renderPresetMenu(): 渲染 API 预设菜单，并绑定保存、删除、加载预设事件
 //   - renderRequestBodyPresetMenu(): 渲染请求体参数预设菜单，并绑定保存、删除、加载预设事件
@@ -3343,6 +3345,92 @@ const UI = {
     },
 
     
+    buildAgentMessageParts(text) {
+        const rawParts = splitMessageIntoBubbleParts(text);
+        const displayParts = [];
+        let sourcePartIndex = 0;
+
+        const pushDisplayPart = part => {
+            const previous = displayParts[displayParts.length - 1];
+            // ★ 相邻 Agent 调用之间没有正文或分割线时合并展示，实际意图仍逐条保留和执行。
+            if (part.type === 'agent' && previous?.type === 'agent') {
+                previous.markedIntents.push(...part.markedIntents);
+                return;
+            }
+            displayParts.push(part);
+        };
+
+        rawParts.forEach(rawPart => {
+            const markedIntents = typeof AgentIntentMarkup !== 'undefined'
+                ? AgentIntentMarkup.extractMarked(rawPart)
+                : [];
+            const visibleText = typeof AgentIntentMarkup !== 'undefined'
+                ? AgentIntentMarkup.strip(rawPart)
+                : rawPart.trim();
+
+            if (!markedIntents.length) {
+                pushDisplayPart({
+                    type: visibleText === '---' ? 'separator' : 'text',
+                    text: visibleText,
+                    partIndex: sourcePartIndex
+                });
+                sourcePartIndex += 1;
+                return;
+            }
+
+            if (!visibleText) {
+                // ★ 独立成段的『』和 --- 一样直接占据原文位置，不生成空白聊天气泡。
+                pushDisplayPart({ type: 'agent', markedIntents });
+                return;
+            }
+
+            // ★ 极少数正文与『』写在同一段时，根据标记位于段首或段尾，放到最接近的气泡边缘。
+            const firstMarkerIndex = rawPart.indexOf(markedIntents[0]);
+            const leadingText = AgentIntentMarkup.strip(rawPart.slice(0, Math.max(0, firstMarkerIndex))).trim();
+            if (!leadingText) pushDisplayPart({ type: 'agent', markedIntents });
+            pushDisplayPart({ type: 'text', text: visibleText, partIndex: sourcePartIndex });
+            if (leadingText) pushDisplayPart({ type: 'agent', markedIntents });
+            sourcePartIndex += 1;
+        });
+
+        return { displayParts, sourcePartCount: sourcePartIndex };
+    },
+
+    createAgentCallPanel(markedIntents, contactName, shouldAnimate = false) {
+        const intents = (markedIntents || []).filter(Boolean);
+        if (!intents.length) return null;
+
+        // ★ Agent 面板与 --- 分割线同为 message-group 的直属子元素，因此可以脱离头像和普通气泡独立居中。
+        const details = document.createElement('details');
+        details.className = 'agent-call-panel';
+        if (shouldAnimate) details.classList.add('agent-call-panel-enter');
+
+        const summary = document.createElement('summary');
+        summary.className = 'agent-call-summary';
+        const label = document.createElement('span');
+        label.className = 'agent-call-label';
+        label.textContent = `[${contactName || '角色'}调用了Agent]`;
+        summary.appendChild(label);
+
+        const content = document.createElement('div');
+        content.className = 'agent-call-content';
+        intents.forEach(intent => {
+            const item = document.createElement('div');
+            item.className = 'agent-call-item';
+            item.textContent = intent;
+            content.appendChild(item);
+        });
+
+        // ★ 点击文本框即可收起；用户正在划选调用内容时保持展开，方便复制。
+        content.addEventListener('click', () => {
+            if (window.getSelection().toString().length > 0) return;
+            details.removeAttribute('open');
+        });
+
+        details.append(summary, content);
+        return details;
+    },
+
     createSingleBubble(text, sender, aiAvatarUrl, timestampRaw, historyIndex, shouldAnimate = true, partIndex = 0, imageUrl = null, isThought = false) {
         const template = document.getElementById('msg-template');
         const clone = template.content.cloneNode(true);
@@ -3623,9 +3711,6 @@ const UI = {
             // 处理 AI 引用格式
             if (sender === 'ai') {
                  cleanText = normalizeChatQuoteBreaks(cleanText);
-                 if (typeof AgentIntentMarkup !== 'undefined') {
-                     cleanText = AgentIntentMarkup.strip(cleanText);
-                 }
             }
 
             const msgTime = typeof msg === 'string' ? null : msg.timestamp;
@@ -3646,7 +3731,17 @@ const UI = {
                 displayImage = 'expired'; 
             }
 
-            const paragraphs = splitMessageIntoBubbleParts(cleanText);
+            const plainParts = sender === 'ai' ? [] : splitMessageIntoBubbleParts(cleanText);
+            const messageLayout = sender === 'ai'
+                ? this.buildAgentMessageParts(cleanText)
+                : {
+                    displayParts: plainParts.map((text, partIndex) => ({
+                        type: text.trim() === '---' ? 'separator' : 'text',
+                        text,
+                        partIndex
+                    })),
+                    sourcePartCount: plainParts.length
+                };
             const group = document.createElement('div');
             group.className = 'message-group';
 
@@ -3674,21 +3769,23 @@ const UI = {
                  group.appendChild(thoughtBubble);
             }
             
-            // 第一步：先渲染所有的【文字气泡】
-            if (paragraphs.length > 0) {
-                paragraphs.forEach((p, j) => {
-                    const trimmedP = p.trim();
-                    if (trimmedP === '---') {
+            // 第一步：按原文顺序渲染【文字气泡 / 分割线 / Agent 调用面板】
+            if (messageLayout.displayParts.length > 0) {
+                messageLayout.displayParts.forEach(part => {
+                    if (part.type === 'separator') {
                         const separator = document.createElement('div');
                         separator.className = 'chat-separator'; 
                         group.appendChild(separator);
+                    } else if (part.type === 'agent') {
+                        const agentCallPanel = this.createAgentCallPanel(part.markedIntents, contact.name, false);
+                        if (agentCallPanel) group.appendChild(agentCallPanel);
                     } else {
-                        const formattedContent = parseCustomMarkdown(trimmedP);
+                        const formattedContent = parseCustomMarkdown(part.text.trim());
                         const bubbleClone = this.createSingleBubble(
-                            formattedContent, sender, contact.avatar, msgTime, historyIndex, false, j, null 
+                            formattedContent, sender, contact.avatar, msgTime, historyIndex, false, part.partIndex, null
                         );
 
-                        if (hiddenIndices.includes(j)) {
+                        if (hiddenIndices.includes(part.partIndex)) {
                             bubbleClone.querySelector('.message-bubble').classList.add('is-hidden-bubble');
                         }
                         group.appendChild(bubbleClone);
@@ -3702,7 +3799,7 @@ const UI = {
 
             // 第二步：如果有图，在最后单独追加一个【图片气泡】
             if (displayImage) {
-                const imgPartIndex = paragraphs.length;
+                const imgPartIndex = messageLayout.sourcePartCount;
                 const imgBubble = this.createSingleBubble(
                     "", sender, contact.avatar, msgTime, historyIndex, false, imgPartIndex, displayImage
                 );
@@ -3953,7 +4050,7 @@ const UI = {
 
 
     // 在 UI 对象中
-    async playWaterfall(fullText, avatar, timestamp, historyIndex) {
+    async playWaterfall(fullText, avatar, timestamp, historyIndex, contactName = '') {
         // ★★★ 1. 强制重置滚动状态（新消息开始时默认跟随，除非你不想） ★★★
         this.autoScrollEnabled = true;
         this.scrollToBottom(); // 初始先滚到底一次
@@ -3969,10 +4066,7 @@ const UI = {
 
         // 1. Pre-process text
         processedText = normalizeChatQuoteBreaks(processedText);
-        if (typeof AgentIntentMarkup !== 'undefined') {
-            processedText = AgentIntentMarkup.strip(processedText);
-        }
-        const paragraphs = splitMessageIntoBubbleParts(processedText);
+        const messageLayout = this.buildAgentMessageParts(processedText);
         
         // 2. Create the container group
         const group = document.createElement('div');
@@ -4002,24 +4096,26 @@ const UI = {
 
 
 
-        // 3. Loop through paragraphs
-        for (let i = 0; i < paragraphs.length; i++) {
+        // 3. 按原文顺序播放正文、分割线和 Agent 调用面板
+        for (let i = 0; i < messageLayout.displayParts.length; i++) {
+            const part = messageLayout.displayParts[i];
             if (i > 0) {
                 // 第一条立即显示；后续气泡按自身可见文字长度模拟输入时间，并加入轻微随机浮动。
-                const bubbleDelayMs = getWaterfallBubbleDelayMs(paragraphs[i]);
+                const bubbleDelayMs = getWaterfallBubbleDelayMs(part.text || '');
                 await new Promise(r => setTimeout(r, bubbleDelayMs));
             }
-            
-            const p = paragraphs[i].trim();
 
-            if (p === '---') {
+            if (part.type === 'separator') {
                 const separator = document.createElement('div');
                 separator.className = 'chat-separator animate';
                 group.appendChild(separator);
+            } else if (part.type === 'agent') {
+                const agentCallPanel = this.createAgentCallPanel(part.markedIntents, contactName, true);
+                if (agentCallPanel) group.appendChild(agentCallPanel);
             } else {
-                const htmlContent = parseCustomMarkdown(p);
+                const htmlContent = parseCustomMarkdown(part.text.trim());
                 // 这里 isThought 默认为 false，正常渲染文本
-                const bubbleClone = this.createSingleBubble(htmlContent, 'ai', avatar, timestamp, historyIndex, true, i);
+                const bubbleClone = this.createSingleBubble(htmlContent, 'ai', avatar, timestamp, historyIndex, true, part.partIndex);
                 group.appendChild(bubbleClone);
             }
             
@@ -4028,6 +4124,7 @@ const UI = {
                 this.scrollToBottom();
             }
         }
+
     },
 
     // ================顶栏状态栏-------------------
@@ -7060,19 +7157,36 @@ const App = {
     restorePendingAgentConfirmations(contact) {
         // ★ 通用恢复入口：页面刷新或重新进入聊天后，TODO/心笺共用同一次扫描。
         if (!contact || !Array.isArray(contact.history)) return;
+        let migratedUndoneState = false;
         contact.history.forEach(message => {
             if (!message || message.role !== 'assistant') return;
             const todoState = this.getAgentExecutionState(message, 'todo');
+            // ★ 旧版撤销后误写成 suggested；进入聊天时迁移为终态，避免历史 suggestion 再次弹出。
+            if (todoState?.status === 'suggested' && todoState.reason === 'user_undo_apply') {
+                todoState.status = 'undone';
+                delete todoState.suggestions;
+                delete todoState.confirmationId;
+                migratedUndoneState = true;
+            }
             if (todoState?.status === 'suggested' && Array.isArray(todoState.suggestions) && todoState.suggestions.length) {
                 const id = todoState.confirmationId || this.ensureAgentConfirmationId(contact, message, 'todo');
                 if (!this.hasAgentConfirmationNotice(id)) this.showAgentPostTodoSuggestionNotice(contact, message, todoState.suggestions);
             }
             const heartState = this.getAgentExecutionState(message, 'heart_note');
+            if (heartState?.status === 'suggested' && heartState.reason === 'user_undo_apply') {
+                heartState.status = 'undone';
+                delete heartState.suggestions;
+                delete heartState.confirmationId;
+                migratedUndoneState = true;
+            }
             if (heartState?.status === 'suggested' && Array.isArray(heartState.suggestions) && heartState.suggestions.length) {
                 const id = heartState.confirmationId || this.ensureAgentConfirmationId(contact, message, 'heart_note');
                 if (!this.hasAgentConfirmationNotice(id)) this.showAgentHeartNoteSuggestionNotice(contact, message, heartState.suggestions);
             }
         });
+        if (migratedUndoneState) {
+            Storage.saveContacts().catch(error => console.warn('[Agent][确认恢复] 保存撤销状态迁移失败:', error));
+        }
     },
 
     discardAgentConfirmationsForMessages(messages = []) {
@@ -7523,7 +7637,7 @@ const App = {
         if (!validIntentTexts.length || !assistantMessage) return null;
 
         const existingState = this.getAgentExecutionState(assistantMessage, 'todo');
-        if (['suggested', 'applied', 'skipped', 'failed'].includes(existingState?.status)) {
+        if (['suggested', 'applied', 'dismissed', 'undone', 'skipped', 'failed'].includes(existingState?.status)) {
             console.log('[Agent][TODO意图] 已有状态，本轮跳过:', existingState);
             return null;
         }
@@ -7685,7 +7799,7 @@ const App = {
         if (!validIntents.length) return null;
 
         const existingState = this.getAgentExecutionState(assistantMessage, 'heart_note');
-        if (['pending', 'suggested', 'applied', 'dismissed', 'skipped', 'failed'].includes(existingState?.status)) return null;
+        if (['pending', 'suggested', 'applied', 'dismissed', 'undone', 'skipped', 'failed'].includes(existingState?.status)) return null;
         const settings = this.buildAgentTodoManagerRequestSettings();
         if (!settings.API_URL || !settings.API_KEY || !settings.MODEL) {
             this.showTopNotice('心笺管理 API 配置缺失，请在 Agent 设置里选择可用模型。', { type: 'failure' });
@@ -7858,7 +7972,8 @@ const App = {
                 await Storage.saveCharacterHeartNotes();
                 this.renderHeartNoteContacts();
                 this.renderHeartNoteDetail();
-                await this.setAgentExecutionState(contact, assistantMessage, 'heart_note', { status: 'suggested', reason: 'user_undo_apply', suggestions: applied });
+                // ★ 撤销代表用户已完成一次决定，写入终态后不再恢复原 suggestion。
+                await this.setAgentExecutionState(contact, assistantMessage, 'heart_note', { status: 'undone', reason: 'user_undo_apply' });
             }
         });
         return applied;
@@ -7871,7 +7986,7 @@ const App = {
         if (!assistantText || !assistantMessage) return null;
 
         const existingState = this.getAgentExecutionState(assistantMessage, 'todo');
-        if (['suggested', 'applied', 'dismissed', 'skipped'].includes(existingState?.status)) {
+        if (['suggested', 'applied', 'dismissed', 'undone', 'skipped'].includes(existingState?.status)) {
             console.log('[PostAgent][TODO建议] 已有状态，本轮跳过:', existingState);
             return null;
         }
@@ -8122,9 +8237,8 @@ const App = {
                 this.renderTodoPlans();
                 this.renderDesktop();
                 await this.setAgentExecutionState(contact, assistantMessage, 'todo', {
-                    status: 'suggested',
-                    reason: 'user_undo_apply',
-                    suggestions: applied
+                    status: 'undone',
+                    reason: 'user_undo_apply'
                 });
                 console.log('[PostAgent][TODO建议] 已撤销确认执行:', applied);
             }
@@ -10720,7 +10834,7 @@ const App = {
                 
                 // 渲染 AI 瀑布流
                 if (!alreadySavedByResume) {
-                    await UI.playWaterfall(aiText, contact.avatar, aiTimestamp, newAiMessageIndex);
+                    await UI.playWaterfall(aiText, contact.avatar, aiTimestamp, newAiMessageIndex, contact.name);
                 } else {
                     UI.renderChatHistory(contact);
                 }

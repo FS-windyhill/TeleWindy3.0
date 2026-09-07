@@ -111,8 +111,9 @@ const AgentHeartNoteManager = {
         ];
         records.forEach(record => {
             const createdAt = new Date(Number(record.createdAt) || Date.now());
-            const time = `${this.pad(createdAt.getHours())}:${this.pad(createdAt.getMinutes())}`;
-            lines.push(`- [${record.dateKey || this.getTodayKey(createdAt)} ${time}] ${record.text}`);
+            // ★ 注入只保留日期以节省上下文，并标明星标状态；不改动心笺原文。
+            const starLabel = record.alwaysInject === true ? '[星标]' : '';
+            lines.push(`- [${record.dateKey || this.getTodayKey(createdAt)}] ${starLabel}${record.text}`);
         });
         return lines.join('\n');
     },

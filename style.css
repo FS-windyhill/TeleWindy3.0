@@ -4506,6 +4506,104 @@ body.dark-mode .message-bubble .code-copy-btn {
 }
 
 
+/* ★★★★★ 聊天 Agent 调用面板 START：复用分割线宽度参数，类名和视觉保持独立 ★★★★★ */
+.agent-call-panel {
+    width: 100%;
+    margin: 0;
+    align-self: center;
+    color: #6b6b6b;
+}
+
+.agent-call-summary {
+    width: 70%;
+    margin: 0 auto 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* ★ 隐藏 details 原生箭头，标题两侧改用与聊天分割线一致的渐变细线。 */
+.agent-call-summary::marker,
+.agent-call-summary::-webkit-details-marker {
+    display: none;
+}
+
+.agent-call-summary::before,
+.agent-call-summary::after {
+    content: '';
+    height: 1px;
+    flex: 1;
+    background: linear-gradient(
+        to right,
+        transparent,
+        rgba(180, 180, 180, 0.9)
+    );
+}
+
+.agent-call-summary::after {
+    background: linear-gradient(
+        to right,
+        rgba(180, 180, 180, 0.9),
+        transparent
+    );
+}
+
+.agent-call-label {
+    flex-shrink: 0;
+    font-size: 0.8rem;
+    line-height: 1.2;
+    font-weight: 500;
+}
+
+.agent-call-content {
+    box-sizing: border-box;
+    width: 60%;
+    margin: 15px auto 12px;
+    padding: 10px 14px;
+    border: 1px solid rgba(160, 160, 160, 0.42);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.52);
+    color: #555;
+    text-align: center;
+    font-size: 0.88rem;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+    user-select: text;
+    -webkit-user-select: text;
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+}
+
+.agent-call-item + .agent-call-item {
+    margin-top: 8px;
+}
+
+.agent-call-panel-enter {
+    animation: lineExpand 0.5s ease-out forwards;
+    transform-origin: center;
+}
+
+body.dark-mode .agent-call-panel,
+body.custom-dark .agent-call-panel {
+    color: #bdbdbd;
+}
+
+body.dark-mode .agent-call-content,
+body.custom-dark .agent-call-content {
+    border-color: rgba(255, 255, 255, 0.25);
+    background: rgba(35, 35, 35, 0.58);
+    color: #ddd;
+}
+/* ★★★★★ 聊天 Agent 调用面板 END ★★★★★ */
+
+
 /* ============ markdown结束 ===============*/
 
 

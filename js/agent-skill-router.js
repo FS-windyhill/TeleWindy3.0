@@ -6,6 +6,7 @@
 //
 // 函数目录：
 //   - AgentIntentMarkup.extract(text): 从角色回复里提取『』包裹的动作意图
+//   - AgentIntentMarkup.extractMarked(text): 提取保留『』的 UI 展示文本
 //   - AgentIntentMarkup.strip(text): 从 UI 展示层隐藏『』动作意图
 //   - buildRouterMessages(contact, userText): 生成通用 Agent 路由 messages
 //   - buildPostRouterMessages(contact, assistantText): 旧版回复后总路由 messages，当前主链路不再主动使用
@@ -29,6 +30,18 @@ const AgentIntentMarkup = {
             return match;
         });
         return intents;
+    },
+
+    extractMarked(text) {
+        // ★ Agent 面板需要展示模型写出的原始标记，保留『』方便辨认真实调用内容。
+        const source = String(text || '');
+        const markedIntents = [];
+        source.replace(this.pattern, match => {
+            const markedIntent = String(match || '').trim();
+            if (markedIntent) markedIntents.push(markedIntent);
+            return match;
+        });
+        return markedIntents;
     },
 
     strip(text) {
