@@ -3361,9 +3361,10 @@ const UI = {
         };
 
         rawParts.forEach(rawPart => {
-            const markedIntents = typeof AgentIntentMarkup !== 'undefined'
+            // ★ 发布后浏览器可能混用新旧脚本；旧版没有 extractMarked 时按同一协议提取，避免聊天页整体中断。
+            const markedIntents = typeof AgentIntentMarkup !== 'undefined' && typeof AgentIntentMarkup.extractMarked === 'function'
                 ? AgentIntentMarkup.extractMarked(rawPart)
-                : [];
+                : (rawPart.match(/『[\s\S]*?』/g) || []);
             const visibleText = typeof AgentIntentMarkup !== 'undefined'
                 ? AgentIntentMarkup.strip(rawPart)
                 : rawPart.trim();
@@ -3386,7 +3387,7 @@ const UI = {
 
             // ★ 极少数正文与『』写在同一段时，根据标记位于段首或段尾，放到最接近的气泡边缘。
             const firstMarkerIndex = rawPart.indexOf(markedIntents[0]);
-            const leadingText = AgentIntentMarkup.strip(rawPart.slice(0, Math.max(0, firstMarkerIndex))).trim();
+            const leadingText = rawPart.slice(0, Math.max(0, firstMarkerIndex)).trim();
             if (!leadingText) pushDisplayPart({ type: 'agent', markedIntents });
             pushDisplayPart({ type: 'text', text: visibleText, partIndex: sourcePartIndex });
             if (leadingText) pushDisplayPart({ type: 'agent', markedIntents });
