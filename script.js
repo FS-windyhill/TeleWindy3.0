@@ -1489,6 +1489,18 @@ const API = {
 
         const statusMatch = message.match(/\b(4\d{2}|5\d{2})\b/);
         const status = statusMatch ? Number(statusMatch[1]) : null;
+        const isUpstreamError = /\bupstream_\d{3}\b/i.test(message);
+
+        // ★ upstream_xxx 已经说明 /jobs 创建和轮询成功；这时错误来自模型接口，不能再提示 Worker 路由错误。
+        if (isUpstreamError) {
+            if (status === 400) return `${cleanMessage}（上游模型拒绝了请求参数：请检查模型名、自定义请求体和消息格式。）`;
+            if (status === 401 || status === 403) return `${cleanMessage}（上游模型鉴权失败：请检查当前 API 预设的 Key 和调用权限。）`;
+            if (status === 404) return `${cleanMessage}（上游模型接口不存在：请检查 API URL 是否为完整的聊天补全地址。）`;
+            if (status === 405) return `${cleanMessage}（上游模型接口不接受当前方法：请检查 API URL，并在 Cloudflare 实时日志中查看 chat_upstream_response 的 finalUrl、location 和 allow。）`;
+            if (status === 413) return `${cleanMessage}（上游模型认为请求太大：请压缩图片或减少聊天上下文。）`;
+            if (status === 429) return `${cleanMessage}（上游模型限流：请稍后重试或检查服务商额度。）`;
+            if (status && status >= 500) return `${cleanMessage}（上游模型服务出错：请查看 Cloudflare Worker 实时日志。）`;
+        }
 
         if (status === 400) return `${cleanMessage}（请求格式不对：前端和后台版本可能不匹配，或请求内容缺少必要字段。）`;
         if (status === 401 || status === 403) return `${cleanMessage}（鉴权失败：请检查后台密钥/Worker APP_TOKEN 是否一致。）`;

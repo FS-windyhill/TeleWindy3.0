@@ -449,6 +449,12 @@ async function runJob(jobId, body, env) {
       url: sanitizeUrlForLog(body.upstream.url),
       model: body.model,
       method: "POST",
+      headers: {
+        authorization: body.upstream.apiKey ? "Bearer [已设置]" : "[未设置]",
+        contentType: "application/json",
+        accept: "application/json",
+        acceptLanguage: "en-US,en"
+      },
       messageCount: messagesForChat.length,
       bodyChars: upstreamBodyText.length
     });
