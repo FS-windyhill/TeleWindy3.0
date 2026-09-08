@@ -453,7 +453,8 @@ async function runJob(jobId, body, env) {
         authorization: body.upstream.apiKey ? "Bearer [已设置]" : "[未设置]",
         contentType: "application/json",
         accept: "application/json",
-        acceptLanguage: "en-US,en"
+        acceptLanguage: "en-US,en",
+        userAgent: "TeleWindy/1.0"
       },
       messageCount: messagesForChat.length,
       bodyChars: upstreamBodyText.length
@@ -467,7 +468,8 @@ async function runJob(jobId, body, env) {
         "Authorization": `Bearer ${body.upstream.apiKey}`,
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "Accept-Language": "en-US,en"
+        "Accept-Language": "en-US,en",
+        "User-Agent": "TeleWindy/1.0"
       },
       body: upstreamBodyText
     }, UPSTREAM_TIMEOUT_MS, "chat_upstream");
@@ -493,7 +495,8 @@ async function runJob(jobId, body, env) {
             "Authorization": `Bearer ${body.upstream.apiKey}`,
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "Accept-Language": "en-US,en"
+            "Accept-Language": "en-US,en",
+            "User-Agent": "TeleWindy/1.0"
           },
           body: upstreamBodyText
         }, UPSTREAM_TIMEOUT_MS, "chat_upstream_fallback");
@@ -1623,7 +1626,10 @@ function getUpstreamResponseDiagnostics(response) {
     contentType: response.headers.get("content-type") || "",
     location: sanitizeUrlForLog(response.headers.get("location") || ""),
     allow: response.headers.get("allow") || "",
-    server: response.headers.get("server") || ""
+    server: response.headers.get("server") || "",
+    cfRay: response.headers.get("cf-ray") || "",
+    cfMitigated: response.headers.get("cf-mitigated") || "",
+    requestId: response.headers.get("x-request-id") || ""
   };
 }
 // ★★★★★ 后台 Key 模式 + 多 Provider 路由 END ★★★★★
