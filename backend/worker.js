@@ -440,15 +440,37 @@ async function runJob(jobId, body, env) {
       stream: false
     });
     let upstreamBody = buildUpstreamBody(messagesForChat);
+    let upstreamBodyText = JSON.stringify(upstreamBody);
+
+    // ★ 上游诊断只记录路由和请求规模，不记录聊天正文、API Key 或 URL 查询参数。
+    console.log("chat_upstream_request", {
+      jobId: shortJobId(jobId),
+      provider: body.upstream.id,
+      url: sanitizeUrlForLog(body.upstream.url),
+      model: body.model,
+      method: "POST",
+      messageCount: messagesForChat.length,
+      bodyChars: upstreamBodyText.length
+    });
 
     let response = await fetchWithTimeout(body.upstream.url, {
       method: "POST",
+      // ★ API 地址不应该依赖跳转；停在 3xx 才能看见 POST 是否被网关改成 GET。
+      redirect: "manual",
       headers: {
         "Authorization": `Bearer ${body.upstream.apiKey}`,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "Accept-Language": "en-US,en"
       },
-      body: JSON.stringify(upstreamBody)
+      body: upstreamBodyText
     }, UPSTREAM_TIMEOUT_MS, "chat_upstream");
+    let responseDiagnostics = getUpstreamResponseDiagnostics(response);
+    console.log("chat_upstream_response", {
+      jobId: shortJobId(jobId),
+      provider: body.upstream.id,
+      ...responseDiagnostics
+    });
 
     if (!response.ok) {
       let upstreamErrorText = sanitizeLogText(await response.text());
@@ -457,14 +479,24 @@ async function runJob(jobId, body, env) {
       if (hasMultimodalImage(messagesForChat) && isMultimodalUnsupportedError(response.status, upstreamErrorText)) {
         messagesForChat = buildMultimodalFallbackMessages(messagesForChat);
         upstreamBody = buildUpstreamBody(messagesForChat);
+        upstreamBodyText = JSON.stringify(upstreamBody);
         response = await fetchWithTimeout(body.upstream.url, {
           method: "POST",
+          redirect: "manual",
           headers: {
             "Authorization": `Bearer ${body.upstream.apiKey}`,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Accept-Language": "en-US,en"
           },
-          body: JSON.stringify(upstreamBody)
+          body: upstreamBodyText
         }, UPSTREAM_TIMEOUT_MS, "chat_upstream_fallback");
+        responseDiagnostics = getUpstreamResponseDiagnostics(response);
+        console.log("chat_upstream_fallback_response", {
+          jobId: shortJobId(jobId),
+          provider: body.upstream.id,
+          ...responseDiagnostics
+        });
         multimodalFallback = response.ok;
         if (!response.ok) upstreamErrorText = sanitizeLogText(await response.text());
       }
@@ -479,6 +511,7 @@ async function runJob(jobId, body, env) {
           jobId: shortJobId(jobId),
           provider: body.upstream.id,
           status: response.status,
+          ...responseDiagnostics,
           error: upstreamErrorText
         });
         const job = await buildJobWithEvent(jobId, env, {
@@ -488,6 +521,7 @@ async function runJob(jobId, body, env) {
         }, "job_upstream_failed", {
           provider: body.upstream.id,
           status: response.status,
+          ...responseDiagnostics,
           error: upstreamErrorText
         });
         // ★★★★★ 上游错误原文回传 END ★★★★★
@@ -1411,9 +1445,9 @@ function buildProviderConfigs(env) {
     }),
     createProviderConfig({
       id: "glm",
-      url: env.GLM_CHAT_URL || "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+      url: env.GLM_CHAT_URL || "https://api.z.ai/api/paas/v4/chat/completions",
       apiKey: env.GLM_API_KEY,
-      matchHosts: ["open.bigmodel.cn"]
+      matchHosts: ["api.z.ai"]
     }),
     createProviderConfig({
       id: "default",
@@ -1562,6 +1596,29 @@ function splitCsv(value) {
 
 function sanitizeLogText(value) {
   return String(value || "").slice(0, 300);
+}
+
+// ★ 上游 URL 可能带临时签名或 Key；诊断日志只保留协议、主机和路径。
+function sanitizeUrlForLog(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return `${url.protocol}//${url.host}${url.pathname}`;
+  } catch {
+    return sanitizeLogText(value);
+  }
+}
+
+// ★ 405/HTML 最需要看最终地址、跳转位置和 Allow；这些字段不会读取或复制响应正文。
+function getUpstreamResponseDiagnostics(response) {
+  return {
+    status: response.status,
+    statusText: response.statusText,
+    finalUrl: sanitizeUrlForLog(response.url),
+    contentType: response.headers.get("content-type") || "",
+    location: sanitizeUrlForLog(response.headers.get("location") || ""),
+    allow: response.headers.get("allow") || "",
+    server: response.headers.get("server") || ""
+  };
 }
 // ★★★★★ 后台 Key 模式 + 多 Provider 路由 END ★★★★★
 

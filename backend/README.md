@@ -385,7 +385,7 @@ https://你的域名（记得要加https://）
 DEEPSEEK_CHAT_URL = "https://api.deepseek.com/v1/chat/completions"
 SILICONFLOW_CHAT_URL = "https://api.siliconflow.cn/v1/chat/completions"
 OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions"
-GLM_CHAT_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+GLM_CHAT_URL = "https://api.z.ai/api/paas/v4/chat/completions"
 
 CUSTOM1_CHAT_URL = "https://你的中转站/v1/chat/completions"
 CUSTOM1_MATCH_HOSTS = ""
