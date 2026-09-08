@@ -106,14 +106,11 @@ const AgentHeartNoteManager = {
 
         const lines = [
             '# 心笺',
-            '以下是你曾经为自己记下的内容，它们反映你的主观关注、感受或打算。',
-            '请把它们自然地作为自身记忆使用，不要逐条复述，也不要提到注入、系统或心笺机制。'
+            '以下是你曾经为自己记下的内容：',
         ];
         records.forEach(record => {
-            const createdAt = new Date(Number(record.createdAt) || Date.now());
-            // ★ 注入只保留日期以节省上下文，并标明星标状态；不改动心笺原文。
-            const starLabel = record.alwaysInject === true ? '[星标]' : '';
-            lines.push(`- [${record.dateKey || this.getTodayKey(createdAt)}] ${starLabel}${record.text}`);
+            // ★ 聊天上下文只注入心笺原文；日期和星标仅用于筛选，不干扰正文语义。
+            lines.push(`- ${record.text}`);
         });
         return lines.join('\n');
     },

@@ -3348,7 +3348,6 @@ const UI = {
     buildAgentMessageParts(text) {
         const rawParts = splitMessageIntoBubbleParts(text);
         const displayParts = [];
-        let sourcePartIndex = 0;
 
         const pushDisplayPart = part => {
             const previous = displayParts[displayParts.length - 1];
@@ -3360,7 +3359,7 @@ const UI = {
             displayParts.push(part);
         };
 
-        rawParts.forEach(rawPart => {
+        rawParts.forEach((rawPart, sourcePartIndex) => {
             // ★ 发布后浏览器可能混用新旧脚本；旧版没有 extractMarked 时按同一协议提取，避免聊天页整体中断。
             const markedIntents = typeof AgentIntentMarkup !== 'undefined' && typeof AgentIntentMarkup.extractMarked === 'function'
                 ? AgentIntentMarkup.extractMarked(rawPart)
@@ -3375,7 +3374,6 @@ const UI = {
                     text: visibleText,
                     partIndex: sourcePartIndex
                 });
-                sourcePartIndex += 1;
                 return;
             }
 
@@ -3391,10 +3389,10 @@ const UI = {
             if (!leadingText) pushDisplayPart({ type: 'agent', markedIntents });
             pushDisplayPart({ type: 'text', text: visibleText, partIndex: sourcePartIndex });
             if (leadingText) pushDisplayPart({ type: 'agent', markedIntents });
-            sourcePartIndex += 1;
         });
 
-        return { displayParts, sourcePartCount: sourcePartIndex };
+        // ★ Agent 面板虽然不可选，仍然占据原文段落索引；后续气泡必须保存真实源索引，避免删除/隐藏错位。
+        return { displayParts, sourcePartCount: rawParts.length };
     },
 
     createAgentCallPanel(markedIntents, contactName, shouldAnimate = false) {
