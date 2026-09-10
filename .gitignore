@@ -1,4 +1,6 @@
 # 本地调试记录，不上传
+# ★ Z.AI 中转仍在本地试验，确认要部署时再解除此目录的上传限制。
+/backend/zai-relay/
 26.6.6缓存调试.txt
 发布网站.bat
 网站发布工具.bat
@@ -14,6 +16,7 @@ publish-site.ps1
 Thumbs.db
 .vscode/
 .idea/
+publish-site.ps1
 
 # 日志和临时文件
 *.log

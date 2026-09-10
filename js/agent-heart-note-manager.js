@@ -109,8 +109,8 @@ const AgentHeartNoteManager = {
             '以下是你曾经为自己记下的内容：',
         ];
         records.forEach(record => {
-            // ★ 聊天上下文只注入心笺原文；日期和星标仅用于筛选，不干扰正文语义。
-            lines.push(`- ${record.text}`);
+            // ★ 星标心笺注入时加上状态前缀，让角色下一轮仍能识别；标记不写回心笺原文。
+            lines.push(`- ${record.alwaysInject === true ? '[星标]' : ''}${record.text}`);
         });
         return lines.join('\n');
     },
