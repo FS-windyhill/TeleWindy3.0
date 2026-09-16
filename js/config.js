@@ -39,6 +39,11 @@ const CONFIG = {
     MAIN_CONTEXT_LOG_KEY: 'teleWindy_main_context_log_v1',
     AGENT_CONTEXT_LOG_KEY: 'teleWindy_agent_context_log_v1',
 
+    // ★ 番茄钟：共享原有 store，分别配置正式聊天轮数和陪伴上下文条数。
+    POMODORO_KEY: 'teleWindy_pomodoro_v1',
+    POMODORO_INJECT_COUNT: 3,
+    POMODORO_CHAT_CONTEXT_COUNT: 6,
+
     CHAT_PAGE_SIZE: 15,
     MOMENTS_PAGE_SIZE: 15, // 心迹分页数
     GIST_ID_KEY: 'telewindy-gist-id',

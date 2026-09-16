@@ -1564,6 +1564,8 @@ const API = {
             contactId: settings.CONTACT_ID || null,
             userMessageIndex: settings.ASYNC_BACKEND_USER_MESSAGE_INDEX ?? null,
             context: settings.ASYNC_BACKEND_CONTEXT || null,
+            // ★ 番茄钟请求快照随 job 保存，避免恢复时聊天索引因删除/重生成发生偏移。
+            pomodoroInjection: settings.POMODORO_INJECTION || null,
             backendUrl: settings.ASYNC_BACKEND_URL.replace(/\/+$/, ''),
             token: settings.ASYNC_BACKEND_TOKEN,
             createdAt: Date.now(),
@@ -2669,10 +2671,23 @@ const UI = {
         if (viewHeartNote && viewName !== 'heart-note') viewHeartNote.style.display = 'none';
         if (viewHeartNoteDetail && viewName !== 'heart-note-detail') viewHeartNoteDetail.style.display = 'none';
 
+        // ★ 番茄钟独立页统一收口，切去其它页面不会停止计时。
+        const viewPomodoro = document.getElementById('view-pomodoro');
+        if (viewPomodoro && viewName !== 'pomodoro') viewPomodoro.style.display = 'none';
+
         // 先清除底栏的全部高亮状态
         document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
 
-        if (viewName === 'desktop') {
+        if (viewName === 'pomodoro') {
+            App.rememberReturnView('pomodoro', STATE.currentMainView || 'explore');
+            appContainer.classList.remove('in-chat-mode');
+            document.querySelectorAll('.page-view').forEach(view => { view.style.display = 'none'; });
+            viewPomodoro.style.display = 'flex';
+            if (bottomTabBar) bottomTabBar.style.display = 'none';
+            Pomodoro.render();
+            // ★ 无论从探索入口还是顶部通知进入，真正打开番茄钟页才清除完成红点。
+            Pomodoro.markRead().catch(error => Pomodoro.report(error));
+        } else if (viewName === 'desktop') {
             // ===========================
             // 0. 进入桌面：首页小组件集中刷新
             // ===========================
@@ -4351,6 +4366,8 @@ const App = {
     async init() {
         // [关键点 1] 加上 await，程序会在这里暂停，直到数据库加载完毕
         await Storage.load();
+        // ★ 番茄钟在联系人加载后恢复，旧备份缺少数据时自动使用默认值。
+        await Pomodoro.init();
         if (this.normalizeMomentsData()) {
             await Storage.saveMoments();
         }
@@ -4524,6 +4541,10 @@ const App = {
                         } else {
                             assistantMessage = contact.history.find(msg => msg.asyncJobId === pending.jobId) || null;
                         }
+
+                        // ★ 番茄钟后台恢复沿用请求时保存的快照，不消费后来才完成的新番茄。
+                        const pomodoroSource = contact.history[pending.userMessageIndex];
+                        await Pomodoro.consume(pending.pomodoroInjection || (pomodoroSource?.role === 'user' ? pomodoroSource.pomodoroInjection : null));
 
                         // ★★★★★ Post Agent：后台恢复后补跑 START ★★★★★
                         // 轻量方案：Worker 恢复接收只负责保存 assistant 回复；保存后由前端补跑 post-agent。
@@ -5236,6 +5257,7 @@ const App = {
 
         const viewMap = [
             ['explore', 'view-explore'],
+            ['pomodoro', 'view-pomodoro'],
             ['todo-plan', 'view-todo-plan'],
             ['countdown', 'view-countdown'],
             ['character-schedule', 'view-character-schedule'],
@@ -5284,6 +5306,7 @@ const App = {
         const backButtonMap = {
             chat: 'back-btn',
             explore: 'explore-back-btn',
+            pomodoro: 'pomodoro-back-btn',
             'todo-plan': 'todo-plan-back-btn',
             countdown: 'countdown-back-btn',
             'character-schedule': 'character-schedule-back-btn',
@@ -10564,6 +10587,21 @@ const App = {
         }
 
 
+        // ★★★★★ 番茄钟：按角色收集实时状态与完成通知 START ★★★★★
+        // 先校正截止时间，避免后台定时器延迟导致已完成的番茄仍被写成进行中。
+        await Pomodoro.tick();
+        const pomodoroUpdateInfo = Pomodoro.context(contact.id, currentMomentTurnId);
+        requestSettings.POMODORO_INJECTION = pomodoroUpdateInfo;
+        // 与朋友圈共用即时背景队列且排在它前面，统一走 auto / user / system 分流。
+        if (pomodoroUpdateInfo.prompt) volatileDynamicContextPrompts.push(pomodoroUpdateInfo.prompt);
+        // 请求快照随用户消息保存，后台恢复也只消费本次实际发送的记录。
+        const pomodoroUserMessage = [...contact.history].reverse().find(m => m.role === 'user');
+        if (pomodoroUserMessage) {
+            pomodoroUserMessage.pomodoroInjection = pomodoroUpdateInfo;
+            await Storage.saveContacts();
+        }
+        // ★★★★★ 番茄钟：按角色收集实时状态与完成通知 END ★★★★★
+
         // ★★★ 【核心修改】检查朋友圈并注入 ★★★
         let momentsUpdateInfo = null;
         try {
@@ -10805,6 +10843,9 @@ const App = {
                     });
                 }
             }
+
+            // ★ 番茄钟只有正式回复成功才扣次数；Reroll 和后台恢复由 turnId 去重。
+            await Pomodoro.consume(pomodoroUpdateInfo);
 
             // ★★★ 【核心修改】AI回复成功后，按聊天轮次扣除朋友圈通知 ★★★
             if (momentsUpdateInfo && momentsUpdateInfo.momentIds) {

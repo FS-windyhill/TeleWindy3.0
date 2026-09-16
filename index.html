@@ -280,6 +280,30 @@
                 <!-- ★★★★★ 心笺：探索页入口 END ★★★★★ -->
 
 
+                <!-- ★★★★★ 番茄钟：探索入口 START ★★★★★ -->
+                <li id="explore-pomodoro-btn">
+                    <!-- ★ 与其它探索入口共用图标容器和行高，避免直接放 SVG 导致整行偏矮。 -->
+                    <span class="icon">
+                        <svg class="lucide lucide-clipboard-clock" xmlns="http://www.w3.org/2000/svg" width="0.95em" height="0.95em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M16 14v2.2l1.6 1"/>
+                            <path d="M16 4h2a2 2 0 0 1 2 2v.832"/>
+                            <path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h2"/>
+                            <circle cx="16" cy="16" r="6"/>
+                            <rect x="8" y="2" width="8" height="4" rx="1"/>
+                        </svg>
+                    </span>
+                    <span class="text">番茄钟</span>
+                    <!-- ★ 复用朋友圈的无数字未读红点，完成后保留到进入番茄钟页面。 -->
+                    <span id="explore-pomodoro-unread-dot" class="explore-moments-unread-indicator hidden" aria-hidden="true"></span>
+                    <span id="pomodoro-entry-status"></span>
+                    <span class="arrow">
+                        <svg width="1.5em" height="1.5em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" style="vertical-align: -0.125em;">
+                            <path d="m9 18 6-6-6-6"></path>
+                        </svg>
+                    </span>
+                </li>
+                <!-- ★★★★★ 番茄钟：探索入口 END ★★★★★ -->
+
                 <!-- ★★★★★ 角色日程：探索页入口 START ★★★★★ -->
                 <li id="explore-character-schedule-btn">
                     <span class="icon">
@@ -371,6 +395,7 @@
                     </span>
                 </li>
                 <!-- ★★★★★ 探索 TO DO 计划：入口 END ★★★★★ -->
+
 
                 <!-- ★★★★★ 探索倒数日：入口 START ★★★★★ -->
                 <li id="explore-countdown-btn">
@@ -488,6 +513,63 @@
             </ul>
         </div>
 
+        <!-- ★★★★★ 番茄钟 START：页面与设置沿用现有探索布局 ★★★★★ -->
+        <div id="view-pomodoro" class="page-view" style="display:none;">
+            <header class="app-header">
+                <button id="pomodoro-back-btn" class="header-icon-btn left" title="返回探索"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+                <h1>番茄钟</h1>
+                <button id="pomodoro-settings-btn" class="header-icon-btn right" title="番茄钟设置"></button>
+            </header>
+            <main class="pomodoro-page">
+                <!-- ★ 单层毛玻璃卡片沿用世界感知的透明底色，隔开壁纸与计时内容。 -->
+                <section class="pomodoro-card" aria-label="陪伴专注">
+                <p id="pomodoro-status">准备开始</p>
+                <button id="pomodoro-pat" title="拍拍头像，说句话" aria-label="拍拍陪伴人头像">
+                    <svg viewBox="0 0 180 180" aria-hidden="true"><circle class="pomodoro-track" cx="90" cy="90" r="84"></circle><circle id="pomodoro-progress" cx="90" cy="90" r="84"></circle></svg>
+                    <img id="pomodoro-avatar" src="assets/images/char.jpg" alt="陪伴人头像">
+                    <span id="pomodoro-avatar-emoji" aria-hidden="true"></span>
+                </button>
+                <strong id="pomodoro-name">还没有选择陪伴人</strong>
+                <p id="pomodoro-speech" aria-live="polite">选一位陪伴人，拍拍头像说句话。</p>
+                <div id="pomodoro-time">25:00</div>
+                <label for="pomodoro-task">这一轮想做什么？</label>
+                <input id="pomodoro-task" type="text" maxlength="200" placeholder="例如：写论文、喝水">
+                <div class="pomodoro-controls"><button id="pomodoro-toggle">开始专注</button><button id="pomodoro-end" disabled>结束本轮</button></div>
+                <p id="pomodoro-stats"></p>
+                <button id="pomodoro-history-btn" class="pomodoro-history-link">查看历史记录</button>
+                </section>
+            </main>
+        </div>
+        <div id="modal-pomodoro-settings" class="modal-overlay moments-bg hidden">
+            <div class="moments-settings-panel" role="dialog" aria-modal="true" aria-labelledby="pomodoro-settings-title">
+                <h3 id="pomodoro-settings-title">番茄钟设置</h3>
+                <div class="m-modal-scroll-container">
+                    <div class="input-group"><label>陪伴人</label><p id="pomodoro-selected"></p><button id="pomodoro-pick">选择陪伴人</button></div>
+                    <div class="input-group"><label for="pomodoro-minutes">专注时长（分钟）</label><input id="pomodoro-minutes" type="number" min="1" max="180" step="1" value="25"></div>
+                    <!-- ★ 与探索记忆页一致：选择现有模型预设。 -->
+                    <div class="input-group"><label for="pomodoro-api-preset">选择模型</label><select id="pomodoro-api-preset" class="character-memory-api-select"></select></div>
+                    <p id="pomodoro-settings-hint" class="moments-setting-hint"></p>
+                </div>
+                <div class="modal-buttons"><button id="pomodoro-settings-close">关闭</button><button id="pomodoro-settings-save">保存</button></div>
+            </div>
+        </div>
+        <!-- ★ 陪伴人列表复用模型选择框样式，但只允许选择已有角色，不提供输入框。 -->
+        <div id="pomodoro-picker" class="modal-overlay hidden">
+            <div class="modal glass-panel model-picker-modal" role="dialog" aria-modal="true" aria-labelledby="pomodoro-picker-title">
+                <h2 id="pomodoro-picker-title">选择陪伴人</h2>
+                <div class="model-picker-list-header"><span id="pomodoro-people-count"></span><span>点击即可选择</span></div>
+                <div id="pomodoro-people" class="model-picker-results"></div>
+                <div class="modal-buttons"><button id="pomodoro-picker-close">关闭</button></div>
+            </div>
+        </div>
+        <div id="pomodoro-history" class="modal-overlay hidden">
+            <div class="modal glass-panel model-picker-modal" role="dialog" aria-modal="true" aria-labelledby="pomodoro-history-title">
+                <h2 id="pomodoro-history-title">番茄钟历史</h2>
+                <div id="pomodoro-history-list" class="model-picker-results"></div>
+                <div class="modal-buttons"><button id="pomodoro-history-close">关闭</button></div>
+            </div>
+        </div>
+        <!-- ★★★★★ 番茄钟 END ★★★★★ -->
         <!-- ★★★★★ TO DO 计划页面 START ★★★★★ -->
         <div id="view-todo-plan" class="page-view" style="display: none;">
             <header class="app-header">
@@ -2660,6 +2742,7 @@
     <script src="./js/agent-runtime.js"></script>
     <script src="./js/agent-todo-manager.js"></script>
     <script src="./js/agent-heart-note-manager.js"></script>
+    <script src="./js/pomodoro.js"></script>
     <script src="./script.js?v=20260908-zai-gateway-diagnostics"></script>
 </body>
 </html>
