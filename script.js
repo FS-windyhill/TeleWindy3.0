@@ -6652,7 +6652,7 @@ const App = {
         list.innerHTML = '';
         records.forEach(record => {
             const card = document.createElement('div');
-            card.className = 'heart-note-card';
+            card.className = `heart-note-card${record.cancelled === true ? ' cancelled' : ''}`;
             card.dataset.id = record.id;
             card.innerHTML = `
                 <div class="heart-note-card-foot">
@@ -6660,6 +6660,7 @@ const App = {
                     <div class="heart-note-actions">
                         <button type="button" class="heart-note-icon-btn heart-note-pin-btn${record.alwaysInject ? ' active' : ''}" data-action="toggle-heart-note-star" title="${record.alwaysInject ? '取消星标' : '星标'}" aria-pressed="${record.alwaysInject ? 'true' : 'false'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path class="heart-note-pin-shape" d="M12 17v5"></path><path class="heart-note-pin-shape" d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"></path></svg></button>
                         <button type="button" class="heart-note-icon-btn" data-action="edit-heart-note" title="修改"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+                        <button type="button" class="heart-note-icon-btn heart-note-cancel-btn${record.cancelled === true ? ' active' : ''}" data-action="cancel-heart-note" title="${record.cancelled === true ? '恢复心笺' : '取消心笺'}" aria-pressed="${record.cancelled === true ? 'true' : 'false'}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 8.5v7"/><path d="M14.5 8.5v7"/></svg></button>
                         <button type="button" class="heart-note-icon-btn danger" data-action="delete-heart-note" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
                     </div>
                 </div>
@@ -6705,7 +6706,7 @@ const App = {
         const duplicate = notebook.records.some(record => record.id !== editing?.id && AgentHeartNoteManager.buildDuplicateKey(record.text, record.dateKey || dateKey) === duplicateKey);
         if (duplicate) return alert('同一天已经有同名心笺了');
         if (editing) Object.assign(editing, { text, updatedAt: now });
-        else notebook.records.push({ id: `heart_note_${now}_${Math.random().toString(36).slice(2, 8)}`, text, dateKey, createdAt: now, updatedAt: now, alwaysInject: false, source: 'user' });
+        else notebook.records.push({ id: `heart_note_${now}_${Math.random().toString(36).slice(2, 8)}`, text, dateKey, createdAt: now, updatedAt: now, alwaysInject: false, cancelled: false, source: 'user' });
         notebook.updatedAt = now;
         await Storage.saveCharacterHeartNotes();
         this.closeHeartNoteModal();
@@ -6728,6 +6729,19 @@ const App = {
         const record = (notebook?.records || []).find(item => item.id === noteId);
         if (!record) return;
         record.alwaysInject = record.alwaysInject !== true;
+        record.updatedAt = Date.now();
+        notebook.updatedAt = Date.now();
+        await Storage.saveCharacterHeartNotes();
+        this.renderHeartNoteContacts();
+        this.renderHeartNoteDetail();
+    },
+
+    async toggleHeartNoteCancelled(noteId) {
+        const notebook = AgentHeartNoteManager.getNotebook(STATE.currentHeartNoteContactId);
+        const record = (notebook?.records || []).find(item => item.id === noteId);
+        if (!record) return;
+        // ★ cancel 与 TODO 一样可再次点击恢复；心笺本体和星标状态都原样保留。
+        record.cancelled = record.cancelled !== true;
         record.updatedAt = Date.now();
         notebook.updatedAt = Date.now();
         await Storage.saveCharacterHeartNotes();
@@ -7941,6 +7955,7 @@ const App = {
                     createdAt: now,
                     updatedAt: now,
                     alwaysInject: false,
+                    cancelled: false,
                     source: 'assistant'
                 };
                 notebook.records.push(record);
@@ -15313,6 +15328,7 @@ const App = {
             if (!action || !card?.dataset.id) return;
             if (action.dataset.action === 'toggle-heart-note-star') this.toggleHeartNoteStar(card.dataset.id);
             if (action.dataset.action === 'edit-heart-note') this.openHeartNoteModal(card.dataset.id);
+            if (action.dataset.action === 'cancel-heart-note') this.toggleHeartNoteCancelled(card.dataset.id);
             if (action.dataset.action === 'delete-heart-note') this.deleteHeartNoteItem(card.dataset.id);
         });
         document.getElementById('heart-note-item-cancel-btn')?.addEventListener('click', () => this.closeHeartNoteModal());

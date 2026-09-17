@@ -11372,6 +11372,11 @@ body.dark-mode button#heart-note-item-save-btn.primary {
 .heart-note-pin-btn .heart-note-pin-shape { fill: transparent; }
 .heart-note-pin-btn.active { color: #ffb21c; }
 .heart-note-pin-btn.active .heart-note-pin-shape { fill: currentColor; }
+.heart-note-cancel-btn { color: #7b718d; }
+.heart-note-cancel-btn.active { color: var(--primary-btn-text, #876eff); }
+/* ★ cancel 只划掉正文并降低卡片权重，操作按钮仍保持清晰，方便随时恢复或删除。 */
+.heart-note-card.cancelled { opacity: 0.7; }
+.heart-note-card.cancelled .heart-note-text { text-decoration: line-through; text-decoration-thickness: 1.5px; }
 .heart-note-icon-btn.danger { color: #d93838; }
 .heart-note-editor-textarea { min-height: 110px; font-style: normal; }
 

@@ -78,6 +78,8 @@ const AgentHeartNoteManager = {
         notebook.records.forEach(record => {
             if (!record || typeof record !== 'object') return;
             record.alwaysInject = record.alwaysInject === true;
+            // ★ 旧数据没有 cancelled 字段时补成 false；取消只影响注入，不移除原心笺。
+            record.cancelled = record.cancelled === true;
             if (!record.dateKey && record.createdAt) record.dateKey = this.getTodayKey(new Date(record.createdAt));
         });
         return notebook;
@@ -92,6 +94,8 @@ const AgentHeartNoteManager = {
         return (notebook.records || [])
             .filter(record => {
                 if (!record || !record.text) return false;
+                // ★ 与 TODO cancel 一致：已取消心笺保留在列表，但无论是否星标都不注入上下文。
+                if (record.cancelled === true) return false;
                 if (record.alwaysInject === true) return true;
                 const date = this.fromDateKey(record.dateKey || this.getTodayKey(new Date(record.createdAt || 0)));
                 return date >= minDate && date <= today;
@@ -132,7 +136,8 @@ const AgentHeartNoteManager = {
                 text: this.cleanText(record.text),
                 dateKey: record.dateKey || '',
                 createdAt: Number(record.createdAt) || 0,
-                alwaysInject: record.alwaysInject === true
+                alwaysInject: record.alwaysInject === true,
+                cancelled: record.cancelled === true
             }));
     },
 
