@@ -2564,7 +2564,7 @@ const UI = {
         const body = document.body;
         
         // 清理旧类名
-        body.classList.remove('light-mode', 'dark-mode', 'custom-mode', 'custom-light', 'custom-dark');
+        body.classList.remove('light-mode', 'dark-mode', 'custom-mode');
 
         // 获取或创建用于注入 CSS 的 style 标签
         let customStyleTag = document.getElementById('user-custom-css');
@@ -2580,8 +2580,8 @@ const UI = {
         // 判断主题逻辑
         if (THEME === 'custom') {
             body.classList.add('custom-mode');
-            // 自定义模式拆成浅/暗底座：浅色复用无前缀默认样式，暗色继续复用原 custom 暗色覆盖。
-            body.classList.add(CUSTOM_BASE_THEME === 'light' ? 'custom-light' : 'custom-dark');
+            // 自定义模式只负责启用用户 CSS；亮暗底座直接复用普通主题，避免维护重复样式。
+            body.classList.add(CUSTOM_BASE_THEME === 'light' ? 'light-mode' : 'dark-mode');
             customStyleTag.textContent = App.prefixUserCss(CUSTOM_CSS);// 注入用户 CSS
             if (cssPanel) cssPanel.classList.remove('hidden'); // 显示面板
             

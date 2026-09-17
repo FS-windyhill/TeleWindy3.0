@@ -270,7 +270,7 @@ const Pomodoro = {
 - 距离下次休息还有 ${Math.ceil(remainingMs / 60000)} 分钟
 - 已经专注了 ${s ? Math.floor((s.durationMs - remainingMs) / 60000) : 0} 分钟
 - 当前状态：${endedSession ? '本轮已中途结束并清零' : ({ running: '专注中', paused: '已暂停', completed: '已完成' }[status] || '尚未开始')}
-请参考“已经专注的时间”“距离下次休息的时间”“当前任务”，根据你人设的性格回复用户。人类说话是不会带括号和动作描写的。你想说啥就说啥，不必拘束，不过不要长篇大论哦。你的任务：模仿人类说话，直接输出说话的内容。不要长篇大论哦，简单一点。`;
+请参考“已经专注的时间”“距离下次休息的时间”“当前任务”，根据你人设的性格，像真人一样回复用户。回复一句话即可，20字以内。`;
             // ★ 最近 6 条真实对话与本次操作分开携带；陪伴请求不消费正式聊天注入次数。
             const result = await API.chat([{ role: 'system', content: prompt }, ...this.recentMessages(contact),
                 { role: 'user', content: actionText }], this.getApiSettings());
