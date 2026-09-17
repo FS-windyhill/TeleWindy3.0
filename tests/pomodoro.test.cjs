@@ -159,8 +159,9 @@ const p = vm.runInContext('Pomodoro', context);
     state.contacts[0].history = history;
     await p.speak();
     const packet = requests.at(-1);
-    assert.equal(packet.messages.length, 8); // 人设 + 六条历史 + 本次动作。
-    assert.equal(packet.messages[1].content, '消息4');
+    assert.equal(packet.messages.length, 2); // 番茄钟请求只携带人设状态和本次动作，不携带聊天记录。
+    assert.equal(packet.messages[1].role, 'user');
+    assert.doesNotMatch(packet.messages.map(message => message.content).join('\n'), /消息[0-9]/);
     assert.equal(packet.settings.MODEL, 'focus-model');
 
     // 中途结束请求旧版提示词，保留任务上下文，不增加完成记录或红点。
@@ -172,7 +173,7 @@ const p = vm.runInContext('Pomodoro', context);
     assert.equal(requests.at(-1).messages.at(-1).content, '番茄钟已清零！重新开始吧～');
     assert.match(requests.at(-1).messages[0].content, /当前任务：写论文/);
     assert.match(requests.at(-1).messages[0].content, /本轮已中途结束并清零/);
-    assert.equal(requests.at(-1).messages.length, 8);
+    assert.equal(requests.at(-1).messages.length, 2);
     assert.equal(p.data.records.length, countBeforeEnd);
     assert.equal(p.data.hasUnreadCompletion, false);
     assert.equal(notices.length, 1);
@@ -197,6 +198,6 @@ const p = vm.runInContext('Pomodoro', context);
     assert.equal(p.$('pomodoro-speech').textContent, '暂停回复');
     assert.equal(p.speaking, false);
     console.log('PASS: 完成/中途结束旧版提示词、完成通知跳转目标、未读持久化/清除、重复结算去重');
-    console.log('PASS: 开始/暂停/继续请求、模型预设选择及回退、6条对话请求、乱序回复保护');
+    console.log('PASS: 开始/暂停/继续请求、模型预设选择及回退、番茄钟不携带聊天记录、乱序回复保护');
     console.log('PASS: 默认兼容、暂停恢复、刷新结算去重、角色隔离、3轮注入、Reroll/后台恢复去重、请求快照、最近6条消息');
 })().catch(error => { console.error(error); process.exitCode = 1; });

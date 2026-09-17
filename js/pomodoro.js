@@ -255,7 +255,7 @@ const Pomodoro = {
             const remainingMs = endedSession ? endedSession.remainingMs : this.remaining();
             const today = new Date().toDateString();
             const completed = this.data.records.filter(r => new Date(r.completedAt).toDateString() === today).length;
-            // ★ 拍头像沿用旧项目验证过的原文，只替换当前任务；最近 6 条对话仍单独携带。
+            // ★ 拍头像沿用旧项目验证过的原文，只替换当前任务。
             const currentTask = s?.task || this.data.task || '专注';
             const patPrompt = `我现在准备完成${currentTask}，但是我有时候也会分心来找你。我现在来找你啦！你想说啥就说啥，不必拘束，比如督促我专心完成任务，或者关心我一下，想说什么都行，不过不要长篇大论哦。`;
             // ★ 中途清零与正常完成采用旧项目原句；次数包含刚刚完成的这一轮。
@@ -271,8 +271,8 @@ const Pomodoro = {
 - 已经专注了 ${s ? Math.floor((s.durationMs - remainingMs) / 60000) : 0} 分钟
 - 当前状态：${endedSession ? '本轮已中途结束并清零' : ({ running: '专注中', paused: '已暂停', completed: '已完成' }[status] || '尚未开始')}
 请参考“已经专注的时间”“距离下次休息的时间”“当前任务”，根据你人设的性格，像真人一样回复用户。回复一句话即可，20字以内。`;
-            // ★ 最近 6 条真实对话与本次操作分开携带；陪伴请求不消费正式聊天注入次数。
-            const result = await API.chat([{ role: 'system', content: prompt }, ...this.recentMessages(contact),
+            // ★ 暂停向番茄钟携带聊天记录：实测会干扰轻量陪伴效果，需要恢复时取消下一行注释。
+            const result = await API.chat([{ role: 'system', content: prompt }, /* ...this.recentMessages(contact), */
                 { role: 'user', content: actionText }], this.getApiSettings());
             if (isCurrent()) {
                 this.$('pomodoro-speech').textContent = String(result).replace(/<(think|thinking|thought)[^>]*>[\s\S]*?(<\/\1>|$)/gi, '').trim() || '我在这里陪你。';
