@@ -13436,6 +13436,21 @@ body.dark-mode button#restore-default-system-prompt-btn.icon-btn {
 
 
 /* ★★★★★ 番茄钟 START：样式限定在本模块，跟随全局字体与深浅主题 ★★★★★ */
+/* ★ 页面和三个弹窗共用主题变量；切换主题色时，计时环与按钮立即同步。 */
+:is(#view-pomodoro, #modal-pomodoro-settings, #pomodoro-picker, #pomodoro-history) {
+    --pomodoro-accent: var(--primary-btn-text);
+    --pomodoro-ink: hsl(var(--theme-color-h) var(--theme-color-s) min(var(--theme-color-l), 38%));
+    --pomodoro-tint: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / .14);
+    --pomodoro-hover: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / .24);
+    --pomodoro-surface: rgba(255,255,255,.75);
+    --pomodoro-text: #38413e;
+}
+/* ★ 两种深色模式共用亮字与深底，保留用户设置的主题色相。 */
+body:is(.dark-mode, .custom-dark) :is(#view-pomodoro, #modal-pomodoro-settings, #pomodoro-picker, #pomodoro-history) {
+    --pomodoro-ink: hsl(var(--theme-color-h) var(--theme-color-s) max(var(--theme-color-l), 75%));
+    --pomodoro-surface: rgba(38,38,38,.85);
+    --pomodoro-text: #eee;
+}
 .pomodoro-page { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 18px 32px; box-sizing: border-box; color: #38413e; }
 /* ★ 与世界感知卡片一致的 60% 白底与 8px 模糊，窄屏内容自然滚动。 */
 .pomodoro-card { width: 100%; max-width: 520px; margin: 0 auto; padding: 28px 22px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; gap: 16px; border-radius: 20px; background: rgba(255,255,255,.6); border: 1px solid #fff; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 8px 30px rgba(34,53,45,.07); }
@@ -13450,8 +13465,8 @@ body.dark-mode .pomodoro-card, body.custom-dark .pomodoro-card { background: rgb
 #pomodoro-pat { position: relative; width: 180px; height: 180px; min-height: 180px; border: none; background: transparent; padding: 0; cursor: pointer; }
 #pomodoro-pat svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
 #pomodoro-pat circle { fill: none; stroke-width: 5; }
-.pomodoro-track { stroke: rgba(127,127,127,.18); }
-#pomodoro-progress { stroke: #82a998; stroke-linecap: round; stroke-dasharray: 528; transition: stroke-dashoffset .3s; }
+.pomodoro-track { stroke: var(--pomodoro-tint); }
+#pomodoro-progress { stroke: var(--pomodoro-accent); stroke-linecap: round; stroke-dasharray: 528; transition: stroke-dashoffset .3s, stroke .2s; }
 #pomodoro-avatar { position: absolute; inset: 20px; width: 140px; height: 140px; border-radius: 50%; object-fit: cover; }
 #pomodoro-avatar-emoji { position: absolute; inset: 20px; display: grid; place-items: center; font-size: 76px; }
 .pomodoro-picker-emoji { width: 36px; margin-right: 12px; text-align: center; font-size: 26px; }
@@ -13460,18 +13475,57 @@ body.dark-mode .pomodoro-card, body.custom-dark .pomodoro-card { background: rgb
 .pomodoro-card > label { font-size: 13px; align-self: center; }
 #pomodoro-task { width: 100%; max-width: 380px; box-sizing: border-box; padding: 12px 14px; border: 1px solid rgba(127,127,127,.25); border-radius: 12px; background: rgba(255,255,255,.55); color: inherit; font: inherit; }
 .pomodoro-controls { display: flex; gap: 12px; width: 100%; max-width: 380px; }
-.pomodoro-controls button, #pomodoro-pick { flex: 1; padding: 12px 16px; border: 1px solid rgba(127,127,127,.2); border-radius: 12px; color: inherit; background: rgba(127,127,127,.1); font: inherit; cursor: pointer; }
-#pomodoro-toggle { background: #729886; color: white; border-color: transparent; }
+.pomodoro-controls button { flex: 1; }
 .pomodoro-page button:disabled, #modal-pomodoro-settings button:disabled { opacity: .45; cursor: default; }
 /* ★ 陪伴人按钮左右贴齐设置内容区；文字保持居中，不拉开字距。 */
 #pomodoro-pick { display: block; width: 100%; box-sizing: border-box; }
+/* ★ 名字本身占满内容宽度再居中；长名字允许换行，避免挤出设置面板。 */
+#pomodoro-selected { width: 100%; margin: 4px 0 14px; text-align: center; line-height: 1.6; overflow-wrap: anywhere; color: var(--pomodoro-text); }
+#pomodoro-name { max-width: 100%; text-align: center; overflow-wrap: anywhere; }
 /* ★ 等待回复时只阻止重复点击，头像及外圈保持原来的不透明度。 */
 #pomodoro-pat:disabled { opacity: 1; }
-.pomodoro-history-link { border: none; background: none; color: inherit; text-decoration: underline; text-underline-offset: 4px; cursor: pointer; padding: 8px; }
+/* ★ 统一所有文字按钮，弹窗关闭也使用明确的底色，避免深色模式出现原生白按钮。 */
+:is(#view-pomodoro, #modal-pomodoro-settings, #pomodoro-picker, #pomodoro-history) :is(.pomodoro-controls button, #pomodoro-pick, .pomodoro-history-link, .modal-buttons button) {
+    min-height: 44px;
+    min-width: 0;
+    box-sizing: border-box;
+    padding: 11px 16px;
+    border: 1px solid var(--pomodoro-accent);
+    border-radius: 12px;
+    background: var(--pomodoro-surface);
+    color: var(--pomodoro-ink);
+    font: inherit;
+    font-weight: 500;
+    text-align: center;
+    cursor: pointer;
+    transition: background .2s, box-shadow .2s, transform .15s;
+}
+/* ★ 主操作使用主题色浅底；文字单独控制明暗，浅色主题下也能看清。 */
+:is(#view-pomodoro, #modal-pomodoro-settings) :is(#pomodoro-toggle, #pomodoro-settings-save, #pomodoro-pick) {
+    background: linear-gradient(var(--pomodoro-tint), var(--pomodoro-tint)), var(--pomodoro-surface);
+    font-weight: 600;
+    box-shadow: 0 3px 10px var(--pomodoro-tint);
+}
+/* ★ 鼠标悬停、触屏按下和键盘聚焦分别反馈；禁用按钮不参与交互动画。 */
+@media (hover: hover) {
+    :is(#view-pomodoro, #modal-pomodoro-settings, #pomodoro-picker, #pomodoro-history) button:not(#pomodoro-pat):not(.header-icon-btn):not(:disabled):hover {
+        background: linear-gradient(var(--pomodoro-hover), var(--pomodoro-hover)), var(--pomodoro-surface);
+    }
+}
+:is(#view-pomodoro, #modal-pomodoro-settings, #pomodoro-picker, #pomodoro-history) button:not(.header-icon-btn):not(:disabled):active { transform: scale(.97); }
+:is(#view-pomodoro, #modal-pomodoro-settings, #pomodoro-picker, #pomodoro-history) button:not(.header-icon-btn):focus-visible {
+    outline: 2px solid var(--pomodoro-ink);
+    outline-offset: 3px;
+}
+#pomodoro-pat { border-radius: 50%; }
 #pomodoro-picker { z-index: 10060; }
 #pomodoro-history { z-index: 10050; }
 #pomodoro-people img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; margin-right: 12px; }
-#pomodoro-people .model-picker-result-item { display: flex; align-items: center; width: 100%; text-align: left; font: inherit; }
+#pomodoro-people .model-picker-result-item { display: flex; align-items: center; justify-content: flex-start; width: 100%; box-sizing: border-box; text-align: left; font: inherit; color: var(--pomodoro-text); border-color: var(--pomodoro-tint); }
+/* ★ 列表头像不压缩，名字占剩余空间；当前标记也跟随主题色。 */
+#pomodoro-people :is(img, .pomodoro-picker-emoji) { flex-shrink: 0; margin-right: 0; }
+#pomodoro-people .model-picker-result-item > span:not([class]) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+#pomodoro-people .model-picker-current-badge { flex-shrink: 0; color: var(--pomodoro-ink); border-color: var(--pomodoro-accent); background: var(--pomodoro-tint); }
 .pomodoro-history-item { padding: 14px 4px; border-bottom: 1px solid rgba(127,127,127,.2); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
 #pomodoro-entry-status { font-size: 13px; opacity: .7; margin-right: 12px; font-variant-numeric: tabular-nums; }
 body.dark-mode .pomodoro-page, body.custom-dark .pomodoro-page { color: #eee; }
