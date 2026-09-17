@@ -120,12 +120,15 @@ const Pomodoro = {
         this.$('pomodoro-progress').style.strokeDashoffset = 528 * (1 - this.remaining() / (s?.durationMs || this.data.minutes * 60000));
         this.$('pomodoro-toggle').textContent = s?.status === 'running' ? '暂停' : s?.status === 'paused' ? '继续专注' : s?.status === 'completed' ? '开始下一轮' : '开始专注';
         this.$('pomodoro-toggle').disabled = this.busy;
-        this.$('pomodoro-end').disabled = !this.active() || this.busy;
+        // ★ “结束本轮”只在计时已开始后出现，暂停时仍可主动结束本轮。
+        const active = this.active();
+        this.$('pomodoro-end').hidden = !active;
+        this.$('pomodoro-end').disabled = !active || this.busy;
         this.$('pomodoro-task').disabled = this.active();
         this.$('pomodoro-status').textContent = s?.status === 'running' ? '正在专注' : s?.status === 'paused' ? '已暂停' : s?.status === 'completed' ? '本轮已完成' : '准备开始';
         const today = new Date().toDateString();
         const records = this.data.records.filter(r => new Date(r.completedAt).toDateString() === today);
-        this.$('pomodoro-stats').textContent = `今日完成 ${records.length} 个番茄 · ${records.reduce((n, r) => n + r.minutes, 0)} 分钟`;
+        this.$('pomodoro-stats').textContent = `今天已经完成 ${records.length} 个番茄`;
         this.$('pomodoro-entry-status').textContent = this.active() ? this.$('pomodoro-time').textContent : '';
         this.$('explore-pomodoro-unread-dot').classList.toggle('hidden', !this.data.hasUnreadCompletion);
     },
@@ -191,6 +194,7 @@ const Pomodoro = {
             if (imageAvatar) { avatar.src = imageAvatar; avatar.alt = ''; }
             else { avatar.className = 'pomodoro-picker-emoji'; avatar.textContent = contact.avatar || '😊'; }
             const name = document.createElement('span');
+            name.className = 'model-picker-result-name';
             name.textContent = contact.name;
             button.append(avatar, name);
             if (contact.id === this.data.contactId) {
@@ -317,17 +321,53 @@ const Pomodoro = {
     showHistory() {
         const list = this.$('pomodoro-history-list');
         list.replaceChildren();
+        const groups = new Map();
         for (const record of [...this.data.records].sort((a, b) => b.completedAt - a.completedAt)) {
-            const item = document.createElement('div');
-            item.className = 'pomodoro-history-item';
-            // ★ 任务和角色名统一用 textContent，避免用户输入被当成 HTML。
-            // ★ 统一展示所有陪伴人的记录；日期用本地年月日，避免 UTC 换日或系统地区格式差异。
+            // ★ 按本地日期分组，避免 UTC 换日把深夜完成的番茄归到前一天。
             const date = new Date(record.completedAt);
-            const dateText = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-            item.textContent = `${dateText} ${String(record.task || '专注').replace(/[\r\n]+/g, ' ')} ${record.minutes}分钟 with ${record.contactName || '陪伴人'}`;
-            list.append(item);
+            const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            if (!groups.has(dateKey)) groups.set(dateKey, []);
+            groups.get(dateKey).push(record);
         }
-        if (!this.data.records.length) list.textContent = '还没有完成记录，开始你的第一个番茄吧。';
+        for (const [dateKey, records] of groups) {
+            const group = document.createElement('section');
+            group.className = 'pomodoro-history-date-group';
+
+            const title = document.createElement('div');
+            title.className = 'pomodoro-history-date-title';
+            const dateLabel = document.createElement('span');
+            dateLabel.textContent = dateKey;
+            const summary = document.createElement('span');
+            summary.className = 'pomodoro-history-date-summary';
+            summary.textContent = `${records.length} 个番茄 · ${records.reduce((total, record) => total + record.minutes, 0)} 分钟`;
+            title.append(dateLabel, summary);
+
+            const body = document.createElement('div');
+            body.className = 'pomodoro-history-date-body';
+            for (const record of records) {
+                const item = document.createElement('div');
+                item.className = 'pomodoro-history-item';
+                const task = document.createElement('span');
+                task.className = 'pomodoro-history-task';
+                // ★ 任务和角色名统一用 textContent，避免用户输入被当成 HTML。
+                task.textContent = String(record.task || '专注').replace(/[\r\n]+/g, ' ');
+                const meta = document.createElement('span');
+                meta.className = 'pomodoro-history-meta';
+                const completedAt = new Date(record.completedAt);
+                const timeText = `${String(completedAt.getHours()).padStart(2, '0')}:${String(completedAt.getMinutes()).padStart(2, '0')}`;
+                meta.textContent = `${timeText} · ${record.minutes} 分钟 · with ${record.contactName || '陪伴人'}`;
+                item.append(task, meta);
+                body.append(item);
+            }
+            group.append(title, body);
+            list.append(group);
+        }
+        if (!this.data.records.length) {
+            list.classList.add('pomodoro-history-empty');
+            list.textContent = '还没有完成记录，开始你的第一个番茄吧。';
+        } else {
+            list.classList.remove('pomodoro-history-empty');
+        }
         this.$('pomodoro-history').classList.remove('hidden');
     },
     async endRound() {

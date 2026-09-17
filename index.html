@@ -532,10 +532,14 @@
                 <strong id="pomodoro-name">还没有选择陪伴人</strong>
                 <p id="pomodoro-speech" aria-live="polite">选一位陪伴人，拍拍头像说句话。</p>
                 <div id="pomodoro-time">25:00</div>
-                <label for="pomodoro-task">这一轮想做什么？</label>
+
                 <input id="pomodoro-task" type="text" maxlength="200" placeholder="例如：写论文、喝水">
-                <div class="pomodoro-controls"><button id="pomodoro-toggle">开始专注</button><button id="pomodoro-end" disabled>结束本轮</button></div>
-                <p id="pomodoro-stats"></p>
+                <div class="pomodoro-controls">
+                    <button id="pomodoro-toggle">开始专注</button>
+                    <!-- ★ 未开始时不展示结束按钮；进入专注或暂停状态后再由脚本显示。 -->
+                    <button id="pomodoro-end" hidden disabled>结束本轮</button>
+                </div>
+                <p id="pomodoro-stats">今天已经完成 0 个番茄</p>
                 <button id="pomodoro-history-btn" class="pomodoro-history-link">查看历史记录</button>
                 </section>
             </main>

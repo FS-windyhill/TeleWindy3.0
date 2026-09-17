@@ -8,6 +8,12 @@ let saved;
 const requests = [];
 const notices = [];
 let viewing = false;
+// ★ 提供历史记录渲染所需的最小 DOM，避免测试依赖真实浏览器。
+const createElement = tagName => ({ tagName, value: '', textContent: '', className: '', style: {}, children: [],
+    classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+    addEventListener() {},
+    append(...children) { this.children.push(...children); },
+    replaceChildren(...children) { this.children = [...children]; } });
 const context = vm.createContext({ console, crypto: webcrypto, Date, setInterval: () => {},
     getComputedStyle: () => ({ display: viewing ? 'flex' : 'none' }),
     App: { showTopNotice: (message, options) => notices.push({ message, options }) },
@@ -15,9 +21,9 @@ const context = vm.createContext({ console, crypto: webcrypto, Date, setInterval
     API: { chat: async (messages, settings) => { requests.push({ messages, settings }); return '陪你一起。'; } },
     DB: { set: async (_, data) => { saved = structuredClone(data); } },
     document: { getElementById(id) {
-        if (!elements.has(id)) elements.set(id, { value: '', textContent: '', style: {}, classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } } });
+        if (!elements.has(id)) elements.set(id, createElement('div'));
         return elements.get(id);
-    } }
+    }, createElement }
 });
 for (const name of ['js/config.js', 'js/history-visibility.js', 'js/pomodoro.js']) {
     vm.runInContext(fs.readFileSync(name, 'utf8'), context, { filename: name });
@@ -31,12 +37,16 @@ const p = vm.runInContext('Pomodoro', context);
     assert.equal(p.data.records.length, 0);
     assert.equal(p.normalize({ session: { status: 'running' } }).session, null);
     p.data.contactId = 'a';
+    p.openPicker();
+    assert.equal(p.$('pomodoro-people').children[0].children[1].className, 'model-picker-result-name');
     p.data.minutes = 29;
     elements.get('pomodoro-task') || p.$('pomodoro-task');
     p.$('pomodoro-task').value = '写论文';
     await p.toggle();
     assert.equal(p.data.session.contactId, 'a');
     assert.equal(p.data.session.durationMs, 29 * 60000);
+    assert.equal(p.$('pomodoro-end').hidden, false); // 开始后才显示“结束本轮”。
+    assert.equal(p.$('pomodoro-stats').textContent, '今天已经完成 0 个番茄');
     await p.toggle();
     assert.equal(p.data.session.status, 'paused');
     const paused = p.remaining();
@@ -56,6 +66,13 @@ const p = vm.runInContext('Pomodoro', context);
     assert.equal(p.data.records.length, 1);
     assert.equal(saved.records[0].completedAt, endAt);
     assert.equal(p.data.session.status, 'completed');
+    assert.equal(p.$('pomodoro-end').hidden, true); // 完成后恢复为单个开始按钮。
+    assert.equal(p.$('pomodoro-stats').textContent, '今天已经完成 1 个番茄');
+    p.showHistory();
+    const historyGroup = p.$('pomodoro-history-list').children[0];
+    assert.equal(historyGroup.className, 'pomodoro-history-date-group');
+    assert.equal(historyGroup.children[0].children[1].textContent, '1 个番茄 · 29 分钟');
+    assert.equal(historyGroup.children[1].children[0].children[0].textContent, '写论文');
     assert.equal(requests.at(-1).messages.at(-1).content, '我完成了第 1 个番茄！');
     assert.equal(requests.length, 4); // 重复 tick 不会重复请求完成回复。
     assert.equal(notices.length, 1);
@@ -151,6 +168,7 @@ const p = vm.runInContext('Pomodoro', context);
     const countBeforeEnd = p.data.records.length;
     await p.endRound();
     assert.equal(p.data.session, null);
+    assert.equal(p.$('pomodoro-end').hidden, true);
     assert.equal(requests.at(-1).messages.at(-1).content, '番茄钟已清零！重新开始吧～');
     assert.match(requests.at(-1).messages[0].content, /当前任务：写论文/);
     assert.match(requests.at(-1).messages[0].content, /本轮已中途结束并清零/);
