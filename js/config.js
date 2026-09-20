@@ -13,6 +13,7 @@
 //   - CHARACTER_MEMORIES_KEY: 探索页角色记忆 key
 //   - MOMENTS_INJECT_COUNT: 用户动态在聊天里提示可见角色的聊天轮次
 //   - CHARACTER_MOMENT_INJECT_COUNT: 角色动态在聊天里提示作者本人的聊天轮次
+//   - POMODORO_INJECT_COUNT / POMODORO_SPEECH_CONTEXT_COUNT: 番茄记录注入轮数与最多回注的陪伴发言条数
 //   - DEFAULT: 所有设置项的默认值
 //     - TODO_PLAN_INJECT_ENABLED: TO DO 计划是否注入 AI system prompt
 //     - COUNTDOWN_INJECT_ENABLED: 倒数日 / 正数日是否注入 AI system prompt
@@ -39,10 +40,12 @@ const CONFIG = {
     MAIN_CONTEXT_LOG_KEY: 'teleWindy_main_context_log_v1',
     AGENT_CONTEXT_LOG_KEY: 'teleWindy_agent_context_log_v1',
 
-    // ★ 番茄钟：共享原有 store，分别配置正式聊天轮数和陪伴上下文条数。
+    // ★ 番茄钟：共享原有 store，分别配置正式聊天轮数、陪伴上下文和回注发言条数。
     POMODORO_KEY: 'teleWindy_pomodoro_v1',
     POMODORO_INJECT_COUNT: 3,
     POMODORO_CHAT_CONTEXT_COUNT: 6,
+    // ★ 每个角色本地只保留最近 10 条番茄钟发言；这里即使改成 100，实际也最多只能注入 10 条。
+    POMODORO_SPEECH_CONTEXT_COUNT: 3,
 
     CHAT_PAGE_SIZE: 15,
     MOMENTS_PAGE_SIZE: 15, // 心迹分页数

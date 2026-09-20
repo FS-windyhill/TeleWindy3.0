@@ -4783,6 +4783,13 @@ body.dark-mode .history-btn {
     justify-content: center;
 }
 
+
+body.dark-mode .icon-btn {
+    background: var(--btn-color);
+    color: #ffffff;
+    border: 0.7px solid #a9a9a9;
+}
+
 .icon-btn:hover {
     background: #f0f0f0;
 }
@@ -10937,7 +10944,7 @@ body.dark-mode .appearance-switch-cell {
 .desktop-activity-cell.level-6 { background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l)); }
 
 
-/* ★★★★★ 桌面 START：活跃日志点击浮窗 ★★★★★ */
+/* ★★★★★ 桌面 START：互动日志点击浮窗 ★★★★★ */
 .desktop-activity-tip {
     position: absolute;
     z-index: 5;
@@ -10958,7 +10965,7 @@ body.dark-mode .appearance-switch-cell {
 .desktop-activity-tip.show {
     display: block;
 }
-/* ★★★★★ 桌面 END：活跃日志点击浮窗 ★★★★★ */
+/* ★★★★★ 桌面 END：互动日志点击浮窗 ★★★★★ */
 
 .desktop-trash-btn {
     width: 32px;

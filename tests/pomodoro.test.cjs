@@ -35,6 +35,7 @@ const p = vm.runInContext('Pomodoro', context);
     assert.equal(p.data.minutes, 25);
     assert.equal(p.data.apiPresetIndex, -1);
     assert.equal(p.data.records.length, 0);
+    assert.equal(p.data.speeches.length, 0);
     assert.equal(p.normalize({ session: { status: 'running' } }).session, null);
     p.data.contactId = 'a';
     p.openPicker();
@@ -90,7 +91,8 @@ const p = vm.runInContext('Pomodoro', context);
     const completedSession = p.data.session;
     p.data.session = { ...completedSession, id: 'active', task: '洗澡', status: 'running', endAt: Date.now() + 60000 };
     const combined = p.context('a', 'ongoing');
-    assert.equal(combined.prompt, '【番茄钟】\n\n- 对方正在和你进行一个番茄钟：洗澡\n- 对方和你一起完成了一个29分钟的番茄钟：写论文');
+    assert.equal(combined.prompt, '【番茄钟】\n\n- 对方正在和你进行一个番茄钟：洗澡\n- 对方和你一起完成了一个29分钟的番茄钟：写论文\n\n【你刚才在番茄钟里说过的话】\n\n- “陪你一起。”\n- “陪你一起。”\n- “陪你一起。”');
+    assert.equal((combined.prompt.match(/陪你一起。/g) || []).length, 3);
     assert.equal(combined.ids.length, 1); // 仅完成记录进入扣次列表。
     assert.equal(p.context('b', 'other').prompt, '');
     p.data.session.status = 'paused';
@@ -129,6 +131,7 @@ const p = vm.runInContext('Pomodoro', context);
     assert.equal(p.context('a', 't3').ids.length, 1); // 第三轮 Reroll 仍看到记录。
     await p.consume(p.context('a', 't3'));
     assert.equal(p.data.records[0].remainingTurns, 0);
+    assert.doesNotMatch(p.context('a', 't4').prompt, /你刚才在番茄钟里说过的话/); // 发言与完成记录同时结束注入。
 
     // 旧记录耗尽后新增番茄独立获得三轮，已发送请求不会消耗后来新增的记录。
     p.data.records.push({ id: 'second', contactId: 'a', task: '喝水', minutes: 3, remainingTurns: 3, consumedTurns: [] });
@@ -153,6 +156,7 @@ const p = vm.runInContext('Pomodoro', context);
     assert.equal(p.getApiSettings().MODEL, 'focus-model');
     assert.equal(p.getApiSettings().MAX_TOKENS, 800);
     assert.equal(p.getApiSettings().ASYNC_BACKEND_ENABLED, false);
+    assert.equal(p.getApiSettings().COUNT_AS_INTERACTION, false); // 番茄钟的高频陪伴请求不进入互动日志。
     p.data.apiPresetIndex = 99;
     assert.equal(p.getApiSettings().MODEL, 'global');
     p.data.apiPresetIndex = 0;
@@ -187,6 +191,7 @@ const p = vm.runInContext('Pomodoro', context);
 
     // 模拟先开始、再暂停，但开始的网络回复后到达，旧回复不能覆盖暂停回复。
     const pending = [];
+    const speechCountBeforeRace = p.data.speeches.length;
     context.API.chat = () => new Promise(resolve => pending.push(resolve));
     const started = p.speak('start');
     const pausedReply = p.speak('pause');
@@ -196,6 +201,8 @@ const p = vm.runInContext('Pomodoro', context);
     pending[0]('开始的迟到回复');
     await started;
     assert.equal(p.$('pomodoro-speech').textContent, '暂停回复');
+    assert.equal(p.data.speeches.length, speechCountBeforeRace + 1); // 迟到且未展示的回复不会保存。
+    assert.equal(p.data.speeches.at(-1).text, '暂停回复');
     assert.equal(p.speaking, false);
     console.log('PASS: 完成/中途结束旧版提示词、完成通知跳转目标、未读持久化/清除、重复结算去重');
     console.log('PASS: 开始/暂停/继续请求、模型预设选择及回退、番茄钟不携带聊天记录、乱序回复保护');

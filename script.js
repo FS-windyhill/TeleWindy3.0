@@ -386,7 +386,7 @@
 //   - getResumedAsyncJobResult(jobId): 前台轮询遇到 404 时复用恢复链路结果
 //   - markPendingJobFailed(jobId, error): 标记本地 pending job 失败原因
 //   - updateAsyncBackendLogWithVision(result, settings): 后台识图完成后，把 image_description 补写进 API 日志
-//   - recordDesktopRequestCount(): 桌面请求活跃度计数，人在桌面时只刷新今天方块
+//   - recordDesktopInteractionCount(): 桌面互动日志计数，人在桌面时只刷新今天方块
 //   - chat(messages, settings): 根据当前服务商组装请求体，发送聊天请求，处理 token 日志，并返回最终回复文本
 //   - analyzeImage(base64Image, visionSettings): 独立的视觉分析函数，调用配置的视觉模型描述图片内容
 
@@ -1672,9 +1672,9 @@ const API = {
     // ★★★★★ 后台回复接收 END：API 层 ★★★★★
     // ============================================================
 
-    // ★★★★★ 桌面 START：请求活跃度统计 ★★★★★
-    // 这里只记录“今天请求了几次”；如果人正停在桌面，只补今天这一格，避免整张热力图跟着重画。
-    recordDesktopRequestCount() {
+    // ★★★★★ 桌面 START：互动日志统计 ★★★★★
+    // 这里只记录用户与 AI 的互动请求；番茄钟、自动发朋友圈、角色日程和角色记忆由调用方明确跳过。
+    recordDesktopInteractionCount() {
         const settings = STATE.settings || {};
         const activity = settings.DESKTOP_ACTIVITY && typeof settings.DESKTOP_ACTIVITY === 'object'
             ? settings.DESKTOP_ACTIVITY
@@ -1697,10 +1697,10 @@ const API = {
 
         // 统计数据轻量写入 settings；不触发桌面重绘，保持发送链路安静。
         if (typeof Storage !== 'undefined' && Storage.saveSettings) {
-            Storage.saveSettings().catch(error => console.warn('[Desktop] request activity save failed:', error));
+            Storage.saveSettings().catch(error => console.warn('[Desktop] interaction activity save failed:', error));
         }
     },
-    // ★★★★★ 桌面 END：请求活跃度统计 ★★★★★
+    // ★★★★★ 桌面 END：互动日志统计 ★★★★★
 
     
     // ============================================
@@ -1844,7 +1844,8 @@ const API = {
     async chat(messages, settings) {
         // ★ 后台任务去重标记只属于“本次 API.chat 调用”，每次开始前先清空旧结果。
         this.lastAsyncBackendResult = null;
-        this.recordDesktopRequestCount();
+        // ★ 默认仍计入互动；只有明确标记的系统型生成请求才跳过，避免漏掉正常聊天和朋友圈互动。
+        if (settings.COUNT_AS_INTERACTION !== false) this.recordDesktopInteractionCount();
         const agentLogPhase = ['pre', 'post'].includes(settings.AGENT_LOG_PHASE) ? settings.AGENT_LOG_PHASE : '';
         const isAgentContextLog = !!agentLogPhase;
 
@@ -5116,14 +5117,14 @@ const App = {
                 const cell = document.createElement('span');
                 cell.dataset.dateKey = dateKey;
                 cell.className = `desktop-activity-cell level-${this.getDesktopActivityLevel(count)}`;
-                cell.dataset.tooltip = `${dateKey}：${isFuture ? '还没到这一天' : `${count} 次请求`}`;
+                cell.dataset.tooltip = `${dateKey}：${isFuture ? '还没到这一天' : `${count} 次互动`}`;
                 cell.title = cell.dataset.tooltip;
                 grid.appendChild(cell);
             }
         }
     },
 
-    // ★★★★★ 桌面 START：活跃日志点击浮窗 ★★★★★
+    // ★★★★★ 桌面 START：互动日志点击浮窗 ★★★★★
     showDesktopActivityTip(cell) {
         const card = cell?.closest('.desktop-activity-card');
         const text = cell?.dataset?.tooltip || cell?.title || '';
@@ -5156,7 +5157,7 @@ const App = {
     hideDesktopActivityTip() {
         document.querySelector('.desktop-activity-tip.show')?.classList.remove('show');
     },
-    // ★★★★★ 桌面 END：活跃日志点击浮窗 ★★★★★
+    // ★★★★★ 桌面 END：互动日志点击浮窗 ★★★★★
 
     renderDesktopActivityToday(activity = null, todayKey = TodoContext.getTodayKey()) {
         const grid = document.getElementById('desktop-activity-grid');
@@ -5174,7 +5175,7 @@ const App = {
         const todayCell = grid?.querySelector(`[data-date-key="${todayKey}"]`);
         if (!todayCell) return;
         todayCell.className = `desktop-activity-cell level-${this.getDesktopActivityLevel(count)}`;
-        todayCell.dataset.tooltip = `${todayKey}：${count} 次请求`;
+        todayCell.dataset.tooltip = `${todayKey}：${count} 次互动`;
         todayCell.title = todayCell.dataset.tooltip;
     },
 
@@ -8976,6 +8977,8 @@ const App = {
             MAX_TOKENS: 1200,
             TEMPERATURE: 0.3,
             CONTEXT_LIMIT: 10,
+            // ★ 自动/手动生成角色记忆都属于资料整理，不计入桌面的互动日志。
+            COUNT_AS_INTERACTION: false,
             CUSTOM_REQUEST_BODY_JSON: STATE.settings.CUSTOM_REQUEST_BODY_JSON || ''
         };
 
@@ -9378,6 +9381,8 @@ const App = {
             MAX_TOKENS: 2400,
             TEMPERATURE: 0.9,
             CONTEXT_LIMIT: 10,
+            // ★ 角色日程是系统生成内容，不代表用户和 AI 发生了一次互动。
+            COUNT_AS_INTERACTION: false,
             CUSTOM_REQUEST_BODY_JSON: STATE.settings.CUSTOM_REQUEST_BODY_JSON || ''
         };
 
@@ -13492,6 +13497,8 @@ const App = {
             const promptText = `【系统设定】\n${contact.prompt || ''}\n${characterScheduleSection}${worldInfoSection}\n【近期聊天】\n${historyText}\n\n【你最近的三条动态】\n${recentMoments}\n\n【本次内容方向】\n${direction}\n\n【可用发帖时间】\n${startText} 至 ${endText}\n\n【任务】\n你是 ${contact.name}。像真人使用朋友圈一样，发布一条自然、独立的文字动态。可以联系近期聊天，也可以写自己的生活和心情，也可以分享你喜欢的诗句、歌词或书摘。不要提到你是 AI，不要写动作括号，不要解释，不要重复最近动态，不要凭空创造会改变人物关系的重大事件。正文建议 10～180 字。\n只输出严格 JSON：{"text":"动态正文","timestamp":"带时区的 ISO 8601 时间"}`;
 
             let apiConfig = this.getMomentsApiConfig(1200);
+            // ★ 角色自动发朋友圈不是用户互动；朋友圈里的评论、回复仍沿用默认计数。
+            apiConfig.COUNT_AS_INTERACTION = false;
             apiConfig = this.applyAsyncBackendToMomentConfig(
                 apiConfig,
                 this.buildMomentsAsyncContext('generate_character_moment', {
@@ -15114,7 +15121,7 @@ const App = {
             this.handleDesktopCloudSync();
         });
 
-        // ★★★★★ 桌面 START：活跃日志热力图点击浮窗 ★★★★★
+        // ★★★★★ 桌面 START：互动日志热力图点击浮窗 ★★★★★
         document.getElementById('desktop-activity-grid')?.addEventListener('click', (event) => {
             const cell = event.target.closest('.desktop-activity-cell');
             if (!cell) return;
@@ -15126,7 +15133,7 @@ const App = {
             // 热力图浮窗只靠点击触发；点到别的小组件时顺手收起，手机端不会残留挡视线。
             if (!event.target.closest('.desktop-activity-card')) this.hideDesktopActivityTip();
         });
-        // ★★★★★ 桌面 END：活跃日志热力图点击浮窗 ★★★★★
+        // ★★★★★ 桌面 END：互动日志热力图点击浮窗 ★★★★★
 
         document.querySelector('.desktop-async-card')?.addEventListener('click', () => {
             safeSwitchView('async-backend');

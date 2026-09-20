@@ -32,6 +32,14 @@ const Pomodoro = {
             records: Array.isArray(source.records) ? source.records.filter(r => r && r.id && r.contactId).map(r => ({
                 ...r, remainingTurns: Math.max(0, Math.floor(Number(r.remainingTurns) || 0)),
                 consumedTurns: Array.isArray(r.consumedTurns) ? r.consumedTurns : []
+            })) : [],
+            // ★ 旧备份没有陪伴发言时补空数组；无归属轮次或空文本的数据不进入正式聊天上下文。
+            speeches: Array.isArray(source.speeches) ? source.speeches.filter(item => item && item.sessionId
+                && item.contactId && String(item.text || '').trim()).map(item => ({
+                sessionId: item.sessionId,
+                contactId: item.contactId,
+                text: String(item.text).trim(),
+                createdAt: Number(item.createdAt) || 0
             })) : []
         };
     },
@@ -225,7 +233,8 @@ const Pomodoro = {
     },
     getApiSettings() {
         // ★ 模型来源与记忆页相同：独立选择 API 预设，-1 或已删除的预设回退全局。
-        const settings = { ...STATE.settings, ASYNC_BACKEND_ENABLED: false, MAX_TOKENS: 400 };
+        // ★ 番茄钟里的开始、暂停、完成和拍头像都是陪伴功能，不写入桌面的互动日志。
+        const settings = { ...STATE.settings, ASYNC_BACKEND_ENABLED: false, COUNT_AS_INTERACTION: false, MAX_TOKENS: 400 };
         const preset = (STATE.settings.API_PRESETS || [])[this.data.apiPresetIndex];
         if (preset) {
             Object.assign(settings, { API_URL: preset.url, API_KEY: preset.key, MODEL: preset.model,
@@ -234,6 +243,17 @@ const Pomodoro = {
             if (Number(preset.max_tokens) > 0) settings.MAX_TOKENS = Number(preset.max_tokens);
         }
         return settings;
+    },
+    async rememberSpeech(contactId, sessionId, text) {
+        const cleanText = String(text || '').replace(/[\r\n]+/g, ' ').trim();
+        if (!contactId || !sessionId || !cleanText) return;
+
+        this.data.speeches.push({ contactId, sessionId, text: cleanText, createdAt: Date.now() });
+        // ★ 每个角色只留最近 10 条原话，正式聊天再按配置截取最后几条，避免本地数据无限增长。
+        const ownSpeeches = this.data.speeches.filter(item => item.contactId === contactId);
+        const expired = new Set(ownSpeeches.slice(0, Math.max(0, ownSpeeches.length - 10)));
+        if (expired.size) this.data.speeches = this.data.speeches.filter(item => !expired.has(item));
+        await this.save();
     },
     async speak(action = 'pat', endedSession = null) {
         if (action === 'pat' && this.speaking) return;
@@ -275,7 +295,10 @@ const Pomodoro = {
             const result = await API.chat([{ role: 'system', content: prompt }, /* ...this.recentMessages(contact), */
                 { role: 'user', content: actionText }], this.getApiSettings());
             if (isCurrent()) {
-                this.$('pomodoro-speech').textContent = String(result).replace(/<(think|thinking|thought)[^>]*>[\s\S]*?(<\/\1>|$)/gi, '').trim() || '我在这里陪你。';
+                const speechText = String(result).replace(/<(think|thinking|thought)[^>]*>[\s\S]*?(<\/\1>|$)/gi, '').trim() || '我在这里陪你。';
+                this.$('pomodoro-speech').textContent = speechText;
+                // ★ 只保存真正展示出来的当前回复；迟到且被新操作覆盖的回复不能混入聊天上下文。
+                await this.rememberSpeech(contact.id, s?.id, speechText);
             }
         } catch (error) {
             console.error('[Pomodoro] 陪伴回复失败', error);
@@ -303,8 +326,19 @@ const Pomodoro = {
             }
         }
         records.forEach(r => lines.push(`- 对方和你一起完成了一个${r.minutes}分钟的番茄钟：${cleanTask(r.task)}`));
+        // ★ 发言与所属番茄共用生命周期：进行中跟随实时状态，完成后跟随记录原有的三轮额度。
+        const visibleSessionIds = new Set(records.map(record => record.id));
+        if (session?.contactId === contactId && ['running', 'paused'].includes(session.status)) visibleSessionIds.add(session.id);
+        const speechLimit = Math.max(0, Math.floor(Number(CONFIG.POMODORO_SPEECH_CONTEXT_COUNT) || 0));
+        const speeches = speechLimit > 0
+            ? this.data.speeches.filter(item => item.contactId === contactId && visibleSessionIds.has(item.sessionId))
+                .sort((a, b) => a.createdAt - b.createdAt).slice(-speechLimit)
+            : [];
+        const speechPrompt = speeches.length
+            ? '\n\n【你刚才在番茄钟里说过的话】\n\n' + speeches.map(item => `- “${item.text}”`).join('\n')
+            : '';
         return { contactId, turnId, ids: records.map(r => r.id),
-            prompt: lines.length ? '【番茄钟】\n\n' + lines.join('\n') : '' };
+            prompt: lines.length ? '【番茄钟】\n\n' + lines.join('\n') + speechPrompt : '' };
     },
     async consume(packet) {
         if (!packet?.turnId) return;
