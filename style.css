@@ -11919,22 +11919,22 @@ body.dark-mode #pomodoro-settings-save {
 
 .pomodoro-history-item {
     display: flex;
-    align-items: center;
-    gap: 12px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
     padding: 11px 4px;
     border-top: 1px solid rgba(127, 127, 127, 0.16);
 }
 
 .pomodoro-history-task {
     min-width: 0;
-    flex: 1;
+    /* ★ 内容独占第一行，避免手机窄屏下被右侧时间信息挤成一字一行。 */
     line-height: 1.5;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
 
 .pomodoro-history-meta {
-    flex: 0 0 auto;
     color: #777;
     font-size: 0.78rem;
     white-space: nowrap;
