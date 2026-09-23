@@ -150,6 +150,13 @@ const Storage = {
         }
 
         STATE.settings = { ...CONFIG.DEFAULT, ...loadedSettings };
+        // ★ 主动消息设置是嵌套对象；老备份只有部分字段时也要逐项补默认值，不能被浅合并整块覆盖。
+        STATE.settings.PROACTIVE_MESSAGES = {
+            ...JSON.parse(JSON.stringify(CONFIG.DEFAULT.PROACTIVE_MESSAGES)),
+            ...(loadedSettings.PROACTIVE_MESSAGES && typeof loadedSettings.PROACTIVE_MESSAGES === 'object'
+                ? loadedSettings.PROACTIVE_MESSAGES
+                : {})
+        };
         // ★ 旧版只有一个 Agent 总开关；升级后它只迁移给 TODO，心笺保持默认关闭。
         if (loadedSettings.AGENT_TODO_MANAGER_ENABLED === undefined) {
             STATE.settings.AGENT_TODO_MANAGER_ENABLED = loadedSettings.AGENT_SKILL_ROUTER_ENABLED === true;

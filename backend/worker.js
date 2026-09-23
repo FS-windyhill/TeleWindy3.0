@@ -13,6 +13,8 @@ const MAX_BODY_BYTES = 20 * 1024 * 1024;
 // 正常执行结束会立刻删除；如果 consumer 被平台中断，最多也只保留 1 小时。
 const MAX_PAYLOAD_TTL_SECONDS = 60 * 60;
 const CUSTOM_PROVIDER_SLOTS = ["CUSTOM1", "CUSTOM2", "CUSTOM3"];
+// ★ 主动判断只需要最近一小段对话；限制为 15 条，避免心跳请求长期携带过多聊天正文。
+const PROACTIVE_CONTEXT_MESSAGE_LIMIT = 15;
 
 export class ChatJobObject {
   constructor(state, env) {
@@ -72,6 +74,284 @@ export class ChatJobObject {
   }
 }
 
+// ★★★★★ 主动消息角色对象 START ★★★★★
+// 每个“浏览器安装实例 × 角色”使用一个 Durable Object：
+// 1. 前端只同步主动判断需要的精简上下文，不上传图片和完整数据库；
+// 2. Alarm 到点后给角色一次“可以思考要不要联系”的机会，而不是强制发消息；
+// 3. 消息先写进 outbox，PWA 下次打开时仍能可靠取回；诊断事件只保留最近 20 条。
+export class ProactiveCharacterObject {
+  constructor(state, env) {
+    this.state = state;
+    this.env = env;
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+    const action = url.pathname.split("/").filter(Boolean).pop() || "status";
+
+    if (request.method === "PUT" && action === "sync") {
+      const capsule = sanitizeProactiveCapsule(await request.json());
+      const previous = await this.state.storage.get("capsule") || {};
+      const runtime = await this.readRuntime();
+      const nextCapsule = { ...previous, ...capsule, updatedAt: Date.now() };
+
+      // ★ 用户在上次主动消息后重新说话，视为已经回应；退避计数在服务端自动清零。
+      if (nextCapsule.lastUserAt > Number(runtime.lastProactiveGeneratedAt || 0)) {
+        runtime.unansweredCount = 0;
+      }
+
+      await this.state.storage.put("capsule", nextCapsule);
+      await this.state.storage.put("runtime", runtime);
+      await this.appendEvent("proactive_sync", {
+        enabled: nextCapsule.enabled,
+        contextCount: nextCapsule.messages.length
+      });
+
+      if (nextCapsule.enabled) {
+        const currentAlarm = await this.state.storage.getAlarm();
+        if (currentAlarm == null) {
+          const firstWakeAt = normalizeFutureWakeAt(
+            nextCapsule.nextWakeAt,
+            Date.now() + 30 * 60 * 1000,
+            nextCapsule.policy
+          );
+          await this.setNextAlarm(firstWakeAt, "initial_sync");
+        }
+      } else {
+        await this.state.storage.deleteAlarm();
+        runtime.nextWakeAt = null;
+        await this.state.storage.put("runtime", runtime);
+      }
+
+      return Response.json(await this.buildStatus());
+    }
+
+    if (request.method === "GET" && action === "status") {
+      return Response.json(await this.buildStatus());
+    }
+
+    if (request.method === "GET" && action === "messages") {
+      const outbox = await this.state.storage.get("outbox") || [];
+      return Response.json({ messages: outbox.filter((item) => item.acknowledged !== true) });
+    }
+
+    if (request.method === "POST" && action === "ack") {
+      const body = await request.json();
+      const ids = new Set(Array.isArray(body.messageIds) ? body.messageIds.map(String) : []);
+      const outbox = await this.state.storage.get("outbox") || [];
+      const nextOutbox = outbox.map((item) => ids.has(String(item.messageId))
+        ? { ...item, acknowledged: true, acknowledgedAt: Date.now() }
+        : item
+      ).slice(-50);
+      await this.state.storage.put("outbox", nextOutbox);
+      return Response.json({ ok: true });
+    }
+
+    if (request.method === "POST" && action === "run") {
+      const result = await this.runHeartbeat({ source: "manual" });
+      return Response.json(result);
+    }
+
+    return Response.json({ error: "not_found" }, { status: 404 });
+  }
+
+  async alarm(alarmInfo) {
+    await this.runHeartbeat({
+      source: alarmInfo?.isRetry ? "alarm_retry" : "alarm",
+      retryCount: Number(alarmInfo?.retryCount || 0)
+    });
+  }
+
+  async runHeartbeat(meta = {}) {
+    const capsule = await this.state.storage.get("capsule");
+    const runtime = await this.readRuntime();
+    const heartbeatRunId = crypto.randomUUID();
+    const startedAt = Date.now();
+
+    if (!capsule?.enabled) {
+      await this.appendEvent("proactive_disabled", { heartbeatRunId });
+      return { ok: true, skipped: "disabled", heartbeatRunId };
+    }
+
+    await this.appendEvent("proactive_alarm_fired", {
+      heartbeatRunId,
+      source: meta.source || "alarm",
+      retryCount: Number(meta.retryCount || 0)
+    });
+
+    const prefilter = getProactivePrefilter(capsule, runtime, startedAt);
+    if (!prefilter.ok) {
+      const nextWakeAt = normalizeFutureWakeAt(
+        prefilter.retryAt,
+        startedAt + getHeartbeatMs(capsule.policy),
+        capsule.policy
+      );
+      await this.appendEvent("proactive_prefilter_skipped", {
+        heartbeatRunId,
+        reason: prefilter.reason,
+        nextWakeAt
+      });
+      // ★ 预筛选也可能跨过自然日并清零当日计数；即使本轮不请求模型，也要把这个变化落盘。
+      await this.state.storage.put("runtime", runtime);
+      await this.setNextAlarm(nextWakeAt, `prefilter_${prefilter.reason}`);
+      return { ok: true, skipped: prefilter.reason, heartbeatRunId, nextWakeAt };
+    }
+
+    const upstream = resolveUpstream(capsule.apiUrl, "", "server_secret", this.env);
+    if (!upstream.ok) {
+      const nextWakeAt = startedAt + getHeartbeatMs(capsule.policy);
+      await this.appendEvent("proactive_run_failed", {
+        heartbeatRunId,
+        error: upstream.error,
+        nextWakeAt
+      });
+      await this.setNextAlarm(nextWakeAt, "provider_missing");
+      return { ok: false, error: upstream.error, heartbeatRunId, nextWakeAt };
+    }
+
+    try {
+      await this.appendEvent("proactive_model_request_started", {
+        heartbeatRunId,
+        provider: upstream.provider.id,
+        model: capsule.model
+      });
+      const response = await fetchWithTimeout(upstream.provider.url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${upstream.provider.apiKey}`
+        },
+        body: JSON.stringify({
+          model: sanitizeModel(capsule.model || this.env.DEFAULT_MODEL),
+          messages: buildProactiveDecisionMessages(capsule, runtime, startedAt),
+          temperature: clampNumber(capsule.temperature, 0, 2, 1),
+          max_tokens: 1000,
+          stream: false
+        })
+      }, UPSTREAM_TIMEOUT_MS, "proactive_upstream");
+
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(`proactive_upstream_${response.status}:${sanitizeLogText(text)}`);
+      }
+      const rawContent = extractAssistantContent(JSON.parse(text));
+      const decision = normalizeProactiveDecision(rawContent, capsule, startedAt);
+
+      runtime.lastHeartbeatAt = startedAt;
+      runtime.lastDecision = decision.decision;
+      runtime.lastHeartbeatRunId = heartbeatRunId;
+
+      let message = null;
+      if (decision.decision === "send") {
+        const outbox = await this.state.storage.get("outbox") || [];
+        message = {
+          messageId: `proactive_${heartbeatRunId}`,
+          heartbeatRunId,
+          role: "assistant",
+          content: decision.content,
+          sentAt: decision.sentAt,
+          generatedAt: Date.now(),
+          source: "proactive_worker",
+          acknowledged: false
+        };
+        outbox.push(message);
+        await this.state.storage.put("outbox", outbox.slice(-50));
+        runtime.lastProactiveGeneratedAt = message.generatedAt;
+        runtime.unansweredCount = Number(runtime.unansweredCount || 0) + 1;
+        runtime.dailyDateKey = getOffsetDateKey(startedAt, capsule.timezoneOffsetMinutes);
+        runtime.dailyCount = Number(runtime.dailyCount || 0) + 1;
+        await this.appendEvent("proactive_decision_send", {
+          heartbeatRunId,
+          sentAt: decision.sentAt,
+          contentLength: decision.content.length
+        });
+      } else {
+        await this.appendEvent("proactive_decision_silent", { heartbeatRunId });
+      }
+
+      const nextWakeAt = normalizeFutureWakeAt(
+        decision.nextWakeAt,
+        startedAt + getHeartbeatMs(capsule.policy),
+        capsule.policy
+      );
+      runtime.nextWakeAt = nextWakeAt;
+      await this.state.storage.put("runtime", runtime);
+      await this.setNextAlarm(nextWakeAt, "model_decision");
+      await this.appendEvent("proactive_model_request_finished", {
+        heartbeatRunId,
+        decision: decision.decision,
+        durationMs: Date.now() - startedAt,
+        nextWakeAt
+      });
+      console.log("proactive_heartbeat_done", {
+        heartbeatRunId,
+        decision: decision.decision,
+        contentLength: decision.content.length,
+        nextWakeAt,
+        durationMs: Date.now() - startedAt
+      });
+      return { ok: true, heartbeatRunId, decision: decision.decision, message, nextWakeAt };
+    } catch (error) {
+      const nextWakeAt = startedAt + getHeartbeatMs(capsule.policy);
+      await this.appendEvent("proactive_run_failed", {
+        heartbeatRunId,
+        error: sanitizeLogText(error?.message || String(error)),
+        nextWakeAt
+      });
+      await this.setNextAlarm(nextWakeAt, "run_failed");
+      console.error("proactive_heartbeat_failed", {
+        heartbeatRunId,
+        error: sanitizeLogText(error?.message || String(error)),
+        durationMs: Date.now() - startedAt
+      });
+      return { ok: false, heartbeatRunId, error: "proactive_run_failed", nextWakeAt };
+    }
+  }
+
+  async readRuntime() {
+    const runtime = await this.state.storage.get("runtime") || {};
+    return {
+      nextWakeAt: Number(runtime.nextWakeAt || 0) || null,
+      lastHeartbeatAt: Number(runtime.lastHeartbeatAt || 0),
+      lastDecision: runtime.lastDecision || "",
+      lastHeartbeatRunId: runtime.lastHeartbeatRunId || "",
+      lastProactiveGeneratedAt: Number(runtime.lastProactiveGeneratedAt || 0),
+      unansweredCount: Math.max(0, Number(runtime.unansweredCount || 0)),
+      dailyDateKey: runtime.dailyDateKey || "",
+      dailyCount: Math.max(0, Number(runtime.dailyCount || 0))
+    };
+  }
+
+  async setNextAlarm(nextWakeAt, reason) {
+    const safeTime = Math.max(Date.now() + 60 * 1000, Number(nextWakeAt || 0));
+    const runtime = await this.readRuntime();
+    runtime.nextWakeAt = safeTime;
+    await this.state.storage.put("runtime", runtime);
+    await this.state.storage.setAlarm(safeTime);
+    await this.appendEvent("proactive_next_alarm_set", { nextWakeAt: safeTime, reason });
+  }
+
+  async appendEvent(code, detail = {}) {
+    const events = await this.state.storage.get("events") || [];
+    events.push({ code, ts: Date.now(), ...detail });
+    await this.state.storage.put("events", events.slice(-20));
+  }
+
+  async buildStatus() {
+    const runtime = await this.readRuntime();
+    const events = await this.state.storage.get("events") || [];
+    const outbox = await this.state.storage.get("outbox") || [];
+    const capsule = await this.state.storage.get("capsule") || null;
+    return {
+      enabled: capsule?.enabled === true,
+      runtime,
+      pendingMessageCount: outbox.filter((item) => item.acknowledged !== true).length,
+      events: events.slice(-20)
+    };
+  }
+}
+// ★★★★★ 主动消息角色对象 END ★★★★★
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -111,6 +391,14 @@ export default {
 
       if (jobMatch && request.method === "DELETE") {
         return await deleteJob(jobMatch[1], request, env);
+      }
+
+      // ★ 主动消息接口只做鉴权和路由；角色状态、Alarm 与 outbox 都封装在独立 Durable Object。
+      const proactiveMatch = url.pathname.match(/^\/proactive\/([^/]+)\/(sync|status|messages|run|ack)$/i);
+      if (proactiveMatch && env.PROACTIVE_CHARACTER_OBJECT) {
+        const objectId = env.PROACTIVE_CHARACTER_OBJECT.idFromName(decodeURIComponent(proactiveMatch[1]));
+        const response = await env.PROACTIVE_CHARACTER_OBJECT.get(objectId).fetch(request);
+        return withCors(response, request, env);
       }
 
       return json({ error: "not_found" }, 404, request, env);
@@ -1287,6 +1575,154 @@ function extractJsonObject(rawText) {
     throw error;
   }
 }
+
+// ★★★★★ 主动消息协议与前置过滤 START ★★★★★
+function sanitizeProactiveCapsule(raw) {
+  const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  const policySource = source.policy && typeof source.policy === "object" ? source.policy : {};
+  const messages = Array.isArray(source.messages) ? source.messages.slice(-PROACTIVE_CONTEXT_MESSAGE_LIMIT).map((message) => ({
+    messageId: String(message?.messageId || "").slice(0, 120),
+    role: message?.role === "assistant" ? "assistant" : "user",
+    content: String(message?.content || "").slice(0, 4000),
+    eventAt: clampInteger(message?.eventAt, 0, Number.MAX_SAFE_INTEGER, 0)
+  })) : [];
+
+  return {
+    enabled: source.enabled === true,
+    characterId: String(source.characterId || "").slice(0, 120),
+    characterName: String(source.characterName || "角色").slice(0, 120),
+    characterPrompt: String(source.characterPrompt || "").slice(0, 20000),
+    contextPrompt: String(source.contextPrompt || "").slice(0, 30000),
+    messages,
+    apiUrl: normalizeUrl(source.apiUrl),
+    model: sanitizeModel(source.model || ""),
+    temperature: clampNumber(source.temperature, 0, 2, 1),
+    timezoneOffsetMinutes: clampInteger(source.timezoneOffsetMinutes, -14 * 60, 14 * 60, 0),
+    lastUserAt: clampInteger(source.lastUserAt, 0, Number.MAX_SAFE_INTEGER, 0),
+    lastChatAt: clampInteger(source.lastChatAt, 0, Number.MAX_SAFE_INTEGER, 0),
+    nextWakeAt: clampInteger(source.nextWakeAt, 0, Number.MAX_SAFE_INTEGER, 0) || null,
+    policy: {
+      activeStartMinutes: clampInteger(policySource.activeStartMinutes, 0, 1439, 9 * 60),
+      activeEndMinutes: clampInteger(policySource.activeEndMinutes, 0, 1439, 23 * 60),
+      minCooldownMinutes: clampInteger(policySource.minCooldownMinutes, 15, 7 * 24 * 60, 180),
+      recentChatQuietMinutes: clampInteger(policySource.recentChatQuietMinutes, 0, 24 * 60, 45),
+      dailyLimit: clampInteger(policySource.dailyLimit, 1, 20, 3),
+      unansweredLimit: clampInteger(policySource.unansweredLimit, 1, 10, 2),
+      heartbeatHours: clampNumber(policySource.heartbeatHours, 1, 168, 12)
+    }
+  };
+}
+
+function getProactivePrefilter(capsule, runtime, now) {
+  const policy = capsule.policy || {};
+  const dateKey = getOffsetDateKey(now, capsule.timezoneOffsetMinutes);
+  if (runtime.dailyDateKey !== dateKey) {
+    runtime.dailyDateKey = dateKey;
+    runtime.dailyCount = 0;
+  }
+  const localMinutes = getOffsetMinutesOfDay(now, capsule.timezoneOffsetMinutes);
+  if (!isMinuteInActiveWindow(localMinutes, policy.activeStartMinutes, policy.activeEndMinutes)) {
+    return { ok: false, reason: "quiet_hours", retryAt: getNextActiveStart(now, capsule.timezoneOffsetMinutes, policy.activeStartMinutes, policy.activeEndMinutes) };
+  }
+  if (runtime.dailyCount >= policy.dailyLimit) return { ok: false, reason: "daily_limit", retryAt: now + getHeartbeatMs(policy) };
+  if (runtime.unansweredCount >= policy.unansweredLimit) return { ok: false, reason: "unanswered_limit", retryAt: now + getHeartbeatMs(policy) };
+  const quietUntil = Number(capsule.lastChatAt || 0) + policy.recentChatQuietMinutes * 60 * 1000;
+  if (quietUntil > now) return { ok: false, reason: "recent_chat", retryAt: quietUntil };
+  const backoffFactor = Math.pow(2, Math.max(0, Number(runtime.unansweredCount || 0)));
+  const cooldownUntil = Number(runtime.lastProactiveGeneratedAt || 0) + policy.minCooldownMinutes * 60 * 1000 * backoffFactor;
+  if (cooldownUntil > now) return { ok: false, reason: "cooldown", retryAt: cooldownUntil };
+  return { ok: true };
+}
+
+function buildProactiveDecisionMessages(capsule, runtime, now) {
+  const history = capsule.messages.map((message) => {
+    const time = message.eventAt ? new Date(message.eventAt).toISOString() : "未知时间";
+    const speaker = message.role === "assistant" ? capsule.characterName : "对方";
+    return `[${time}] ${speaker}：${message.content}`;
+  }).join("\n");
+  const system = [
+    `你就是 ${capsule.characterName}。这不是用户发起的聊天，而是你在一个自主唤醒时刻决定要不要主动联系对方。`,
+    "外部定时器只提供思考机会，不要求你必须发送。没有真实而自然的理由时，请选择 silent。",
+    "不要解释决策过程，不要假装对方刚刚说了不存在的话，不要提及系统、定时器、JSON 或 AI。",
+    "只输出一个严格 JSON 对象，不要输出 Markdown：",
+    '{"decision":"silent或send","content":"send时填写消息正文，silent时为空字符串","sent_at":"send时填写带时区ISO 8601时间，silent时为null","next_wake_at":"下一次想重新判断的带时区ISO 8601时间，或null"}',
+    `当前真实时间：${new Date(now).toISOString()}`,
+    `连续主动未回复数：${Number(runtime.unansweredCount || 0)}`,
+    "sent_at 不得晚于当前时间；next_wake_at 必须晚于当前时间。"
+  ].join("\n");
+  const context = [
+    capsule.characterPrompt ? `【角色设定】\n${capsule.characterPrompt}` : "",
+    capsule.contextPrompt ? `【背景与记忆】\n${capsule.contextPrompt}` : "",
+    history ? `【最近聊天】\n${history}` : "【最近聊天】\n暂无聊天记录"
+  ].filter(Boolean).join("\n\n");
+  return [
+    { role: "system", content: system },
+    { role: "system", content: context },
+    { role: "user", content: "现在请自行决定保持沉默还是主动联系，并安排下一次唤醒。只输出 JSON。" }
+  ];
+}
+
+function normalizeProactiveDecision(rawText, capsule, now) {
+  let parsed;
+  try {
+    parsed = extractJsonObject(String(rawText || "")
+      .replace(/<(?:think|thinking|thought)[^>]*>[\s\S]*?(?:<\/(?:think|thinking|thought)>|$)/gi, "")
+      .replace(/```(?:json)?/gi, "").replace(/```/g, "").trim());
+  } catch {
+    parsed = null;
+  }
+  const decision = parsed?.decision === "send" ? "send" : "silent";
+  const content = decision === "send" ? String(parsed?.content || "").trim().slice(0, 4000) : "";
+  if (!content) return { decision: "silent", content: "", sentAt: null, nextWakeAt: parseProactiveTime(parsed?.next_wake_at) };
+  const candidateSentAt = parseProactiveTime(parsed?.sent_at);
+  // ★ Worker 模式是真正后台执行：展示时间只允许落在本次唤醒附近，不能任由模型倒填到几小时前。
+  const sentAtMs = candidateSentAt && candidateSentAt <= now && candidateSentAt >= now - 10 * 60 * 1000 ? candidateSentAt : now;
+  return { decision, content, sentAt: new Date(sentAtMs).toISOString(), nextWakeAt: parseProactiveTime(parsed?.next_wake_at) };
+}
+
+function parseProactiveTime(value) {
+  if (value == null || value === "") return null;
+  const time = new Date(String(value)).getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
+function normalizeFutureWakeAt(value, fallback, policy = {}) {
+  const now = Date.now();
+  const parsed = typeof value === "number" ? value : parseProactiveTime(value);
+  const minTime = now + 15 * 60 * 1000;
+  const maxTime = now + Math.max(1, Number(policy.heartbeatHours || 12)) * 60 * 60 * 1000;
+  if (!Number.isFinite(parsed) || parsed < minTime) return Math.max(minTime, Math.min(Number(fallback || maxTime), maxTime));
+  return Math.min(parsed, maxTime);
+}
+
+function getHeartbeatMs(policy = {}) {
+  return Math.max(1, Number(policy.heartbeatHours || 12)) * 60 * 60 * 1000;
+}
+
+function getOffsetDateKey(timestamp, offsetMinutes = 0) {
+  return new Date(Number(timestamp) - Number(offsetMinutes || 0) * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function getOffsetMinutesOfDay(timestamp, offsetMinutes = 0) {
+  const date = new Date(Number(timestamp) - Number(offsetMinutes || 0) * 60 * 1000);
+  return date.getUTCHours() * 60 + date.getUTCMinutes();
+}
+
+function isMinuteInActiveWindow(minutes, start, end) {
+  if (start === end) return true;
+  return start < end ? minutes >= start && minutes < end : minutes >= start || minutes < end;
+}
+
+function getNextActiveStart(now, offsetMinutes, startMinutes, endMinutes) {
+  const shifted = new Date(Number(now) - Number(offsetMinutes || 0) * 60 * 1000);
+  const currentMinutes = shifted.getUTCHours() * 60 + shifted.getUTCMinutes();
+  let daysToAdd = 0;
+  if (isMinuteInActiveWindow(currentMinutes, startMinutes, endMinutes)) return now;
+  if (startMinutes <= endMinutes && currentMinutes >= startMinutes) daysToAdd = 1;
+  const targetUtc = Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate() + daysToAdd, Math.floor(startMinutes / 60), startMinutes % 60, 0, 0);
+  return targetUtc + Number(offsetMinutes || 0) * 60 * 1000;
+}
+// ★★★★★ 主动消息协议与前置过滤 END ★★★★★
 
 function cleanAgentText(value, maxLength = 120) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, maxLength);

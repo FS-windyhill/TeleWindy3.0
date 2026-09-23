@@ -1173,7 +1173,9 @@ const API = {
                 agent_error: result.agent_error || '',
                 post_agent: result.post_agent || null,
                 multimodal_fallback: result.multimodal_fallback === true,
-                userMessageIndex: settings.ASYNC_BACKEND_USER_MESSAGE_INDEX ?? null
+                userMessageIndex: settings.ASYNC_BACKEND_USER_MESSAGE_INDEX ?? null,
+                // ★ 主动消息会按真实发送时间插入历史，中途数组下标可能变化；回填优先使用稳定消息 ID。
+                userMessageId: settings.ASYNC_BACKEND_USER_MESSAGE_ID || null
             };
             if (result.multimodal_fallback === true) this.notifyMultimodalFallback(job.jobId);
             return (result.result || '').trim();
@@ -1563,6 +1565,7 @@ const API = {
             jobId,
             contactId: settings.CONTACT_ID || null,
             userMessageIndex: settings.ASYNC_BACKEND_USER_MESSAGE_INDEX ?? null,
+            userMessageId: settings.ASYNC_BACKEND_USER_MESSAGE_ID || null,
             context: settings.ASYNC_BACKEND_CONTEXT || null,
             // ★ 番茄钟请求快照随 job 保存，避免恢复时聊天索引因删除/重生成发生偏移。
             pomodoroInjection: settings.POMODORO_INJECTION || null,
@@ -2656,6 +2659,7 @@ const UI = {
         const viewCharacterMemoryDetail = document.getElementById('view-character-memory-detail');
         const viewHeartNote = document.getElementById('view-heart-note');
         const viewHeartNoteDetail = document.getElementById('view-heart-note-detail');
+        const viewProactiveMessages = document.getElementById('view-proactive-messages');
         const viewAgent = document.getElementById('view-agent');
         const viewAsyncBackend = document.getElementById('view-async-backend');
         const viewWorldbook = document.getElementById('view-worldbook');
@@ -2671,6 +2675,7 @@ const UI = {
         // ★ 心笺也是探索子页，与角色记忆保持相同的显隐收口。
         if (viewHeartNote && viewName !== 'heart-note') viewHeartNote.style.display = 'none';
         if (viewHeartNoteDetail && viewName !== 'heart-note-detail') viewHeartNoteDetail.style.display = 'none';
+        if (viewProactiveMessages && viewName !== 'proactive-messages') viewProactiveMessages.style.display = 'none';
 
         // ★ 番茄钟独立页统一收口，切去其它页面不会停止计时。
         const viewPomodoro = document.getElementById('view-pomodoro');
@@ -3050,6 +3055,17 @@ const UI = {
             if (viewHeartNoteDetail) viewHeartNoteDetail.style.display = 'flex';
             if (bottomTabBar) bottomTabBar.style.display = 'none';
             App?.renderHeartNoteDetail?.();
+
+        } else if (viewName === 'proactive-messages') {
+            // ★ 主动消息是探索二级页；统一隐藏其它 page-view，避免后加页面遗漏显隐分支。
+            App.rememberReturnView('proactive-messages', STATE.currentMainView || 'explore');
+            appContainer.classList.remove('in-chat-mode');
+            document.querySelectorAll('.page-view').forEach(view => {
+                if (view !== this.els.viewChat) view.style.display = 'none';
+            });
+            if (viewProactiveMessages) viewProactiveMessages.style.display = 'flex';
+            if (bottomTabBar) bottomTabBar.style.display = 'none';
+            ProactiveMessages?.render?.();
 
         } else if (viewName === 'moments') {
             // ===========================
@@ -4388,6 +4404,8 @@ const App = {
         
         // [关键点 3] 绑定点击事件
         this.bindEvents();
+        // ★ 主动消息在联系人和设置加载完成后接管自己的页面事件、Worker 同步与纯前端补发检查。
+        await ProactiveMessages.init();
         this.syncAsyncBackendToggle();
         this.syncWorldSenseToggle();
         this.syncTodoContextToggles();
@@ -4519,8 +4537,10 @@ const App = {
                         // ★ 后台识图回填：
                         // Worker 完成识图后只返回文字描述，不保存原图。
                         // 这里把描述补回当初那条用户图片消息，保持现有 image_description 字段不变。
-                        if (job.image_description && Number.isInteger(pending.userMessageIndex)) {
-                            const imageMsg = contact.history[pending.userMessageIndex];
+                        if (job.image_description && (pending.userMessageId || Number.isInteger(pending.userMessageIndex))) {
+                            const imageMsg = pending.userMessageId
+                                ? contact.history.find(item => item?.messageId === pending.userMessageId)
+                                : contact.history[pending.userMessageIndex];
                             if (imageMsg && imageMsg.role === 'user' && imageMsg.images && !imageMsg.image_description) {
                                 imageMsg.image_description = job.image_description;
                             }
@@ -4537,6 +4557,10 @@ const App = {
                                 role: 'assistant',
                                 content: (job.result || '').trim(),
                                 timestamp: formatTimestamp(),
+                                messageId: ProactiveMessages.makeId('assistant'),
+                                eventAt: Date.now(),
+                                recordedAt: Date.now(),
+                                replyToMessageId: pending.userMessageId || '',
                                 asyncJobId: pending.jobId
                             };
                             contact.history.push(assistantMessage);
@@ -4545,7 +4569,9 @@ const App = {
                         }
 
                         // ★ 番茄钟后台恢复沿用请求时保存的快照，不消费后来才完成的新番茄。
-                        const pomodoroSource = contact.history[pending.userMessageIndex];
+                        const pomodoroSource = pending.userMessageId
+                            ? contact.history.find(item => item?.messageId === pending.userMessageId)
+                            : contact.history[pending.userMessageIndex];
                         await Pomodoro.consume(pending.pomodoroInjection || (pomodoroSource?.role === 'user' ? pomodoroSource.pomodoroInjection : null));
 
                         // ★★★★★ Post Agent：后台恢复后补跑 START ★★★★★
@@ -5268,6 +5294,7 @@ const App = {
             ['character-memory-detail', 'view-character-memory-detail'],
             ['heart-note', 'view-heart-note'],
             ['heart-note-detail', 'view-heart-note-detail'],
+            ['proactive-messages', 'view-proactive-messages'],
             ['agent', 'view-agent'],
             ['async-backend', 'view-async-backend'],
             ['worldbook', 'view-worldbook'],
@@ -10446,6 +10473,10 @@ const App = {
                 role: 'user', 
                 content: `[${timestamp}] ${userText}`, // 注意：content 里不含描述，描述是后台用的
                 timestamp: timestamp,
+                // ★ 稳定消息身份让主动补发可以按时间插入，而不会让后台任务只靠易变的数组下标找错消息。
+                messageId: ProactiveMessages.makeId('user'),
+                eventAt: Date.now(),
+                recordedAt: Date.now(),
                 momentInjectionTurnId: momentInjectionTurnId,
                 // ★ 存图和描述
                 images: currentImageBase64 ? [currentImageBase64] : null,
@@ -10467,11 +10498,15 @@ const App = {
             
             contact.history.push(newUserMsg);
             agentUserMessage = newUserMsg;
+            requestSettings.ASYNC_BACKEND_USER_MESSAGE_ID = newUserMsg.messageId;
             currentMomentTurnId = momentInjectionTurnId;
         }
 
         // 保存一次（包含刚刚优化的图片数据）
         await Storage.saveContacts();
+        if (!isReroll && agentUserMessage) {
+            ProactiveMessages.onUserMessage(contact).catch(error => console.warn('[主动消息] 用户消息同步失败:', error));
+        }
         UI.setLoading(true, contact.id);
 
         // ★★★★★ Agent：前置执行关闭 START ★★★★★
@@ -10795,12 +10830,16 @@ const App = {
             const asyncAgentStatus = usingAsyncBackend ? API.lastAsyncBackendResult?.agent_status : '';
             const asyncAgentError = usingAsyncBackend ? API.lastAsyncBackendResult?.agent_error : '';
             const asyncUserMessageIndex = usingAsyncBackend ? API.lastAsyncBackendResult?.userMessageIndex : null;
+            const asyncUserMessageId = usingAsyncBackend ? API.lastAsyncBackendResult?.userMessageId : null;
 
             // ★ 后台识图回填：
             // 前台轮询链路如果顺利等到 Worker 完成，也要把图片描述补进刚刚的用户消息。
             // 这样后续上下文仍然沿用原本的 image_description 注入逻辑。
-            if (asyncImageDescription && Number.isInteger(asyncUserMessageIndex)) {
-                const imageMsg = contact.history[asyncUserMessageIndex];
+            if (asyncImageDescription && (asyncUserMessageId || agentUserMessage?.messageId || Number.isInteger(asyncUserMessageIndex))) {
+                const stableUserMessageId = asyncUserMessageId || agentUserMessage?.messageId;
+                const imageMsg = stableUserMessageId
+                    ? contact.history.find(item => item?.messageId === stableUserMessageId)
+                    : contact.history[asyncUserMessageIndex];
                 if (imageMsg && imageMsg.role === 'user' && imageMsg.images && !imageMsg.image_description) {
                     imageMsg.image_description = asyncImageDescription;
                 }
@@ -10844,7 +10883,15 @@ const App = {
             // 两边拿到的是同一个 Worker job，所以前台保存时也写 asyncJobId，
             // 并且保存前先查一次，防止恢复链路已经把同一条回复写进 history。
             if (!alreadySavedByResume) {
-                const aiMessage = { role: 'assistant', content: aiText, timestamp: aiTimestamp };
+                const aiMessage = {
+                    role: 'assistant',
+                    content: aiText,
+                    timestamp: aiTimestamp,
+                    messageId: ProactiveMessages.makeId('assistant'),
+                    eventAt: Date.now(),
+                    recordedAt: Date.now(),
+                    replyToMessageId: agentUserMessage?.messageId || ''
+                };
                 if (asyncJobId) aiMessage.asyncJobId = asyncJobId;
                 contact.history.push(aiMessage);
                 newAiMessageIndex = contact.history.length - 1;

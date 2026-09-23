@@ -20,9 +20,22 @@ max_retries = 0
 name = "CHAT_JOB_OBJECT"
 class_name = "ChatJobObject"
 
+[[durable_objects.bindings]]
+name = "PROACTIVE_CHARACTER_OBJECT"
+class_name = "ProactiveCharacterObject"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["ChatJobObject"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["ProactiveCharacterObject"]
+
+# ★ Worker 控制台可按 proactive_* 事件检索每次唤醒；角色对象里另存最近 20 条精简事件。
+[observability]
+enabled = true
+head_sampling_rate = 1
 
 [vars]
 ALLOWED_ORIGIN = "https://795799.xyz,https://www.795799.xyz,http://127.0.0.1:5500"

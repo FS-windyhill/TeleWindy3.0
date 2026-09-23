@@ -13,6 +13,23 @@ Worker 在后台请求模型 API
 
 Worker 主要解决的是“浏览器页面被系统挂起后，请求被杀掉”的问题。它不是一个长期数据库，也不是多人共用的公共代理。推荐每个用户自己部署自己的私人 Worker。
 
+## 主动消息
+
+新版 Worker 额外提供“每个浏览器安装实例 × 每个角色”一个 `ProactiveCharacterObject`：
+
+```text
+PWA 同步角色设定、最近文字聊天和主动消息规则
+Durable Object Alarm 到点唤醒角色
+模型一次返回 decision / content / sent_at / next_wake_at
+发送结果进入 outbox，PWA 下次打开后取回并按 sent_at 插入聊天时间线
+```
+
+主动消息必须使用“Worker 内置 Key”模式。浏览器临时携带的 `client_key` 在页面关闭后不存在，无法供 Alarm 使用。没有配置 Worker 内置 Key 时，前端会自动使用纯前端补发模式。
+
+角色对象只保留最近 15 条文字聊天组成的精简决策上下文、运行计数、待领取消息和最近 20 条诊断事件，不保存图片 base64。Worker 控制台日志也只记录决策、耗时和正文长度，不打印模型 Key、完整 Prompt 或消息正文。
+
+部署时需要在原有 `ChatJobObject` 之外新增 `PROACTIVE_CHARACTER_OBJECT` binding，并保留 `wrangler.toml.example` 中的 `v2` migration。不要修改已经部署过的 `v1` migration。
+
 ## 两种后台调用模式
 
 网页里的“后台回复接收 / 后台调用模式”有两个选项。
@@ -151,8 +168,15 @@ type：追加评论 / 追问回复 / 重新生成评论
 POST /jobs
 GET /jobs/:jobId
 DELETE /jobs/:jobId
+PUT /proactive/:objectId/sync
+GET /proactive/:objectId/status
+GET /proactive/:objectId/messages
+POST /proactive/:objectId/run
+POST /proactive/:objectId/ack
 OPTIONS /*
 ```
+
+其中 `objectId` 由前端的安装实例 ID 和角色 ID 组合得到；不是用户名，也不要放 API Key。`messages` 只返回尚未确认领取的 outbox，前端成功写入本地聊天记录后再调用 `ack`，因此重复拉取也能靠 `messageId` 去重。
 
 ## 部署步骤（推荐：跟随前端 API Key）
 
