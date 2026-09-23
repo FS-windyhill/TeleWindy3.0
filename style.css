@@ -11632,13 +11632,6 @@ body.dark-mode .pomodoro-card {
         background: rgba(20, 20, 20, 0.9);
     }
 
-    /* ★ 手机上保留遮罩层次但取消全屏模糊，打开键盘和原生 select 时不再整屏重绘。 */
-    .modal-overlay,
-    body.dark-mode .modal-overlay,
-    body.dark-mode .modal-overlay.moments-bg {
-        backdrop-filter: none;
-        -webkit-backdrop-filter: none;
-    }
 }
 
 .pomodoro-card > p {
