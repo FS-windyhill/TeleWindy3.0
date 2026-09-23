@@ -38,6 +38,10 @@ const p = vm.runInContext('Pomodoro', context);
     assert.equal(p.data.speeches.length, 0);
     assert.equal(p.normalize({ session: { status: 'running' } }).session, null);
     p.data.contactId = 'a';
+    // ★ 后台心跳只允许更新探索入口，不能每秒重绘隐藏的番茄钟页面。
+    p.$('pomodoro-time').textContent = '后台不应改动';
+    await p.tick(Date.now(), { renderMode: 'indicator' });
+    assert.equal(p.$('pomodoro-time').textContent, '后台不应改动');
     p.openPicker();
     assert.equal(p.$('pomodoro-people').children[0].children[1].className, 'model-picker-result-name');
     p.data.minutes = 29;

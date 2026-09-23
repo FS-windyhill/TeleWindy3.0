@@ -47,8 +47,12 @@ const Pomodoro = {
         this.data = this.normalize(await DB.get(CONFIG.POMODORO_KEY));
         this.bind();
         await this.tick();
-        // ★ interval 只负责刷新显示，剩余时间始终用结束时间计算，切页不会暂停。
-        setInterval(() => this.tick().catch(e => this.report(e)), 1000);
+        // ★ 后台只校正状态和入口提示；真正停留在番茄钟页时才刷新时钟，避免每秒重绘整个应用。
+        setInterval(() => {
+            const view = this.$('view-pomodoro');
+            const renderMode = !document.hidden && view?.style.display !== 'none' ? 'clock' : 'indicator';
+            this.tick(Date.now(), { renderMode }).catch(e => this.report(e));
+        }, 1000);
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) this.tick().then(() => {
                 if (this.isViewing()) return this.markRead();
@@ -90,8 +94,10 @@ const Pomodoro = {
         const s = this.data.session;
         return s ? (s.status === 'running' ? Math.max(0, s.endAt - now) : s.remainingMs) : this.data.minutes * 60000;
     },
-    async tick(now = Date.now()) {
+    async tick(now = Date.now(), options = {}) {
+        const renderMode = options.renderMode || 'full';
         const s = this.data.session;
+        let stateChanged = false;
         if (s?.status === 'running' && this.remaining(now) <= 0 && !this.busy) {
             this.busy = true;
             try {
@@ -104,6 +110,7 @@ const Pomodoro = {
                 s.status = 'completed';
                 s.remainingMs = 0;
                 this.data.hasUnreadCompletion = !this.isViewing();
+                stateChanged = true;
                 await this.save();
                 this.$('pomodoro-speech').textContent = '这一轮完成啦，拍拍头像，和陪伴人说句话吧。';
                 // ★ 通知不依赖 API 成功，点击走统一页面路由；横幅关闭不会清除未读。
@@ -112,33 +119,68 @@ const Pomodoro = {
                 void this.speak('complete').catch(e => this.report(e));
             } finally { this.busy = false; }
         }
-        this.render();
+        // ★ 完成结算需要完整刷新一次；普通后台心跳只维护探索入口，不再碰头像、按钮和表单状态。
+        if (stateChanged || renderMode === 'full') this.render(now);
+        else if (renderMode === 'clock') {
+            this.renderClock(now);
+            this.renderEntry(now);
+        } else {
+            this.renderEntry(now);
+        }
     },
-    render() {
+    setText(id, value) {
+        const element = this.$(id);
+        const text = String(value);
+        if (element.textContent !== text) element.textContent = text;
+    },
+    setBoolean(id, property, value) {
+        const element = this.$(id);
+        const nextValue = !!value;
+        if (element[property] !== nextValue) element[property] = nextValue;
+    },
+    renderClock(now = Date.now()) {
+        const s = this.data.session;
+        const remainingMs = this.remaining(now);
+        const seconds = Math.ceil(remainingMs / 1000);
+        this.setText('pomodoro-time', `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`);
+        const offset = String(528 * (1 - remainingMs / (s?.durationMs || this.data.minutes * 60000)));
+        const progress = this.$('pomodoro-progress');
+        if (progress.style.strokeDashoffset !== offset) progress.style.strokeDashoffset = offset;
+    },
+    renderEntry(now = Date.now()) {
+        const seconds = Math.ceil(this.remaining(now) / 1000);
+        const clockText = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+        this.setText('pomodoro-entry-status', this.active() ? clockText : '');
+        const unreadDot = this.$('explore-pomodoro-unread-dot');
+        if (unreadDot.classList.contains('hidden') === this.data.hasUnreadCompletion) {
+            unreadDot.classList.toggle('hidden', !this.data.hasUnreadCompletion);
+        }
+    },
+    render(now = Date.now()) {
         const s = this.data.session;
         const contact = this.contact();
-        const seconds = Math.ceil(this.remaining() / 1000);
-        this.$('pomodoro-time').textContent = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+        this.renderClock(now);
         // ★ 老角色可能使用 Emoji 头像，不能把表情文字赋给 img.src。
         const imageAvatar = this.avatarSource(contact);
-        this.$('pomodoro-avatar').src = imageAvatar || 'assets/images/char.jpg';
-        this.$('pomodoro-avatar').hidden = !!contact && !imageAvatar;
-        this.$('pomodoro-avatar-emoji').textContent = contact && !imageAvatar ? (contact.avatar || '😊') : '';
-        this.$('pomodoro-name').textContent = contact?.name || (s ? '陪伴人已不存在' : '还没有选择陪伴人');
-        this.$('pomodoro-progress').style.strokeDashoffset = 528 * (1 - this.remaining() / (s?.durationMs || this.data.minutes * 60000));
-        this.$('pomodoro-toggle').textContent = s?.status === 'running' ? '暂停' : s?.status === 'paused' ? '继续专注' : s?.status === 'completed' ? '开始下一轮' : '开始专注';
-        this.$('pomodoro-toggle').disabled = this.busy;
+        const avatar = this.$('pomodoro-avatar');
+        const avatarSource = imageAvatar || 'assets/images/char.jpg';
+        const currentAvatarSource = typeof avatar.getAttribute === 'function' ? avatar.getAttribute('src') : avatar.src;
+        if (currentAvatarSource !== avatarSource) avatar.src = avatarSource;
+        this.setBoolean('pomodoro-avatar', 'hidden', !!contact && !imageAvatar);
+        this.setText('pomodoro-avatar-emoji', contact && !imageAvatar ? (contact.avatar || '😊') : '');
+        this.setText('pomodoro-name', contact?.name || (s ? '陪伴人已不存在' : '还没有选择陪伴人'));
+        this.setText('pomodoro-toggle', s?.status === 'running' ? '暂停' : s?.status === 'paused' ? '继续专注' : s?.status === 'completed' ? '开始下一轮' : '开始专注');
+        this.setBoolean('pomodoro-toggle', 'disabled', this.busy);
         // ★ “结束本轮”只在计时已开始后出现，暂停时仍可主动结束本轮。
         const active = this.active();
-        this.$('pomodoro-end').hidden = !active;
-        this.$('pomodoro-end').disabled = !active || this.busy;
-        this.$('pomodoro-task').disabled = this.active();
-        this.$('pomodoro-status').textContent = s?.status === 'running' ? '正在专注' : s?.status === 'paused' ? '已暂停' : s?.status === 'completed' ? '本轮已完成' : '准备开始';
+        this.setBoolean('pomodoro-end', 'hidden', !active);
+        this.setBoolean('pomodoro-end', 'disabled', !active || this.busy);
+        this.setBoolean('pomodoro-task', 'disabled', active);
+        this.setText('pomodoro-status', s?.status === 'running' ? '正在专注' : s?.status === 'paused' ? '已暂停' : s?.status === 'completed' ? '本轮已完成' : '准备开始');
         const today = new Date().toDateString();
         const records = this.data.records.filter(r => new Date(r.completedAt).toDateString() === today);
-        this.$('pomodoro-stats').textContent = `今天已经完成 ${records.length} 个番茄`;
-        this.$('pomodoro-entry-status').textContent = this.active() ? this.$('pomodoro-time').textContent : '';
-        this.$('explore-pomodoro-unread-dot').classList.toggle('hidden', !this.data.hasUnreadCompletion);
+        this.setText('pomodoro-stats', `今天已经完成 ${records.length} 个番茄`);
+        this.renderEntry(now);
     },
     async toggle() {
         await this.tick();

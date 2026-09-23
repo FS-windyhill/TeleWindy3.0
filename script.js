@@ -4166,7 +4166,8 @@ const UI = {
                 minute: '2-digit', 
                 hour12: false 
             });
-            if (timeEl) timeEl.textContent = timeStr;
+            // ★ 秒级检查只为及时跨分钟，显示内容没变时不重复写 DOM。
+            if (timeEl && timeEl.textContent !== timeStr) timeEl.textContent = timeStr;
         };
         updateTime(); 
         setInterval(updateTime, 1000); 
@@ -10609,7 +10610,8 @@ const App = {
 
         // ★★★★★ 番茄钟：按角色收集实时状态与完成通知 START ★★★★★
         // 先校正截止时间，避免后台定时器延迟导致已完成的番茄仍被写成进行中。
-        await Pomodoro.tick();
+        // ★ 正式聊天只需要校正番茄钟状态，不在聊天输入期间重绘隐藏的番茄钟页面。
+        await Pomodoro.tick(Date.now(), { renderMode: 'indicator' });
         const pomodoroUpdateInfo = Pomodoro.context(contact.id, currentMomentTurnId);
         requestSettings.POMODORO_INJECTION = pomodoroUpdateInfo;
         // 与朋友圈共用即时背景队列且排在它前面，统一走 auto / user / system 分流。
@@ -15012,20 +15014,7 @@ const App = {
             });
         }
 
-        // ================== 新增：输入框自动增高，配合图片自动升高 ==================
-        // 注意：UI.els.input 是你在第6部分定义的输入框引用
-        if (UI.els.input) {
-            UI.els.input.addEventListener('input', function() {
-                // 1. 先重置高度，防止删除文字后无法回缩
-                this.style.height = 'auto'; 
-                
-                // 2. 根据内容高度调整
-                // 38 是你 CSS 里的默认高度，防止空的时候缩得太小
-                // Math.min(this.scrollHeight, 150) 如果你想限制最大高度不超过150px
-                this.style.height = this.scrollHeight + 'px';
-            });
-        }
-        // ========================================================
+        // ★ 输入框自动增高已在 bindEvents 开头统一绑定，这里不能重复监听，否则每次输入都会强制布局两遍。
 
         // ★★★ 在这里加上视觉预设的按钮监听 ★★★
         if(UI.els.saveVisionPresetBtn) {
