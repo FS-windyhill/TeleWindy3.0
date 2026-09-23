@@ -13,6 +13,8 @@ const ProactiveMessages = {
     contextMessageLimit: 15,
     running: false,
     wakeTimer: null,
+    // ★ 运行状态不持久化：每次页面打开都以真实 Worker 能力检测为准，避免旧成功状态长期误导用户。
+    workerProbe: { status: 'idle', code: '', message: '尚未检测', signature: '', checkedAt: 0 },
 
     defaults() {
         return JSON.parse(JSON.stringify(CONFIG.DEFAULT.PROACTIVE_MESSAGES));
@@ -46,12 +48,16 @@ const ProactiveMessages = {
         return encodeURIComponent(`${this.installationId()}:${String(contactId)}`);
     },
 
-    workerModeAvailable() {
+    workerConfigured() {
         return !!(
             STATE.settings.ASYNC_BACKEND_URL
             && STATE.settings.ASYNC_BACKEND_TOKEN
-            && STATE.settings.ASYNC_BACKEND_KEY_MODE === 'server_secret'
+            && this.settings().followFrontendApiKey !== true
         );
+    },
+
+    workerModeAvailable() {
+        return this.workerConfigured() && this.workerProbe.status === 'ready';
     },
 
     workerBaseUrl(contactId) {
@@ -63,6 +69,10 @@ const ProactiveMessages = {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${STATE.settings.ASYNC_BACKEND_TOKEN || ''}`
         };
+    },
+
+    capabilityUrl() {
+        return `${String(STATE.settings.ASYNC_BACKEND_URL || '').replace(/\/+$/, '')}/proactive/capabilities`;
     },
 
     makeId(prefix = 'msg') {
@@ -117,17 +127,43 @@ const ProactiveMessages = {
             CUSTOM_REQUEST_BODY_JSON: STATE.settings.CUSTOM_REQUEST_BODY_JSON || '',
             ASYNC_BACKEND_ENABLED: false
         };
-        if (contact?.linkedPresetName) {
-            const preset = (STATE.settings.API_PRESETS || []).find(item => item?.name === contact.linkedPresetName);
-            if (preset) {
-                settings.API_URL = preset.url || settings.API_URL;
-                settings.API_KEY = preset.key || settings.API_KEY;
-                settings.MODEL = preset.model || settings.MODEL;
-                settings.TEMPERATURE = Number.isFinite(Number(preset.temperature)) ? Number(preset.temperature) : settings.TEMPERATURE;
-                settings.CUSTOM_REQUEST_BODY_JSON = preset.extra_body_json || '';
+        const selectedName = String(this.settings().apiPresetName || '__character__');
+        let preset = null;
+        if (selectedName === '__character__' && contact?.linkedPresetName) {
+            preset = (STATE.settings.API_PRESETS || []).find(item => item?.name === contact.linkedPresetName);
+        } else if (selectedName !== '__character__' && selectedName !== '__global__') {
+            preset = (STATE.settings.API_PRESETS || []).find(item => item?.name === selectedName);
+            // ★ 专属预设被删除或改名时回退旧版角色模型，不把请求悄悄发给数组里的另一个预设。
+            if (!preset && contact?.linkedPresetName) {
+                preset = (STATE.settings.API_PRESETS || []).find(item => item?.name === contact.linkedPresetName);
             }
         }
+        if (preset) {
+            settings.API_URL = preset.url || settings.API_URL;
+            settings.API_KEY = preset.key || settings.API_KEY;
+            settings.MODEL = preset.model || settings.MODEL;
+            settings.TEMPERATURE = Number.isFinite(Number(preset.temperature)) && preset.temperature !== '' ? Number(preset.temperature) : settings.TEMPERATURE;
+            settings.MAX_TOKENS = Number(preset.max_tokens) > 0 ? Number(preset.max_tokens) : settings.MAX_TOKENS;
+            settings.CUSTOM_REQUEST_BODY_JSON = preset.extra_body_json || '';
+        }
         return settings;
+    },
+
+    selectedPresetLabel() {
+        const selectedName = String(this.settings().apiPresetName || '__character__');
+        if (selectedName === '__character__') return '跟随角色对话模型';
+        if (selectedName === '__global__') return '跟随全局默认';
+        const preset = (STATE.settings.API_PRESETS || []).find(item => item?.name === selectedName);
+        return preset ? `${preset.name}（${preset.model || '未知模型'}）` : '预设已删除，回退角色模型';
+    },
+
+    getCapabilityApiUrls() {
+        const selectedIds = new Set(this.settings().characterIds.map(String));
+        let contacts = (STATE.contacts || []).filter(contact => selectedIds.has(String(contact.id)));
+        if (!contacts.length) contacts = (STATE.contacts || []).slice(0, 1);
+        const urls = contacts.map(contact => this.getRequestSettings(contact).API_URL).filter(Boolean);
+        if (!urls.length && STATE.settings.API_URL) urls.push(STATE.settings.API_URL);
+        return [...new Set(urls.map(url => String(url).trim()).filter(Boolean))];
     },
 
     getPolicy() {
@@ -139,17 +175,27 @@ const ProactiveMessages = {
         return {
             activeStartMinutes: timeToMinutes(settings.activeStart, 9 * 60),
             activeEndMinutes: timeToMinutes(settings.activeEnd, 23 * 60),
-            minCooldownMinutes: this.clamp(settings.minCooldownMinutes, 15, 10080, 180),
-            recentChatQuietMinutes: this.clamp(settings.recentChatQuietMinutes, 0, 1440, 45),
-            dailyLimit: this.clamp(settings.dailyLimit, 1, 20, 3),
-            unansweredLimit: this.clamp(settings.unansweredLimit, 1, 10, 2),
-            heartbeatHours: this.clamp(settings.heartbeatHours, 1, 168, 12)
+            minCooldownMinutes: this.duration(settings.minCooldownMinutes, 10080, 180, true),
+            recentChatQuietMinutes: this.duration(settings.recentChatQuietMinutes, 1440, 45, true),
+            dailyLimit: this.integer(settings.dailyLimit, 1, 20, 3),
+            unansweredLimit: this.integer(settings.unansweredLimit, 1, 10, 2),
+            heartbeatHours: this.duration(settings.heartbeatHours, 168, 12, false)
         };
     },
 
     clamp(value, min, max, fallback) {
         const number = Number(value);
         return Number.isFinite(number) ? Math.min(max, Math.max(min, number)) : fallback;
+    },
+
+    duration(value, max, fallback, allowZero = false) {
+        const number = Number(value);
+        if (!Number.isFinite(number) || (allowZero ? number < 0 : number <= 0)) return fallback;
+        return Math.min(max, number);
+    },
+
+    integer(value, min, max, fallback) {
+        return Math.round(this.clamp(value, min, max, fallback));
     },
 
     lastActivity(contact, role = null) {
@@ -180,6 +226,14 @@ const ProactiveMessages = {
 
     buildCapsule(contact) {
         const requestSettings = this.getRequestSettings(contact);
+        let requestBodyExtra = {};
+        try {
+            const parsed = JSON.parse(requestSettings.CUSTOM_REQUEST_BODY_JSON || '{}');
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) requestBodyExtra = parsed;
+        } catch (error) {
+            // ★ API 预设保存时已经校验 JSON；这里仍兜底为空对象，避免旧数据阻断整次后台同步。
+            console.warn('[主动消息] API 预设附加参数不是有效 JSON，Worker 模式将忽略:', error);
+        }
         const messages = (contact.history || []).slice(-this.contextMessageLimit).map(message => ({
             messageId: message.messageId,
             role: message.role === 'assistant' ? 'assistant' : 'user',
@@ -196,6 +250,8 @@ const ProactiveMessages = {
             apiUrl: requestSettings.API_URL || '',
             model: requestSettings.MODEL || '',
             temperature: requestSettings.TEMPERATURE,
+            maxTokens: requestSettings.MAX_TOKENS,
+            requestBodyExtra,
             timezoneOffsetMinutes: new Date().getTimezoneOffset(),
             lastUserAt: this.lastActivity(contact, 'user'),
             lastChatAt: this.lastActivity(contact),
@@ -204,11 +260,84 @@ const ProactiveMessages = {
         };
     },
 
+    async probeWorkerCapability(force = false) {
+        const settings = this.settings();
+        if (settings.followFrontendApiKey === true) {
+            this.workerProbe = { status: 'frontend', code: 'follow_frontend_key', message: '跟随前端 API Key', signature: '', checkedAt: Date.now() };
+            this.renderModeStatus();
+            return false;
+        }
+        if (!STATE.settings.ASYNC_BACKEND_URL || !STATE.settings.ASYNC_BACKEND_TOKEN) {
+            this.workerProbe = { status: 'unconfigured', code: 'backend_missing', message: '请填写 Worker URL 和访问密钥', signature: '', checkedAt: Date.now() };
+            this.renderModeStatus();
+            return false;
+        }
+
+        const apiUrls = this.getCapabilityApiUrls();
+        const signature = JSON.stringify([STATE.settings.ASYNC_BACKEND_URL, apiUrls]);
+        if (!force && this.workerProbe.signature === signature && Date.now() - Number(this.workerProbe.checkedAt || 0) < 30000) {
+            return this.workerProbe.status === 'ready';
+        }
+
+        this.workerProbe = { status: 'checking', code: '', message: '正在检测 Worker…', signature, checkedAt: Date.now() };
+        this.renderModeStatus();
+        try {
+            const response = await fetch(this.capabilityUrl(), {
+                method: 'POST',
+                headers: this.workerHeaders(),
+                body: JSON.stringify({ api_urls: apiUrls })
+            });
+            let data = {};
+            try { data = await response.json(); } catch (error) {}
+            if (!response.ok || data.ok !== true) {
+                const code = data.error || (response.status === 404 ? 'proactive_endpoint_missing' : response.status === 401 ? 'unauthorized' : `http_${response.status}`);
+                throw Object.assign(new Error(code), { code });
+            }
+            this.workerProbe = { status: 'ready', code: '', message: 'Worker 主动消息可用', signature, checkedAt: Date.now(), providers: data.providers || [] };
+            this.renderModeStatus();
+            return true;
+        } catch (error) {
+            const code = error?.code || error?.message || 'network_error';
+            const messages = {
+                proactive_endpoint_missing: 'Worker 版本过旧，请重新部署',
+                proactive_binding_missing: 'Worker 未配置主动消息 Durable Object',
+                unauthorized: '后台访问密钥错误',
+                upstream_provider_key_missing: 'Worker 模型 Key 未配置',
+                upstream_provider_not_configured: 'Worker 未配置该 API 服务商',
+                upstream_provider_url_missing: 'Worker 服务商 URL 未配置'
+            };
+            this.workerProbe = { status: 'error', code, message: messages[code] || `Worker 检测失败：${code}`, signature, checkedAt: Date.now() };
+            this.renderModeStatus();
+            return false;
+        }
+    },
+
+    renderModeStatus() {
+        const badge = document.getElementById('proactive-mode-badge');
+        const help = document.getElementById('proactive-mode-help');
+        const status = document.getElementById('proactive-worker-status');
+        const probe = this.workerProbe;
+        const worker = this.workerModeAvailable();
+        if (badge) badge.textContent = probe.status === 'checking' ? '检测中' : worker ? 'Worker 后台' : '纯前端';
+        if (help) help.textContent = probe.status === 'checking'
+            ? '正在确认新版主动消息接口、Durable Object 和模型 Secret。'
+            : worker
+                ? '角色会由 Durable Object Alarm 在后台唤醒；PWA 打开后取回待领取消息。'
+                : probe.status === 'error'
+                    ? `${probe.message}；当前会退回纯前端补发。`
+                    : '使用前端 API Key，在下次打开 PWA 后补做离线期间的主动判断。';
+        if (status) {
+            status.textContent = probe.message || '尚未检测';
+            status.className = `proactive-worker-status ${probe.status === 'ready' ? 'ready' : probe.status === 'error' ? 'error' : probe.status === 'checking' ? 'checking' : ''}`;
+        }
+    },
+
     async init() {
         this.settings();
         if (this.ensureMessageIds()) await Storage.saveContacts();
         this.bindUi();
         this.render();
+        this.probeWorkerCapability().catch(error => console.warn('[主动消息] Worker 能力检测失败:', error));
         // ★ 先让原有 pending job 恢复一拍，再同步/补发，避免启动时两套异步恢复抢同一份历史。
         setTimeout(() => this.runStartup().catch(error => console.warn('[主动消息] 启动检查失败:', error)), 1800);
     },
@@ -228,6 +357,19 @@ const ProactiveMessages = {
         document.getElementById('proactive-save-btn')?.addEventListener('click', () => this.saveFromUi());
         document.getElementById('proactive-test-btn')?.addEventListener('click', () => this.testSelectedCharacter());
         document.getElementById('proactive-debug-character')?.addEventListener('change', () => this.renderDebug());
+        document.getElementById('proactive-api-preset-btn')?.addEventListener('click', () => this.openApiPresetModal());
+        document.getElementById('proactive-api-cancel-btn')?.addEventListener('click', () => this.closeApiPresetModal());
+        document.getElementById('proactive-api-save-btn')?.addEventListener('click', () => this.saveApiPresetModal());
+        document.getElementById('proactive-api-modal')?.addEventListener('click', event => {
+            if (event.target?.id === 'proactive-api-modal') this.closeApiPresetModal();
+        });
+        document.getElementById('proactive-worker-token-toggle')?.addEventListener('click', () => {
+            const input = document.getElementById('proactive-worker-token');
+            const button = document.getElementById('proactive-worker-token-toggle');
+            if (!input || !button) return;
+            input.type = input.type === 'password' ? 'text' : 'password';
+            button.textContent = input.type === 'password' ? '显示' : '隐藏';
+        });
         window.addEventListener('pageshow', () => this.runStartup().catch(error => console.warn('[主动消息] pageshow 检查失败:', error)));
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) this.runStartup().catch(error => console.warn('[主动消息] 前台检查失败:', error));
@@ -247,18 +389,59 @@ const ProactiveMessages = {
         setValue('proactive-unanswered-limit', settings.unansweredLimit);
         setValue('proactive-heartbeat-hours', settings.heartbeatHours);
         setValue('proactive-catchup-hours', settings.catchupMaxHours);
+        setValue('proactive-worker-url', STATE.settings.ASYNC_BACKEND_URL || '');
+        setValue('proactive-worker-token', STATE.settings.ASYNC_BACKEND_TOKEN || '');
         const catchup = document.getElementById('proactive-catchup-enabled');
         if (catchup) catchup.checked = settings.catchupEnabled !== false;
-        const badge = document.getElementById('proactive-mode-badge');
-        const help = document.getElementById('proactive-mode-help');
-        const worker = this.workerModeAvailable();
-        if (badge) badge.textContent = worker ? 'Worker 后台' : '纯前端';
-        if (help) help.textContent = worker
-            ? '角色会由 Durable Object Alarm 在后台唤醒；PWA 打开后取回待领取消息。'
-            : '没有配置 Worker 内置 Key，会在下次打开 PWA 后补上离线期间可能发出的消息。';
+        const follow = document.getElementById('proactive-follow-frontend-key');
+        if (follow) follow.checked = settings.followFrontendApiKey === true;
+        const apiButton = document.getElementById('proactive-api-preset-btn');
+        if (apiButton) apiButton.title = `主动消息 API：${this.selectedPresetLabel()}`;
+        this.renderModeStatus();
         this.renderCharacters();
         this.renderDebugSelector();
         this.renderDebug();
+    },
+
+    openApiPresetModal() {
+        const modal = document.getElementById('proactive-api-modal');
+        const select = document.getElementById('proactive-api-preset-select');
+        if (!modal || !select) return;
+        select.textContent = '';
+        const addOption = (value, text) => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = text;
+            select.appendChild(option);
+        };
+        addOption('__character__', '-- 跟随角色对话模型 --');
+        addOption('__global__', '-- 跟随全局默认 --');
+        (STATE.settings.API_PRESETS || []).forEach(preset => {
+            if (preset?.name) addOption(String(preset.name), `${preset.name} (${preset.model || '未知模型'})`);
+        });
+        const selectedName = String(this.settings().apiPresetName || '__character__');
+        select.value = [...select.options].some(option => option.value === selectedName) ? selectedName : '__character__';
+        modal.classList.remove('hidden');
+    },
+
+    closeApiPresetModal() {
+        document.getElementById('proactive-api-modal')?.classList.add('hidden');
+    },
+
+    async saveApiPresetModal() {
+        const select = document.getElementById('proactive-api-preset-select');
+        this.settings().apiPresetName = select?.value || '__character__';
+        await Storage.saveSettings();
+        this.closeApiPresetModal();
+        await this.probeWorkerCapability(true);
+        await this.runStartup();
+        this.render();
+    },
+
+    onSharedBackendSettingsChanged() {
+        this.workerProbe = { status: 'idle', code: '', message: '等待重新检测', signature: '', checkedAt: 0 };
+        this.render();
+        this.probeWorkerCapability(true).catch(error => console.warn('[主动消息] 共用后端配置检测失败:', error));
     },
 
     renderCharacters() {
@@ -335,17 +518,27 @@ const ProactiveMessages = {
     async saveFromUi() {
         const settings = this.settings();
         const value = id => document.getElementById(id)?.value;
+        const heartbeatHours = Number(value('proactive-heartbeat-hours'));
+        const catchupHours = Number(value('proactive-catchup-hours'));
+        if (!Number.isFinite(heartbeatHours) || heartbeatHours <= 0 || !Number.isFinite(catchupHours) || catchupHours <= 0) {
+            alert('“最长多久再想一次”和“纯前端最多回看”需要填写大于 0 的数字，可以使用小数。');
+            return;
+        }
         settings.activeStart = value('proactive-active-start') || '09:00';
         settings.activeEnd = value('proactive-active-end') || '23:00';
-        settings.minCooldownMinutes = this.clamp(value('proactive-min-cooldown'), 15, 10080, 180);
-        settings.recentChatQuietMinutes = this.clamp(value('proactive-chat-quiet'), 0, 1440, 45);
-        settings.dailyLimit = this.clamp(value('proactive-daily-limit'), 1, 20, 3);
-        settings.unansweredLimit = this.clamp(value('proactive-unanswered-limit'), 1, 10, 2);
-        settings.heartbeatHours = this.clamp(value('proactive-heartbeat-hours'), 1, 168, 12);
-        settings.catchupMaxHours = this.clamp(value('proactive-catchup-hours'), 1, 168, 24);
+        settings.minCooldownMinutes = this.duration(value('proactive-min-cooldown'), 10080, 180, true);
+        settings.recentChatQuietMinutes = this.duration(value('proactive-chat-quiet'), 1440, 45, true);
+        settings.dailyLimit = this.integer(value('proactive-daily-limit'), 1, 20, 3);
+        settings.unansweredLimit = this.integer(value('proactive-unanswered-limit'), 1, 10, 2);
+        settings.heartbeatHours = this.duration(heartbeatHours, 168, 12, false);
+        settings.catchupMaxHours = this.duration(catchupHours, 168, 24, false);
         settings.catchupEnabled = document.getElementById('proactive-catchup-enabled')?.checked !== false;
+        settings.followFrontendApiKey = document.getElementById('proactive-follow-frontend-key')?.checked === true;
         settings.characterIds = [...document.querySelectorAll('[data-proactive-character-id]:checked')].map(input => String(input.dataset.proactiveCharacterId));
+        STATE.settings.ASYNC_BACKEND_URL = String(value('proactive-worker-url') || '').trim().replace(/\/+$/, '');
+        STATE.settings.ASYNC_BACKEND_TOKEN = String(value('proactive-worker-token') || '').trim();
         await Storage.saveSettings();
+        await this.probeWorkerCapability(true);
         await this.runStartup();
         this.render();
         if (typeof App !== 'undefined' && typeof App.showTopNotice === 'function') App.showTopNotice('主动消息设置已保存');
@@ -354,9 +547,10 @@ const ProactiveMessages = {
     async runStartup() {
         if (this.running) return;
         const settings = this.settings();
-        if (!settings.enabled) return;
         this.running = true;
         try {
+            if (this.workerConfigured()) await this.probeWorkerCapability();
+            if (!settings.enabled) return;
             const contacts = (STATE.contacts || []).filter(contact => settings.characterIds.map(String).includes(String(contact.id)));
             for (const contact of contacts) {
                 if (this.workerModeAvailable()) {
@@ -383,7 +577,8 @@ const ProactiveMessages = {
             .filter(([id, value]) => selected.has(String(id)) && Number(value) > 0)
             .map(([, value]) => Number(value));
         if (!times.length) return;
-        const delay = Math.min(2147483647, Math.max(1000, Math.min(...times) - Date.now()));
+        // ★ 不附加隐藏的秒级下限；用户设置和模型 next_wake_at 共同决定实际等待时间。
+        const delay = Math.min(2147483647, Math.max(0, Math.min(...times) - Date.now()));
         this.wakeTimer = setTimeout(() => this.runStartup().catch(error => console.warn('[主动消息] 定时检查失败:', error)), delay);
     },
 
@@ -483,7 +678,8 @@ const ProactiveMessages = {
         const key = String(contact.id);
         const existingNext = Number(settings.nextLocalWakeAtByChar[key] || 0);
         if (!force && !existingNext) {
-            settings.nextLocalWakeAtByChar[key] = now + 30 * 60 * 1000;
+            // ★ 首次默认半小时后思考，但不能超过用户自己填写的最长唤醒间隔。
+            settings.nextLocalWakeAtByChar[key] = now + Math.min(30 * 60 * 1000, this.getPolicy().heartbeatHours * 3600000);
             settings.lastLocalCheckAtByChar[key] = now;
             this.addLocalEvent(key, 'proactive_initial_wake_set', { nextWakeAt: settings.nextLocalWakeAtByChar[key] });
             return;
@@ -496,7 +692,7 @@ const ProactiveMessages = {
             return;
         }
         const lastCheck = Number(settings.lastLocalCheckAtByChar[key] || existingNext || now);
-        const windowStart = Math.max(lastCheck, now - this.clamp(settings.catchupMaxHours, 1, 168, 24) * 3600000);
+        const windowStart = Math.max(lastCheck, now - this.duration(settings.catchupMaxHours, 168, 24, false) * 3600000);
         const windowEnd = now;
         const heartbeatRunId = this.makeId('proactive_local');
         settings.lastLocalCheckAtByChar[key] = now;
@@ -525,9 +721,8 @@ const ProactiveMessages = {
             } else {
                 this.addLocalEvent(key, 'proactive_decision_silent', { heartbeatRunId });
             }
-            const minWake = now + 15 * 60000;
             const maxWake = now + this.getPolicy().heartbeatHours * 3600000;
-            settings.nextLocalWakeAtByChar[key] = result.nextWakeAt && result.nextWakeAt >= minWake ? Math.min(result.nextWakeAt, maxWake) : maxWake;
+            settings.nextLocalWakeAtByChar[key] = result.nextWakeAt && result.nextWakeAt > now ? Math.min(result.nextWakeAt, maxWake) : maxWake;
             runtime.nextWakeAt = settings.nextLocalWakeAtByChar[key];
             this.addLocalEvent(key, 'proactive_next_alarm_set', { nextWakeAt: runtime.nextWakeAt });
         } catch (error) {
@@ -571,6 +766,7 @@ const ProactiveMessages = {
         const button = document.getElementById('proactive-test-btn');
         if (button) button.disabled = true;
         try {
+            if (this.workerConfigured()) await this.probeWorkerCapability(true);
             if (this.workerModeAvailable()) {
                 await this.syncWorker(contact);
                 const response = await fetch(`${this.workerBaseUrl(contact.id)}/run`, { method: 'POST', headers: this.workerHeaders() });

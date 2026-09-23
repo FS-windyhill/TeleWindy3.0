@@ -5313,8 +5313,8 @@ const App = {
         // ★ 边缘滑返回只做页面级操作：输入、按钮、弹窗、横向滚动区先全部让路，避免误触。
         if (!target || target === document) return true;
         if (target.closest('input, textarea, select, button, a, label, [contenteditable="true"], [role="button"]')) return true;
-        if (target.closest('.modal:not(.hidden), .menu, .contact-menu, .message-actions-menu')) return true;
-        const hasVisibleModal = Array.from(document.querySelectorAll('.modal:not(.hidden), #modal-overlay:not(.hidden)')).some(el => {
+        if (target.closest('.modal:not(.hidden), .proactive-api-modal:not(.hidden), .menu, .contact-menu, .message-actions-menu')) return true;
+        const hasVisibleModal = Array.from(document.querySelectorAll('.modal:not(.hidden), .proactive-api-modal:not(.hidden), #modal-overlay:not(.hidden)')).some(el => {
             const style = getComputedStyle(el);
             return style.display !== 'none' && style.visibility !== 'hidden' && el.getClientRects().length > 0;
         });
@@ -5344,6 +5344,7 @@ const App = {
             'character-memory-detail': 'character-memory-detail-back-btn',
             'heart-note': 'heart-note-back-btn',
             'heart-note-detail': 'heart-note-detail-back-btn',
+            'proactive-messages': 'proactive-messages-back-btn',
             agent: 'agent-back-btn',
             'async-backend': 'async-backend-back-btn',
             worldbook: 'worldbook-back-btn',
@@ -9614,6 +9615,10 @@ const App = {
         this.syncAsyncBackendToggle();
 
         await Storage.saveSettings();
+        // ★ 两个页面共用 Worker URL/访问口令；在后台回复页保存后，主动消息状态立即重新检测。
+        if (typeof ProactiveMessages !== 'undefined' && typeof ProactiveMessages.onSharedBackendSettingsChanged === 'function') {
+            ProactiveMessages.onSharedBackendSettingsChanged();
+        }
 
         if (status) {
             status.textContent = '已保存';

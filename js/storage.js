@@ -157,6 +157,10 @@ const Storage = {
                 ? loadedSettings.PROACTIVE_MESSAGES
                 : {})
         };
+        // ★ 旧版主动消息直接借用后台回复的 Key 模式；只在字段缺失时迁移一次，之后两项功能各自管理。
+        if (loadedSettings.PROACTIVE_MESSAGES?.followFrontendApiKey === undefined) {
+            STATE.settings.PROACTIVE_MESSAGES.followFrontendApiKey = loadedSettings.ASYNC_BACKEND_KEY_MODE !== 'server_secret';
+        }
         // ★ 旧版只有一个 Agent 总开关；升级后它只迁移给 TODO，心笺保持默认关闭。
         if (loadedSettings.AGENT_TODO_MANAGER_ENABLED === undefined) {
             STATE.settings.AGENT_TODO_MANAGER_ENABLED = loadedSettings.AGENT_SKILL_ROUTER_ENABLED === true;

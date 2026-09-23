@@ -221,11 +221,13 @@ export class ProactiveCharacterObject {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${upstream.provider.apiKey}`
         },
+        // ★ 与前端 API 预设保持一致：附加参数可覆盖温度等高级项，但消息和非流式协议仍由主动消息控制。
         body: JSON.stringify({
           model: sanitizeModel(capsule.model || this.env.DEFAULT_MODEL),
-          messages: buildProactiveDecisionMessages(capsule, runtime, startedAt),
           temperature: clampNumber(capsule.temperature, 0, 2, 1),
-          max_tokens: 1000,
+          max_tokens: capsule.maxTokens,
+          ...(capsule.requestBodyExtra || {}),
+          messages: buildProactiveDecisionMessages(capsule, runtime, startedAt),
           stream: false
         })
       }, UPSTREAM_TIMEOUT_MS, "proactive_upstream");
@@ -323,7 +325,8 @@ export class ProactiveCharacterObject {
   }
 
   async setNextAlarm(nextWakeAt, reason) {
-    const safeTime = Math.max(Date.now() + 60 * 1000, Number(nextWakeAt || 0));
+    // ★ 不替用户偷偷增加分钟级下限；只保证时间不落在已经过去的毫秒里。
+    const safeTime = Math.max(Date.now(), Number(nextWakeAt || 0));
     const runtime = await this.readRuntime();
     runtime.nextWakeAt = safeTime;
     await this.state.storage.put("runtime", runtime);
@@ -391,6 +394,29 @@ export default {
 
       if (jobMatch && request.method === "DELETE") {
         return await deleteJob(jobMatch[1], request, env);
+      }
+
+      // ★ 主动消息页面用真实能力探测替代本地猜测：同时检查新版路由、DO binding 和所选 API 的 Worker Secret。
+      if (request.method === "POST" && url.pathname === "/proactive/capabilities") {
+        if (!env.PROACTIVE_CHARACTER_OBJECT) {
+          return json({ ok: false, error: "proactive_binding_missing" }, 503, request, env);
+        }
+        const body = await request.json();
+        const apiUrls = Array.isArray(body.api_urls) ? [...new Set(body.api_urls.map(normalizeUrl).filter(Boolean))].slice(0, 20) : [];
+        if (!apiUrls.length) {
+          return json({ ok: false, error: "upstream_provider_url_missing" }, 400, request, env);
+        }
+        const results = apiUrls.map((apiUrl) => {
+          const upstream = resolveUpstream(apiUrl, "", "server_secret", env);
+          return upstream.ok
+            ? { ok: true, apiUrl, provider: upstream.provider.id }
+            : { ok: false, apiUrl, error: upstream.error, provider: upstream.providerId || "" };
+        });
+        const failed = results.find((item) => !item.ok);
+        if (failed) {
+          return json({ ok: false, error: failed.error, providers: results }, 400, request, env);
+        }
+        return json({ ok: true, proactiveApi: true, providers: results }, 200, request, env);
       }
 
       // ★ 主动消息接口只做鉴权和路由；角色状态、Alarm 与 outbox 都封装在独立 Durable Object。
@@ -1580,6 +1606,7 @@ function extractJsonObject(rawText) {
 function sanitizeProactiveCapsule(raw) {
   const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const policySource = source.policy && typeof source.policy === "object" ? source.policy : {};
+  const requestBodyExtra = sanitizeRequestBodyExtra(source.requestBodyExtra);
   const messages = Array.isArray(source.messages) ? source.messages.slice(-PROACTIVE_CONTEXT_MESSAGE_LIMIT).map((message) => ({
     messageId: String(message?.messageId || "").slice(0, 120),
     role: message?.role === "assistant" ? "assistant" : "user",
@@ -1597,6 +1624,8 @@ function sanitizeProactiveCapsule(raw) {
     apiUrl: normalizeUrl(source.apiUrl),
     model: sanitizeModel(source.model || ""),
     temperature: clampNumber(source.temperature, 0, 2, 1),
+    maxTokens: clampInteger(source.maxTokens, 1, 4096, 1000),
+    requestBodyExtra: requestBodyExtra && typeof requestBodyExtra === "object" ? requestBodyExtra : {},
     timezoneOffsetMinutes: clampInteger(source.timezoneOffsetMinutes, -14 * 60, 14 * 60, 0),
     lastUserAt: clampInteger(source.lastUserAt, 0, Number.MAX_SAFE_INTEGER, 0),
     lastChatAt: clampInteger(source.lastChatAt, 0, Number.MAX_SAFE_INTEGER, 0),
@@ -1604,11 +1633,11 @@ function sanitizeProactiveCapsule(raw) {
     policy: {
       activeStartMinutes: clampInteger(policySource.activeStartMinutes, 0, 1439, 9 * 60),
       activeEndMinutes: clampInteger(policySource.activeEndMinutes, 0, 1439, 23 * 60),
-      minCooldownMinutes: clampInteger(policySource.minCooldownMinutes, 15, 7 * 24 * 60, 180),
-      recentChatQuietMinutes: clampInteger(policySource.recentChatQuietMinutes, 0, 24 * 60, 45),
+      minCooldownMinutes: clampNumber(policySource.minCooldownMinutes, 0, 7 * 24 * 60, 180),
+      recentChatQuietMinutes: clampNumber(policySource.recentChatQuietMinutes, 0, 24 * 60, 45),
       dailyLimit: clampInteger(policySource.dailyLimit, 1, 20, 3),
       unansweredLimit: clampInteger(policySource.unansweredLimit, 1, 10, 2),
-      heartbeatHours: clampNumber(policySource.heartbeatHours, 1, 168, 12)
+      heartbeatHours: clampPositiveNumber(policySource.heartbeatHours, 168, 12)
     }
   };
 }
@@ -1689,14 +1718,16 @@ function parseProactiveTime(value) {
 function normalizeFutureWakeAt(value, fallback, policy = {}) {
   const now = Date.now();
   const parsed = typeof value === "number" ? value : parseProactiveTime(value);
-  const minTime = now + 15 * 60 * 1000;
-  const maxTime = now + Math.max(1, Number(policy.heartbeatHours || 12)) * 60 * 60 * 1000;
-  if (!Number.isFinite(parsed) || parsed < minTime) return Math.max(minTime, Math.min(Number(fallback || maxTime), maxTime));
+  const maxTime = now + getHeartbeatMs(policy);
+  if (!Number.isFinite(parsed) || parsed <= now) {
+    const fallbackTime = Number(fallback);
+    return Number.isFinite(fallbackTime) && fallbackTime > now ? Math.min(fallbackTime, maxTime) : maxTime;
+  }
   return Math.min(parsed, maxTime);
 }
 
 function getHeartbeatMs(policy = {}) {
-  return Math.max(1, Number(policy.heartbeatHours || 12)) * 60 * 60 * 1000;
+  return clampPositiveNumber(policy.heartbeatHours, 168, 12) * 60 * 60 * 1000;
 }
 
 function getOffsetDateKey(timestamp, offsetMinutes = 0) {
@@ -2211,6 +2242,12 @@ function clampNumber(value, min, max, fallback) {
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
+}
+
+function clampPositiveNumber(value, max, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return fallback;
+  return Math.min(max, n);
 }
 
 function clampInteger(value, min, max, fallback) {

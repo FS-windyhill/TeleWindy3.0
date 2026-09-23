@@ -67,6 +67,10 @@ const CONFIG = {
         PROACTIVE_MESSAGES: {
             enabled: false,
             characterIds: [],
+            // ★ 主动消息的 Key 来源独立于普通后台回复；默认沿用旧版 client_key 的纯前端行为。
+            followFrontendApiKey: true,
+            // ★ __character__ 保留旧版“跟随角色聊天预设”；另一个内置值 __global__ 表示全局默认。
+            apiPresetName: '__character__',
             activeStart: '09:00',
             activeEnd: '23:00',
             minCooldownMinutes: 180,

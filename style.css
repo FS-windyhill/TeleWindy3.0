@@ -11418,6 +11418,20 @@ body.dark-mode .heart-note-setting-row input { background: rgba(255, 255, 255, 0
 .proactive-intro-card p { margin: 8px 0 0; color: #6b7080; font-size: .88rem; line-height: 1.55; }
 .proactive-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .proactive-badge { padding: 4px 9px; border-radius: 999px; background: rgba(115,94,255,.12); color: #6252c7; font-size: .76rem; white-space: nowrap; }
+.proactive-api-header-btn { position: absolute; right: 15px; min-width: 42px; height: 32px; padding: 0 10px; border: 1px solid rgba(120,120,140,.24); border-radius: 999px; background: rgba(255,255,255,.48); color: inherit; font-size: .76rem; font-weight: 700; cursor: pointer; }
+/* ★ 连接卡片只复刻后台回复接收的视觉语言，不复用其类名；两处表单仍绑定同一份设置。 */
+.proactive-worker-card { max-width: 760px; margin: 0 auto 14px; padding: 16px; border: 1px solid rgba(120,120,140,.16); border-radius: 18px; background: rgba(255,255,255,.72); box-shadow: 0 8px 28px rgba(40,45,70,.07); box-sizing: border-box; }
+.proactive-worker-status { color: #6b7080; font-size: .78rem; }
+.proactive-worker-status.ready { color: #23814d; }
+.proactive-worker-status.error { color: #b94343; }
+.proactive-worker-status.checking { color: #8a6a18; }
+.proactive-worker-note { margin: 8px 0 13px; color: #6b7080; font-size: .8rem; line-height: 1.5; }
+.proactive-worker-field { display: flex; flex-direction: column; gap: 7px; margin-top: 11px; color: #555b69; font-size: .82rem; }
+.proactive-worker-field > input, .proactive-worker-secret-wrap > input { width: 100%; padding: 9px 10px; border: 1px solid rgba(120,120,140,.25); border-radius: 12px; background: rgba(255,255,255,.82); color: inherit; box-sizing: border-box; }
+.proactive-worker-secret-wrap { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px; }
+.proactive-worker-secret-wrap button { min-width: 58px; border: 1px solid rgba(120,120,140,.25); border-radius: 12px; background: rgba(255,255,255,.56); color: inherit; }
+.proactive-worker-follow { display: flex; align-items: center; gap: 9px; margin-top: 14px; color: #555b69; font-size: .86rem; font-weight: 600; }
+.proactive-worker-follow input { width: 18px; height: 18px; }
 .proactive-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
 .proactive-settings-grid label { display: flex; flex-direction: column; gap: 7px; color: #555b69; font-size: .82rem; }
 .proactive-settings-grid input, .proactive-debug-card select { width: 100%; padding: 9px 10px; border: 1px solid rgba(120,120,140,.25); border-radius: 12px; background: rgba(255,255,255,.82); color: inherit; box-sizing: border-box; }
@@ -11436,10 +11450,27 @@ body.dark-mode .heart-note-setting-row input { background: rgba(255, 255, 255, 0
 .proactive-event-item { display: grid; grid-template-columns: 78px 1fr; gap: 8px; padding: 8px 10px; border-bottom: 1px solid rgba(125,125,150,.12); font-size: .78rem; }
 .proactive-event-item time { color: #8a8e99; }
 body.dark-mode .proactive-card { background: rgba(25,27,38,.78); border-color: rgba(255,255,255,.12); }
+body.dark-mode .proactive-worker-card { background: rgba(25,27,38,.78); border-color: rgba(255,255,255,.12); }
 body.dark-mode .proactive-intro-card p, body.dark-mode .proactive-settings-grid label { color: rgba(255,255,255,.72); }
+body.dark-mode .proactive-worker-note, body.dark-mode .proactive-worker-field, body.dark-mode .proactive-worker-follow { color: rgba(255,255,255,.72); }
 body.dark-mode .proactive-settings-grid input, body.dark-mode .proactive-debug-card select { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.18); color: #f5f5f7; }
+body.dark-mode .proactive-worker-field > input, body.dark-mode .proactive-worker-secret-wrap > input, body.dark-mode .proactive-worker-secret-wrap button, body.dark-mode .proactive-api-header-btn { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.18); color: #f5f5f7; }
 body.dark-mode .proactive-character-item, body.dark-mode .proactive-status-summary { background: rgba(255,255,255,.07); }
 @media (max-width: 620px) { .proactive-settings-grid { grid-template-columns: 1fr; } }
+
+.proactive-api-modal { position: fixed; inset: 0; z-index: 10020; display: grid; place-items: center; padding: 18px; background: rgba(20,22,30,.34); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); }
+.proactive-api-modal.hidden { display: none; }
+.proactive-api-dialog { width: min(86vw, 440px); padding: 20px; border: 1px solid rgba(255,255,255,.62); border-radius: 18px; background: rgba(255,255,255,.9); box-shadow: 0 16px 42px rgba(30,35,55,.22); box-sizing: border-box; }
+.proactive-api-dialog h3 { margin: 0 0 8px; }
+.proactive-api-dialog p { margin: 0 0 14px; color: #6b7080; font-size: .82rem; line-height: 1.5; }
+.proactive-api-dialog select { width: 100%; padding: 10px 11px; border: 1px solid rgba(120,120,140,.25); border-radius: 12px; background: rgba(255,255,255,.84); color: inherit; box-sizing: border-box; }
+.proactive-api-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 16px; }
+.proactive-api-actions button { min-width: 72px; padding: 8px 13px; border: 1px solid rgba(120,120,140,.24); border-radius: 999px; background: rgba(255,255,255,.68); color: inherit; }
+.proactive-api-actions .primary { color: white; background: var(--primary-color); border-color: transparent; }
+body.dark-mode .proactive-api-dialog { background: rgba(28,30,40,.95); border-color: rgba(255,255,255,.16); color: #f5f5f7; }
+body.dark-mode .proactive-api-dialog p { color: rgba(255,255,255,.68); }
+body.dark-mode .proactive-api-dialog select, body.dark-mode .proactive-api-actions button { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.18); color: #f5f5f7; }
+body.dark-mode .proactive-api-actions .primary { background: var(--primary-color); }
 /* ★★★★★ 主动消息 END ★★★★★ */
 body.dark-mode .heart-note-text { background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(245, 245, 245, 0.2); }
 body.dark-mode .heart-note-intro,

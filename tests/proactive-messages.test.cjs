@@ -6,6 +6,8 @@ global.CONFIG = {
         PROACTIVE_MESSAGES: {
             enabled: false,
             characterIds: [],
+            followFrontendApiKey: true,
+            apiPresetName: '__character__',
             activeStart: '09:00',
             activeEnd: '23:00',
             minCooldownMinutes: 180,
@@ -78,4 +80,41 @@ test('主动判断胶囊只携带最近 15 条文字聊天', () => {
     assert.equal(capsule.messages.length, 15);
     assert.equal(capsule.messages[0].messageId, 'message_5');
     assert.equal(capsule.messages[14].messageId, 'message_19');
+});
+
+test('主动消息可按稳定预设名称选择独立模型', () => {
+    STATE.settings.PROACTIVE_MESSAGES.apiPresetName = '主动专用';
+    STATE.settings.API_PRESETS = [{
+        name: '主动专用',
+        url: 'https://preset.example/v1/chat/completions',
+        key: 'preset-key',
+        model: 'preset-model',
+        temperature: 0.6,
+        max_tokens: 777,
+        extra_body_json: '{"top_p":0.8}'
+    }];
+    const settings = ProactiveMessages.getRequestSettings({ linkedPresetName: '' });
+    assert.equal(settings.API_URL, 'https://preset.example/v1/chat/completions');
+    assert.equal(settings.API_KEY, 'preset-key');
+    assert.equal(settings.MODEL, 'preset-model');
+    assert.equal(settings.MAX_TOKENS, 777);
+    const capsule = ProactiveMessages.buildCapsule({ id: 'char-preset', name: '测试角色', history: [] });
+    assert.equal(capsule.maxTokens, 777);
+    assert.deepEqual(capsule.requestBodyExtra, { top_p: 0.8 });
+});
+
+test('时间策略保留用户填写的小数且次数取整', () => {
+    Object.assign(STATE.settings.PROACTIVE_MESSAGES, {
+        minCooldownMinutes: 0.25,
+        recentChatQuietMinutes: 0.5,
+        heartbeatHours: 0.01,
+        dailyLimit: 2.4,
+        unansweredLimit: 1.6
+    });
+    const policy = ProactiveMessages.getPolicy();
+    assert.equal(policy.minCooldownMinutes, 0.25);
+    assert.equal(policy.recentChatQuietMinutes, 0.5);
+    assert.equal(policy.heartbeatHours, 0.01);
+    assert.equal(policy.dailyLimit, 2);
+    assert.equal(policy.unansweredLimit, 2);
 });

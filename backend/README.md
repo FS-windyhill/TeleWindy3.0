@@ -26,6 +26,8 @@ Durable Object Alarm 到点唤醒角色
 
 主动消息必须使用“Worker 内置 Key”模式。浏览器临时携带的 `client_key` 在页面关闭后不存在，无法供 Alarm 使用。没有配置 Worker 内置 Key 时，前端会自动使用纯前端补发模式。
 
+主动消息页里的 Worker URL 和访问口令与“后台回复接收”共用，但 Key 来源单独选择：勾选“跟随前端 API Key”时使用纯前端补发；取消勾选后，页面会调用 `POST /proactive/capabilities`，真实检查新版接口、Durable Object binding，以及主动消息所选 API 是否存在对应的 Worker Secret。旧版 Worker 返回 404 时会安全回退纯前端，不影响原有 `/jobs`。
+
 角色对象只保留最近 15 条文字聊天组成的精简决策上下文、运行计数、待领取消息和最近 20 条诊断事件，不保存图片 base64。Worker 控制台日志也只记录决策、耗时和正文长度，不打印模型 Key、完整 Prompt 或消息正文。
 
 部署时需要在原有 `ChatJobObject` 之外新增 `PROACTIVE_CHARACTER_OBJECT` binding，并保留 `wrangler.toml.example` 中的 `v2` migration。不要修改已经部署过的 `v1` migration。
@@ -173,6 +175,7 @@ GET /proactive/:objectId/status
 GET /proactive/:objectId/messages
 POST /proactive/:objectId/run
 POST /proactive/:objectId/ack
+POST /proactive/capabilities
 OPTIONS /*
 ```
 
