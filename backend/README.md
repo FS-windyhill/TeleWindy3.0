@@ -15,7 +15,7 @@ Worker 主要解决的是“浏览器页面被系统挂起后，请求被杀掉�
 
 ## 主动消息
 
-新版 Worker 额外提供“每个浏览器安装实例 × 每个角色”一个 `ProactiveCharacterObject`：
+新版 Worker 在现有 `CHAT_JOB_OBJECT` 中，为“每个浏览器安装实例 × 每个角色”创建一个主动角色对象：
 
 ```text
 PWA 同步角色设定、最近文字聊天和主动消息规则
@@ -24,13 +24,13 @@ Durable Object Alarm 到点唤醒角色
 发送结果进入 outbox，PWA 下次打开后取回并按 sent_at 插入聊天时间线
 ```
 
-主动消息必须使用“Worker 内置 Key”模式。浏览器临时携带的 `client_key` 在页面关闭后不存在，无法供 Alarm 使用。没有配置 Worker 内置 Key 时，前端会自动使用纯前端补发模式。
+主动消息支持三种运行方式：浏览器补发、私人 Worker 加密凭据、Worker Secret。私人 Worker 模式会把当前角色 API Key 经 HTTPS 发给用户自己的 Worker，使用 `APP_TOKEN` 派生的 AES-GCM key 加密后保存；接口不提供明文读取能力。更重视隔离的用户仍可选择 Worker Secret。
 
-主动消息页里的 Worker URL 和访问口令与“后台回复接收”共用，但 Key 来源单独选择：勾选“跟随前端 API Key”时使用纯前端补发；取消勾选后，页面会调用 `POST /proactive/capabilities`，真实检查新版接口、Durable Object binding，以及主动消息所选 API 是否存在对应的 Worker Secret。旧版 Worker 返回 404 时会安全回退纯前端，不影响原有 `/jobs`。
+主动消息页里的 Worker URL 和访问口令与“后台回复接收”共用。页面会调用 `POST /proactive/capabilities` 检查新版接口、现有 `CHAT_JOB_OBJECT` binding 和所选凭据模式；旧版 Worker 返回 404 时会安全回退纯前端，不影响原有 `/jobs`。
 
 角色对象只保留最近 15 条文字聊天组成的精简决策上下文、运行计数、待领取消息和最近 20 条诊断事件，不保存图片 base64。Worker 控制台日志也只记录决策、耗时和正文长度，不打印模型 Key、完整 Prompt 或消息正文。
 
-部署时需要在原有 `ChatJobObject` 之外新增 `PROACTIVE_CHARACTER_OBJECT` binding，并保留 `wrangler.toml.example` 中的 `v2` migration。不要修改已经部署过的 `v1` migration。
+主动消息直接复用原有 `CHAT_JOB_OBJECT` binding，不需要新增 Durable Object migration。已经部署过独立 `PROACTIVE_CHARACTER_OBJECT` 的用户可以保留旧 binding 一段时间，新 Worker 会在拉取和确认消息时兼容旧 outbox。
 
 ## 两种后台调用模式
 

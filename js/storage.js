@@ -161,6 +161,12 @@ const Storage = {
         if (loadedSettings.PROACTIVE_MESSAGES?.followFrontendApiKey === undefined) {
             STATE.settings.PROACTIVE_MESSAGES.followFrontendApiKey = loadedSettings.ASYNC_BACKEND_KEY_MODE !== 'server_secret';
         }
+        // ★ 主动消息 v3 把“浏览器运行 / 私人 Worker / Worker Secret”拆开；旧布尔值按原语义无损迁移。
+        if (loadedSettings.PROACTIVE_MESSAGES?.executionMode === undefined) {
+            STATE.settings.PROACTIVE_MESSAGES.executionMode = STATE.settings.PROACTIVE_MESSAGES.followFrontendApiKey
+                ? 'frontend'
+                : 'server_secret';
+        }
         // ★ 旧版只有一个 Agent 总开关；升级后它只迁移给 TODO，心笺保持默认关闭。
         if (loadedSettings.AGENT_TODO_MANAGER_ENABLED === undefined) {
             STATE.settings.AGENT_TODO_MANAGER_ENABLED = loadedSettings.AGENT_SKILL_ROUTER_ENABLED === true;

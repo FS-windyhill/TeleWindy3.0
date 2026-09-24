@@ -475,7 +475,7 @@
                 <!-- ★★★★★ 世界感知：探索页入口 END ★★★★★ -->
 
 
-                <!-- ★★★★★ 后台回复接收 ★★★★★ -->
+                <!-- ★★★★★ 后台运行服务 ★★★★★ -->
                 <li id="explore-async-backend-btn">
                     <span class="icon">
                         <svg width="0.95em" height="0.95em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
@@ -489,8 +489,8 @@
                             <path d="M14.83 9.17l4.24-4.24"></path>
                         </svg>
                     </span>
-                    <span class="text">后台回复接收</span>
-                    <label class="async-backend-switch" title="启用/关闭后台回复接收">
+                    <span class="text">后台运行服务</span>
+                    <label class="async-backend-switch" title="启用/关闭切屏后台回复">
                         <input type="checkbox" id="async-backend-enable-toggle" checked>
                         <span class="app-switch-slider async-backend-slider"></span>
                     </label>
@@ -794,38 +794,57 @@
                     <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
                 </button>
                 <h1>主动消息</h1>
-                <button id="proactive-api-preset-btn" class="proactive-api-header-btn" type="button" title="选择主动消息 API 预设">API</button>
+                <button id="proactive-api-preset-btn" class="header-icon-btn right" type="button" title="选择主动消息 API 预设" aria-label="选择主动消息 API 预设">
+                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                </button>
             </header>
             <main class="proactive-page">
-                <section class="proactive-card proactive-intro-card">
-                    <div class="proactive-title-row"><strong>让角色自己决定是否联系你</strong><span id="proactive-mode-badge" class="proactive-badge">纯前端</span></div>
-                    <p id="proactive-mode-help">没有配置 Worker 时，会在下次打开 PWA 后补上离线期间可能发出的消息。</p>
+                <section class="proactive-card">
+                    <div class="proactive-title-row"><div class="input-label">让角色自己决定是否联系你</div><span id="proactive-mode-badge" class="proactive-badge">纯前端</span></div>
+                    <p id="proactive-mode-help" class="input-hint">没有配置 Worker 时，会在下次打开 PWA 后补上离线期间可能发出的消息。</p>
                 </section>
-                <!-- ★ Worker URL 与访问口令和“后台回复接收”共用同一份设置；这里只做主动消息自己的编辑入口。 -->
-                <section class="proactive-worker-card">
-                    <div class="proactive-title-row"><strong>Worker 后台连接</strong><span id="proactive-worker-status" class="proactive-worker-status">尚未检测</span></div>
-                    <p class="proactive-worker-note">与“后台回复接收”共用同一套 TeleWindy 后端连接配置，在任意一处修改都会同步生效。</p>
-                    <label class="proactive-worker-field"><span>Worker URL</span><input id="proactive-worker-url" type="url" placeholder="https://your-worker.workers.dev"></label>
-                    <label class="proactive-worker-field"><span>后台访问密钥</span><span class="proactive-worker-secret-wrap"><input id="proactive-worker-token" type="password" autocomplete="off" placeholder="same as Worker APP_TOKEN"><button id="proactive-worker-token-toggle" type="button" title="显示或隐藏后台访问密钥">显示</button></span></label>
-                    <label class="proactive-worker-follow"><input id="proactive-follow-frontend-key" type="checkbox"><span>跟随前端 API Key</span></label>
-                    <p class="proactive-worker-note">使用当前选定 API 预设里的 URL 和 Key 完成主动判断，适合私人配置、中转站和任意 OpenAI 兼容接口；页面关闭后会在下次打开 PWA 时补做判断。</p>
+                <!-- ★ 主动消息页只选择运行方式；Worker URL、访问密钥和连接状态统一放在“后台运行服务”。 -->
+                <section class="proactive-card">
+                    <!-- ★ 执行位置与 API 预设来源分开：三种模式都继续使用上方选定的角色/全局预设。 -->
+                    <div class="input-group">
+                        <label for="proactive-execution-mode">主动消息运行方式</label>
+                        <select id="proactive-execution-mode">
+                            <option value="frontend">浏览器运行（零配置）</option>
+                            <option value="private_worker">私人 Worker 后台（推荐）</option>
+                            <option value="server_secret">Worker Secret 后台（高级）</option>
+                        </select>
+                        <div class="async-backend-note proactive-mode-note">
+                            浏览器运行：零配置，回到页面后补做判断。<br>
+                            私人 Worker：跟随角色 API，并将 Key 加密保存到你的 Worker。<br>
+                            Worker Secret：跟随角色 URL 和模型，Key 由 Cloudflare Secret 提供。
+                        </div>
+                        <!-- ★ 能力检测不请求模型；连接结果与实际回退状态分开显示，避免失败时只看到“纯前端”。 -->
+                        <div class="proactive-worker-check">
+                            <div><span>连接状态</span><strong id="proactive-worker-check-status">尚未检测</strong></div>
+                            <div><span>实际运行</span><strong id="proactive-worker-actual-mode">浏览器运行</strong></div>
+                            <button id="proactive-worker-probe-btn" type="button">检测并应用运行方式</button>
+                        </div>
+                    </div>
                 </section>
                 <section class="proactive-card proactive-settings-grid">
-                    <label><span>允许联系时段</span><span class="proactive-inline"><input id="proactive-active-start" type="time"><em>至</em><input id="proactive-active-end" type="time"></span></label>
-                    <label><span>最短主动间隔（分钟）</span><input id="proactive-min-cooldown" type="number" min="0" step="any" inputmode="decimal"></label>
-                    <label><span>正常聊天后安静（分钟）</span><input id="proactive-chat-quiet" type="number" min="0" step="any" inputmode="decimal"></label>
-                    <label><span>每日最多发送</span><input id="proactive-daily-limit" type="number" min="1" max="20" step="1" inputmode="numeric"></label>
-                    <label><span>未回复时最多连发</span><input id="proactive-unanswered-limit" type="number" min="1" max="10" step="1" inputmode="numeric"></label>
-                    <label><span>最长多久再想一次（小时）</span><input id="proactive-heartbeat-hours" type="number" step="any" inputmode="decimal"></label>
-                    <label class="proactive-check-row"><input id="proactive-catchup-enabled" type="checkbox"><span>纯前端模式允许离线补发</span></label>
-                    <label><span>纯前端最多回看（小时）</span><input id="proactive-catchup-hours" type="number" step="any" inputmode="decimal"></label>
+                    <div class="input-group"><label>允许联系时段</label><span class="proactive-inline"><input id="proactive-active-start" type="time"><em>至</em><input id="proactive-active-end" type="time"></span></div>
+                    <div class="input-group"><label for="proactive-min-cooldown">最短主动间隔（分钟）</label><input id="proactive-min-cooldown" type="number" min="0" step="any" inputmode="decimal"></div>
+                    <div class="input-group"><label for="proactive-chat-quiet">正常聊天后安静（分钟）</label><input id="proactive-chat-quiet" type="number" min="0" step="any" inputmode="decimal"></div>
+                    <div class="input-group"><label for="proactive-daily-limit">每日最多发送</label><input id="proactive-daily-limit" type="number" min="1" max="20" step="1" inputmode="numeric"></div>
+                    <div class="input-group"><label for="proactive-unanswered-limit">未回复时最多连发</label><input id="proactive-unanswered-limit" type="number" min="1" max="10" step="1" inputmode="numeric"></div>
+                    <div class="input-group"><label for="proactive-heartbeat-hours">最长多久再想一次（小时）</label><input id="proactive-heartbeat-hours" type="number" step="any" inputmode="decimal"></div>
+                    <div class="input-group"><label class="proactive-check-row"><input id="proactive-catchup-enabled" type="checkbox"><span>纯前端模式允许离线补发</span></label></div>
+                    <div class="input-group"><label for="proactive-catchup-hours">纯前端最多回看（小时）</label><input id="proactive-catchup-hours" type="number" step="any" inputmode="decimal"></div>
                 </section>
                 <section class="proactive-card">
-                    <div class="proactive-title-row"><strong>参与角色</strong><button id="proactive-save-btn" class="primary">保存并同步</button></div>
+                    <div class="proactive-title-row"><div class="input-label">参与角色</div><button id="proactive-save-btn" class="primary">保存并同步</button></div>
                     <div id="proactive-character-list" class="proactive-character-list"></div>
                 </section>
                 <section class="proactive-card proactive-debug-card">
-                    <div class="proactive-title-row"><strong>运行状态</strong><button id="proactive-test-btn" type="button">立即测试一次</button></div>
+                    <div class="proactive-title-row"><div class="input-label">运行状态</div><button id="proactive-test-btn" type="button">立即测试一次</button></div>
                     <select id="proactive-debug-character"></select>
                     <div id="proactive-status-summary" class="proactive-status-summary">尚未运行</div>
                     <div id="proactive-event-list" class="proactive-event-list"></div>
@@ -870,7 +889,7 @@
         </div>
         <!-- ★★★★★ Agent 页面 END ★★★★★ -->
 
-        <!-- 👇 新加的：后台回复接收 👇 -->
+        <!-- ★★★★★ 后台运行服务：连接配置与能力开关统一入口 START ★★★★★ -->
         <div id="view-async-backend" class="page-view" style="display: none;">
             <header class="app-header">
                 <button id="async-backend-back-btn" class="header-icon-btn left" title="返回探索">
@@ -878,7 +897,7 @@
                         <polyline points="15 18 9 12 15 6"></polyline>
                     </svg>
                 </button>
-                <h1>后台回复接收</h1>
+                <h1>后台运行服务</h1>
             </header>
 
             <main class="async-backend-page">
@@ -890,7 +909,19 @@
                     <div class="async-backend-card-scroll">
 
                     <div class="async-backend-note">
-                        设置下列选项，则切屏时，可以继续接收消息。<br>教程：https://github.com/FS-windyhill/TeleWindy3.0/tree/main/backend
+                        一套 Worker 连接同时服务于切屏后台回复和主动消息。<br>教程：https://github.com/FS-windyhill/TeleWindy3.0/tree/main/backend
+                    </div>
+                    <!-- ★ 两个能力共用下方连接配置，但可以分别启用，互不修改对方的运行模式。 -->
+                    <div class="async-backend-capability-section">
+                        <div class="input-label">后台能力</div>
+                        <div class="async-backend-capability-row">
+                            <span><strong>切屏后继续生成回复</strong><small>用户发消息后，把当前任务交给 Worker 继续完成。</small></span>
+                            <label class="async-backend-switch"><input type="checkbox" id="async-backend-reply-capability-toggle"><span class="app-switch-slider async-backend-slider"></span></label>
+                        </div>
+                        <div class="async-backend-capability-row">
+                            <span><strong>后台主动消息</strong><small>由主动消息页面选择浏览器、私人 Worker 或 Worker Secret 模式。</small></span>
+                            <label class="async-backend-switch"><input type="checkbox" id="async-backend-proactive-capability-toggle"><span class="app-switch-slider async-backend-slider"></span></label>
+                        </div>
                     </div>
                     <div class="input-group">
                         <label class="input-label">后台URL</label>
@@ -2824,9 +2855,9 @@
     <script src="./js/agent-todo-manager.js"></script>
     <script src="./js/agent-heart-note-manager.js"></script>
     <script src="./js/pomodoro.js"></script>
-    <script src="./js/proactive-messages.js?v=20260923-proactive-v2"></script>
-    <!-- ★ 主动消息接入了稳定 messageId 与双时间轴，更新版本参数避免 PWA 继续使用旧主脚本。 -->
-    <script src="./script.js?v=20260923-proactive-v2"></script>
+    <script src="./js/proactive-messages.js?v=20260924-proactive-v7"></script>
+    <!-- ★ 主动消息 v5 增加正文时间戳与轻量 Toast，更新版本参数避免 PWA 继续使用旧脚本。 -->
+    <script src="./script.js?v=20260924-proactive-v5"></script>
 </body>
 </html>
 

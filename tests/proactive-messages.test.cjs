@@ -6,7 +6,10 @@ global.CONFIG = {
         PROACTIVE_MESSAGES: {
             enabled: false,
             characterIds: [],
+            executionMode: 'frontend',
+            privateWorkerCredentialConsent: false,
             followFrontendApiKey: true,
+            workerProbeCache: null,
             apiPresetName: '__character__',
             activeStart: '09:00',
             activeEnd: '23:00',
@@ -82,6 +85,26 @@ test('主动判断胶囊只携带最近 15 条文字聊天', () => {
     assert.equal(capsule.messages[14].messageId, 'message_19');
 });
 
+test('主动消息把 sent_at 写入正文，但聊天气泡隐藏该前缀', async () => {
+    const eventAt = new Date(2026, 8, 4, 7, 0).getTime();
+    const contact = { id: 'char-time', history: [] };
+    const previousStorage = global.Storage;
+    global.Storage = { saveContacts: async () => {} };
+    try {
+        const inserted = await ProactiveMessages.insertMessage(contact, {
+            messageId: 'proactive_time_test',
+            content: '早上好',
+            sentAt: new Date(eventAt).toISOString(),
+            source: 'proactive_worker'
+        });
+        assert.equal(inserted, true);
+        assert.equal(contact.history[0].content, '[2026-09-04 07:00] 早上好');
+        assert.equal(ProactiveMessages.displayContent(contact.history[0]), '早上好');
+    } finally {
+        global.Storage = previousStorage;
+    }
+});
+
 test('主动消息可按稳定预设名称选择独立模型', () => {
     STATE.settings.PROACTIVE_MESSAGES.apiPresetName = '主动专用';
     STATE.settings.API_PRESETS = [{
@@ -117,4 +140,80 @@ test('时间策略保留用户填写的小数且次数取整', () => {
     assert.equal(policy.heartbeatHours, 0.01);
     assert.equal(policy.dailyLimit, 2);
     assert.equal(policy.unansweredLimit, 2);
+});
+
+test('私人 Worker 胶囊跟随角色 API 并携带待加密 Key', () => {
+    STATE.settings.PROACTIVE_MESSAGES.executionMode = 'private_worker';
+    STATE.settings.PROACTIVE_MESSAGES.apiPresetName = '__character__';
+    STATE.settings.API_PRESETS = [{
+        name: '角色专用',
+        url: 'https://role.example/v1/chat/completions',
+        key: 'role-private-key',
+        model: 'role-model'
+    }];
+    const capsule = ProactiveMessages.buildCapsule({
+        id: 'char-worker',
+        name: '测试角色',
+        linkedPresetName: '角色专用',
+        history: []
+    });
+    assert.equal(capsule.credentialMode, 'stored_client_key');
+    assert.equal(capsule.apiUrl, 'https://role.example/v1/chat/completions');
+    assert.equal(capsule.apiKey, 'role-private-key');
+    assert.equal(capsule.model, 'role-model');
+});
+
+test('高级 Worker Secret 模式不会上传前端 API Key', () => {
+    STATE.settings.PROACTIVE_MESSAGES.executionMode = 'server_secret';
+    STATE.settings.API_URL = 'https://secret.example/v1/chat/completions';
+    STATE.settings.API_KEY = 'should-not-upload';
+    STATE.settings.MODEL = 'secret-model';
+    STATE.settings.PROACTIVE_MESSAGES.apiPresetName = '__global__';
+    const capsule = ProactiveMessages.buildCapsule({ id: 'char-secret', name: '测试角色', history: [] });
+    assert.equal(capsule.credentialMode, 'server_secret');
+    assert.equal(capsule.apiKey, '');
+});
+
+test('私人 Worker 未确认凭据时保持启用但不会误进后台模式', () => {
+    STATE.settings.ASYNC_BACKEND_URL = 'https://worker.example';
+    STATE.settings.ASYNC_BACKEND_TOKEN = 'worker-token';
+    STATE.settings.PROACTIVE_MESSAGES.executionMode = 'private_worker';
+    STATE.settings.PROACTIVE_MESSAGES.privateWorkerCredentialConsent = false;
+    assert.equal(ProactiveMessages.workerConfigured(), false);
+    STATE.settings.PROACTIVE_MESSAGES.privateWorkerCredentialConsent = true;
+    assert.equal(ProactiveMessages.workerConfigured(), true);
+});
+
+test('Worker URL、访问密钥或模式变化后检测缓存签名会失效', () => {
+    STATE.settings.ASYNC_BACKEND_URL = 'https://worker.example';
+    STATE.settings.ASYNC_BACKEND_TOKEN = 'token-a';
+    STATE.settings.PROACTIVE_MESSAGES.executionMode = 'server_secret';
+    const first = ProactiveMessages.probeSignature([]);
+    STATE.settings.ASYNC_BACKEND_TOKEN = 'token-b';
+    const second = ProactiveMessages.probeSignature([]);
+    STATE.settings.PROACTIVE_MESSAGES.executionMode = 'private_worker';
+    const third = ProactiveMessages.probeSignature([]);
+    assert.notEqual(first, second);
+    assert.notEqual(second, third);
+    assert.equal(first.includes('token-a'), false);
+});
+
+test('Worker 检测失败会明确保存为浏览器运行模式', async () => {
+    const settings = STATE.settings.PROACTIVE_MESSAGES;
+    settings.executionMode = 'private_worker';
+    settings.followFrontendApiKey = false;
+    const originalRememberWorkerProbe = ProactiveMessages.rememberWorkerProbe;
+    let rememberedProbe = null;
+    // ★ 这里只隔离持久化与 DOM 渲染，专门验证失败回退时保存的模式和提示信息。
+    ProactiveMessages.rememberWorkerProbe = async probe => { rememberedProbe = probe; };
+    try {
+        await ProactiveMessages.fallbackToFrontendAfterFailedApply('后台访问密钥错误', 'unauthorized');
+        assert.equal(ProactiveMessages.settings().executionMode, 'frontend');
+        assert.equal(ProactiveMessages.settings().followFrontendApiKey, true);
+        assert.equal(rememberedProbe.code, 'unauthorized');
+        assert.match(rememberedProbe.message, /已自动改用浏览器运行/);
+        assert.equal(rememberedProbe.signature, ProactiveMessages.probeSignature());
+    } finally {
+        ProactiveMessages.rememberWorkerProbe = originalRememberWorkerProbe;
+    }
 });

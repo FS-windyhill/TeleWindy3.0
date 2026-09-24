@@ -1,0 +1,86 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+// ★ Worker 文件没有单独的 Node 构建入口；用 data URL 载入 ES module，直接覆盖真实加密与 DO 路由。
+const workerSource = await readFile(new URL('../backend/worker.js', import.meta.url), 'utf8');
+const workerModule = await import(`data:text/javascript;base64,${Buffer.from(workerSource).toString('base64')}`);
+
+class MemoryStorage {
+    constructor() {
+        this.values = new Map();
+        this.alarm = null;
+    }
+
+    async get(key) { return this.values.get(key); }
+    async put(key, value) { this.values.set(key, value); }
+    async delete(key) { this.values.delete(key); }
+    async getAlarm() { return this.alarm; }
+    async setAlarm(value) { this.alarm = value; }
+    async deleteAlarm() { this.alarm = null; }
+}
+
+function proactiveCapsule(overrides = {}) {
+    return {
+        enabled: true,
+        characterId: 'char-1',
+        characterName: '测试角色',
+        messages: [],
+        credentialMode: 'stored_client_key',
+        apiKey: 'private-test-key',
+        apiUrl: 'https://api.example.com/v1/chat/completions',
+        model: 'test-model',
+        policy: { heartbeatHours: 12 },
+        ...overrides
+    };
+}
+
+test('CHAT_JOB_OBJECT 会加密保存主动消息 Key，状态接口不返回明文', async () => {
+    const storage = new MemoryStorage();
+    const object = new workerModule.ChatJobObject({ storage }, { APP_TOKEN: 'long-private-worker-token' });
+    const response = await object.fetch(new Request('https://worker.local/proactive/object/sync', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(proactiveCapsule())
+    }));
+
+    assert.equal(response.status, 200);
+    const credential = await storage.get('credential');
+    const capsule = await storage.get('capsule');
+    assert.ok(credential.ciphertext);
+    assert.notEqual(credential.ciphertext, 'private-test-key');
+    assert.equal(JSON.stringify(credential).includes('private-test-key'), false);
+    assert.equal(Object.hasOwn(capsule, 'apiKey'), false);
+
+    const status = await response.json();
+    assert.equal(status.credentialMode, 'stored_client_key');
+    assert.equal(JSON.stringify(status).includes('private-test-key'), false);
+});
+
+test('停用主动角色会删除凭据和 Alarm，不要求再次提供 Key', async () => {
+    const storage = new MemoryStorage();
+    const object = new workerModule.ChatJobObject({ storage }, { APP_TOKEN: 'long-private-worker-token' });
+    await object.fetch(new Request('https://worker.local/proactive/object/sync', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(proactiveCapsule())
+    }));
+
+    const response = await object.fetch(new Request('https://worker.local/proactive/object/sync', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(proactiveCapsule({ enabled: false, apiKey: '' }))
+    }));
+
+    assert.equal(response.status, 200);
+    assert.equal(await storage.get('credential'), undefined);
+    assert.equal(await storage.getAlarm(), null);
+});
+
+test('普通后台 job 的 Alarm 仍保持原有过期删除行为', async () => {
+    const storage = new MemoryStorage();
+    await storage.put('job', { status: 'completed' });
+    const object = new workerModule.ChatJobObject({ storage }, { APP_TOKEN: 'worker-token' });
+    await object.alarm();
+    assert.equal(await storage.get('job'), undefined);
+});

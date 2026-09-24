@@ -2271,7 +2271,8 @@ const Toast = {
     show(message, options = {}) {
         const item = {
             message: String(message || ''),
-            duration: Number.isFinite(options.duration) ? Math.max(0, options.duration) : 1500
+            duration: Number.isFinite(options.duration) ? Math.max(0, options.duration) : 1500,
+            icon: ['check', 'settings', 'warning'].includes(options.icon) ? options.icon : 'check'
         };
 
         if (!item.message) return;
@@ -2293,7 +2294,7 @@ const Toast = {
         const toast = document.createElement('div');
         toast.className = 'toast-item';
 
-        // SVG 使用固定模板，不接收外部内容；路径沿用 Lucide 的 check 图标。
+        // SVG 使用固定模板，不接收外部内容；主动消息可复用同一 Toast，并按结果切换图标。
         const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         icon.setAttribute('viewBox', '0 0 24 24');
         icon.setAttribute('fill', 'none');
@@ -2303,9 +2304,19 @@ const Toast = {
         icon.setAttribute('stroke-linejoin', 'round');
         icon.setAttribute('aria-hidden', 'true');
 
-        const checkPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        checkPath.setAttribute('d', 'M20 6 9 17l-5-5');
-        icon.appendChild(checkPath);
+        if (item.icon === 'settings') {
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', '12');
+            circle.setAttribute('cy', '12');
+            circle.setAttribute('r', '3');
+            const gear = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            gear.setAttribute('d', 'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.12.6.6 1.04 1.21 1H21a2 2 0 0 1 0 4h-.09c-.61-.04-1.09.4-1.51 1z');
+            icon.append(circle, gear);
+        } else {
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', item.icon === 'warning' ? 'M12 9v4m0 4h.01M10.3 3.6 2.2 18a2 2 0 0 0 1.7 3h16.2a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0z' : 'M20 6 9 17l-5-5');
+            icon.appendChild(path);
+        }
 
         const text = document.createElement('span');
         text.textContent = item.message;
@@ -3745,6 +3756,11 @@ const UI = {
             
             const sender = msg.role === 'assistant' ? 'ai' : 'user';
             let cleanText = typeof msg === 'string' ? msg : msg.content || '';
+
+            // ★ 主动消息的正文时间戳只给角色上下文和编辑功能使用；气泡本身继续使用 timestamp 字段展示时间。
+            if (typeof msg !== 'string' && msg.proactiveSource && typeof ProactiveMessages !== 'undefined') {
+                cleanText = ProactiveMessages.displayContent(msg, cleanText);
+            }
             
             // 处理 User 时间戳
             if (sender === 'user') {
@@ -9584,6 +9600,8 @@ const App = {
         const modeInput = document.querySelector(`input[name="async-backend-key-mode"][value="${keyMode}"]`);
 
         this.syncAsyncBackendToggle();
+        const proactiveToggle = document.getElementById('async-backend-proactive-capability-toggle');
+        if (proactiveToggle) proactiveToggle.checked = STATE.settings.PROACTIVE_MESSAGES?.enabled === true;
         if (urlInput) urlInput.value = STATE.settings.ASYNC_BACKEND_URL || '';
         if (tokenInput) tokenInput.value = STATE.settings.ASYNC_BACKEND_TOKEN || '';
         if (modeInput) modeInput.checked = true;
@@ -9631,8 +9649,11 @@ const App = {
     },
 
     syncAsyncBackendToggle() {
-        const toggle = document.getElementById('async-backend-enable-toggle');
-        if (toggle) toggle.checked = STATE.settings.ASYNC_BACKEND_ENABLED !== false;
+        // ★ 探索页快捷开关与“后台运行服务”能力开关读取同一字段，避免两个入口显示不一致。
+        ['async-backend-enable-toggle', 'async-backend-reply-capability-toggle'].forEach(id => {
+            const toggle = document.getElementById(id);
+            if (toggle) toggle.checked = STATE.settings.ASYNC_BACKEND_ENABLED !== false;
+        });
     },
 
     async toggleAsyncBackendEnabled(enabled) {
@@ -15283,6 +15304,10 @@ const App = {
         });
 
         document.getElementById('async-backend-enable-toggle')?.addEventListener('change', (event) => {
+            this.toggleAsyncBackendEnabled(event.target.checked);
+        });
+
+        document.getElementById('async-backend-reply-capability-toggle')?.addEventListener('change', (event) => {
             this.toggleAsyncBackendEnabled(event.target.checked);
         });
 

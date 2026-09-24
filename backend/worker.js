@@ -25,6 +25,13 @@ export class ChatJobObject {
   async fetch(request) {
     const url = new URL(request.url);
 
+    // ★ 主动消息复用已经部署过的 CHAT_JOB_OBJECT namespace：
+    // 普通 job 仍走原路径和过期清理；以 /proactive/ 开头的对象则交给主动角色状态机。
+    // 这样老用户只更新 Worker 代码即可，不需要新增 binding 或 Durable Object migration。
+    if (url.pathname.includes("/proactive/")) {
+      return await new ProactiveCharacterObject(this.state, this.env).fetch(request);
+    }
+
     if (request.method === "POST" && url.pathname === "/init") {
       const body = await request.json();
       const job = body.job && typeof body.job === "object" ? body.job : {};
@@ -64,6 +71,11 @@ export class ChatJobObject {
   }
 
   async alarm() {
+    // ★ 同一个 namespace 中只有主动角色会写 capsule；普通 job 的 Alarm 仍只负责过期删除。
+    const proactiveCapsule = await this.state.storage.get("capsule");
+    if (proactiveCapsule) {
+      return await new ProactiveCharacterObject(this.state, this.env).alarm();
+    }
     await this.state.storage.delete("job");
   }
 
@@ -90,10 +102,31 @@ export class ProactiveCharacterObject {
     const action = url.pathname.split("/").filter(Boolean).pop() || "status";
 
     if (request.method === "PUT" && action === "sync") {
-      const capsule = sanitizeProactiveCapsule(await request.json());
+      const rawCapsule = await request.json();
+      const capsule = sanitizeProactiveCapsule(rawCapsule);
       const previous = await this.state.storage.get("capsule") || {};
       const runtime = await this.readRuntime();
       const nextCapsule = { ...previous, ...capsule, updatedAt: Date.now() };
+
+      // ★ 普通后台回复的 client_key 只存一小时；主动 Alarm 未来仍要使用，因此必须单独加密保存。
+      // 密文使用 APP_TOKEN 派生的 AES-GCM key，接口永远不提供明文读取能力。
+      if (!nextCapsule.enabled) {
+        await this.state.storage.delete("credential");
+      } else if (nextCapsule.credentialMode === "stored_client_key") {
+        const apiKey = String(rawCapsule.apiKey || "");
+        if (!apiKey) {
+          return Response.json({ error: "client_api_key_missing" }, { status: 400 });
+        }
+        const encryptedCredential = await encryptProactiveCredential(apiKey, this.env);
+        await this.state.storage.put("credential", {
+          ...encryptedCredential,
+          apiUrl: nextCapsule.apiUrl,
+          fingerprint: await fingerprintSecret(apiKey),
+          updatedAt: Date.now()
+        });
+      } else {
+        await this.state.storage.delete("credential");
+      }
 
       // ★ 用户在上次主动消息后重新说话，视为已经回应；退避计数在服务端自动清零。
       if (nextCapsule.lastUserAt > Number(runtime.lastProactiveGeneratedAt || 0)) {
@@ -119,6 +152,7 @@ export class ProactiveCharacterObject {
         }
       } else {
         await this.state.storage.deleteAlarm();
+        await this.state.storage.delete("credential");
         runtime.nextWakeAt = null;
         await this.state.storage.put("runtime", runtime);
       }
@@ -197,7 +231,28 @@ export class ProactiveCharacterObject {
       return { ok: true, skipped: prefilter.reason, heartbeatRunId, nextWakeAt };
     }
 
-    const upstream = resolveUpstream(capsule.apiUrl, "", "server_secret", this.env);
+    const credentialMode = capsule.credentialMode === "stored_client_key" ? "stored_client_key" : "server_secret";
+    let apiKey = "";
+    if (credentialMode === "stored_client_key") {
+      const credential = await this.state.storage.get("credential");
+      try {
+        apiKey = await decryptProactiveCredential(credential, this.env);
+      } catch (error) {
+        await this.appendEvent("proactive_run_failed", {
+          heartbeatRunId,
+          error: "stored_credential_unavailable"
+        });
+        const nextWakeAt = startedAt + getHeartbeatMs(capsule.policy);
+        await this.setNextAlarm(nextWakeAt, "credential_missing");
+        return { ok: false, error: "stored_credential_unavailable", heartbeatRunId, nextWakeAt };
+      }
+    }
+    const upstream = resolveUpstream(
+      capsule.apiUrl,
+      apiKey,
+      credentialMode === "stored_client_key" ? "client_key" : "server_secret",
+      this.env
+    );
     if (!upstream.ok) {
       const nextWakeAt = startedAt + getHeartbeatMs(capsule.policy);
       await this.appendEvent("proactive_run_failed", {
@@ -215,22 +270,15 @@ export class ProactiveCharacterObject {
         provider: upstream.provider.id,
         model: capsule.model
       });
-      const response = await fetchWithTimeout(upstream.provider.url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${upstream.provider.apiKey}`
-        },
-        // ★ 与前端 API 预设保持一致：附加参数可覆盖温度等高级项，但消息和非流式协议仍由主动消息控制。
-        body: JSON.stringify({
-          model: sanitizeModel(capsule.model || this.env.DEFAULT_MODEL),
-          temperature: clampNumber(capsule.temperature, 0, 2, 1),
-          max_tokens: capsule.maxTokens,
-          ...(capsule.requestBodyExtra || {}),
-          messages: buildProactiveDecisionMessages(capsule, runtime, startedAt),
-          stream: false
-        })
-      }, UPSTREAM_TIMEOUT_MS, "proactive_upstream");
+      // ★ 与普通后台回复共用文本模型传输层；主动消息只负责构造自己的判断协议。
+      const response = await fetchChatCompletion(upstream.provider, {
+        model: sanitizeModel(capsule.model || this.env.DEFAULT_MODEL),
+        temperature: clampNumber(capsule.temperature, 0, 2, 1),
+        max_tokens: capsule.maxTokens,
+        ...(capsule.requestBodyExtra || {}),
+        messages: buildProactiveDecisionMessages(capsule, runtime, startedAt),
+        stream: false
+      }, "proactive_upstream");
 
       const text = await response.text();
       if (!response.ok) {
@@ -347,6 +395,7 @@ export class ProactiveCharacterObject {
     const capsule = await this.state.storage.get("capsule") || null;
     return {
       enabled: capsule?.enabled === true,
+      credentialMode: capsule?.credentialMode || "server_secret",
       runtime,
       pendingMessageCount: outbox.filter((item) => item.acknowledged !== true).length,
       events: events.slice(-20)
@@ -396,18 +445,22 @@ export default {
         return await deleteJob(jobMatch[1], request, env);
       }
 
-      // ★ 主动消息页面用真实能力探测替代本地猜测：同时检查新版路由、DO binding 和所选 API 的 Worker Secret。
+      // ★ 主动消息页面用真实能力探测替代本地猜测：同时检查新版路由、现有 DO binding 和所选凭据模式。
       if (request.method === "POST" && url.pathname === "/proactive/capabilities") {
-        if (!env.PROACTIVE_CHARACTER_OBJECT) {
+        if (!env.CHAT_JOB_OBJECT && !env.PROACTIVE_CHARACTER_OBJECT) {
           return json({ ok: false, error: "proactive_binding_missing" }, 503, request, env);
         }
         const body = await request.json();
+        const credentialMode = body.credential_mode === "stored_client_key" ? "stored_client_key" : "server_secret";
         const apiUrls = Array.isArray(body.api_urls) ? [...new Set(body.api_urls.map(normalizeUrl).filter(Boolean))].slice(0, 20) : [];
         if (!apiUrls.length) {
           return json({ ok: false, error: "upstream_provider_url_missing" }, 400, request, env);
         }
         const results = apiUrls.map((apiUrl) => {
-          const upstream = resolveUpstream(apiUrl, "", "server_secret", env);
+          // ★ 私人 Worker 模式的 Key 会在角色同步时加密保存；能力探测只验证 URL 安全性。
+          const upstream = credentialMode === "stored_client_key"
+            ? resolveUpstream(apiUrl, "capability_probe", "client_key", env)
+            : resolveUpstream(apiUrl, "", "server_secret", env);
           return upstream.ok
             ? { ok: true, apiUrl, provider: upstream.provider.id }
             : { ok: false, apiUrl, error: upstream.error, provider: upstream.providerId || "" };
@@ -416,15 +469,50 @@ export default {
         if (failed) {
           return json({ ok: false, error: failed.error, providers: results }, 400, request, env);
         }
-        return json({ ok: true, proactiveApi: true, providers: results }, 200, request, env);
+        return json({
+          ok: true,
+          proactiveApi: true,
+          proactiveVersion: 3,
+          sharedJobObject: !!env.CHAT_JOB_OBJECT,
+          encryptedClientKey: true,
+          providers: results
+        }, 200, request, env);
       }
 
-      // ★ 主动消息接口只做鉴权和路由；角色状态、Alarm 与 outbox 都封装在独立 Durable Object。
+      // ★ 新版优先复用 CHAT_JOB_OBJECT；旧 binding 只在读取/确认消息时参与，帮助已部署用户排空旧 outbox。
       const proactiveMatch = url.pathname.match(/^\/proactive\/([^/]+)\/(sync|status|messages|run|ack)$/i);
-      if (proactiveMatch && env.PROACTIVE_CHARACTER_OBJECT) {
-        const objectId = env.PROACTIVE_CHARACTER_OBJECT.idFromName(decodeURIComponent(proactiveMatch[1]));
-        const response = await env.PROACTIVE_CHARACTER_OBJECT.get(objectId).fetch(request);
-        return withCors(response, request, env);
+      if (proactiveMatch && (env.CHAT_JOB_OBJECT || env.PROACTIVE_CHARACTER_OBJECT)) {
+        const objectName = decodeURIComponent(proactiveMatch[1]);
+        const action = proactiveMatch[2].toLowerCase();
+        const requestCopy = ["ack", "sync"].includes(action) && env.PROACTIVE_CHARACTER_OBJECT ? request.clone() : null;
+        const primaryNamespace = env.CHAT_JOB_OBJECT || env.PROACTIVE_CHARACTER_OBJECT;
+        const primaryObjectName = env.CHAT_JOB_OBJECT ? `proactive:${objectName}` : objectName;
+        const primaryId = primaryNamespace.idFromName(primaryObjectName);
+        const primaryResponse = await primaryNamespace.get(primaryId).fetch(request);
+
+        if (primaryResponse.ok && env.CHAT_JOB_OBJECT && env.PROACTIVE_CHARACTER_OBJECT && action === "sync" && requestCopy) {
+          // ★ 前端会先拉取并确认旧 outbox，再执行 sync；此时顺手停掉旧对象 Alarm，避免升级后新旧对象双跑。
+          const legacyCapsule = await requestCopy.json();
+          const legacyId = env.PROACTIVE_CHARACTER_OBJECT.idFromName(objectName);
+          await env.PROACTIVE_CHARACTER_OBJECT.get(legacyId).fetch("https://proactive.local/sync", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...legacyCapsule, enabled: false })
+          });
+        }
+
+        if (env.CHAT_JOB_OBJECT && env.PROACTIVE_CHARACTER_OBJECT && (action === "messages" || action === "ack")) {
+          const legacyId = env.PROACTIVE_CHARACTER_OBJECT.idFromName(objectName);
+          const legacyResponse = await env.PROACTIVE_CHARACTER_OBJECT.get(legacyId).fetch(requestCopy || request);
+          if (action === "messages") {
+            const primaryData = primaryResponse.ok ? await primaryResponse.json() : { messages: [] };
+            const legacyData = legacyResponse.ok ? await legacyResponse.json() : { messages: [] };
+            const messages = [...(primaryData.messages || []), ...(legacyData.messages || [])];
+            const unique = [...new Map(messages.map((item) => [String(item.messageId || ""), item])).values()];
+            return json({ messages: unique }, 200, request, env);
+          }
+        }
+        return withCors(primaryResponse, request, env);
       }
 
       return json({ error: "not_found" }, 404, request, env);
@@ -774,19 +862,7 @@ async function runJob(jobId, body, env) {
       bodyChars: upstreamBodyText.length
     });
 
-    let response = await fetchWithTimeout(body.upstream.url, {
-      method: "POST",
-      // ★ API 地址不应该依赖跳转；停在 3xx 才能看见 POST 是否被网关改成 GET。
-      redirect: "manual",
-      headers: {
-        "Authorization": `Bearer ${body.upstream.apiKey}`,
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-        "Accept-Language": "en-US,en",
-        "User-Agent": "TeleWindy/1.0"
-      },
-      body: upstreamBodyText
-    }, UPSTREAM_TIMEOUT_MS, "chat_upstream");
+    let response = await fetchChatCompletion(body.upstream, upstreamBodyText, "chat_upstream");
     let responseDiagnostics = getUpstreamResponseDiagnostics(response);
     console.log("chat_upstream_response", {
       jobId: shortJobId(jobId),
@@ -802,18 +878,7 @@ async function runJob(jobId, body, env) {
         messagesForChat = buildMultimodalFallbackMessages(messagesForChat);
         upstreamBody = buildUpstreamBody(messagesForChat);
         upstreamBodyText = JSON.stringify(upstreamBody);
-        response = await fetchWithTimeout(body.upstream.url, {
-          method: "POST",
-          redirect: "manual",
-          headers: {
-            "Authorization": `Bearer ${body.upstream.apiKey}`,
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Accept-Language": "en-US,en",
-            "User-Agent": "TeleWindy/1.0"
-          },
-          body: upstreamBodyText
-        }, UPSTREAM_TIMEOUT_MS, "chat_upstream_fallback");
+        response = await fetchChatCompletion(body.upstream, upstreamBodyText, "chat_upstream_fallback");
         responseDiagnostics = getUpstreamResponseDiagnostics(response);
         console.log("chat_upstream_fallback_response", {
           jobId: shortJobId(jobId),
@@ -1621,6 +1686,7 @@ function sanitizeProactiveCapsule(raw) {
     characterPrompt: String(source.characterPrompt || "").slice(0, 20000),
     contextPrompt: String(source.contextPrompt || "").slice(0, 30000),
     messages,
+    credentialMode: source.credentialMode === "stored_client_key" ? "stored_client_key" : "server_secret",
     apiUrl: normalizeUrl(source.apiUrl),
     model: sanitizeModel(source.model || ""),
     temperature: clampNumber(source.temperature, 0, 2, 1),
@@ -1641,6 +1707,60 @@ function sanitizeProactiveCapsule(raw) {
     }
   };
 }
+
+// ★★★★★ 主动消息加密凭据 START ★★★★★
+// 主动 Alarm 可能在浏览器关闭数天后才运行，不能沿用普通 job 的一小时临时 payload。
+// 这里用 APP_TOKEN 派生 AES-GCM key；DO 只保存密文、随机 IV 和不可逆短指纹。
+async function proactiveCredentialKey(env) {
+  const appToken = String(env.APP_TOKEN || "");
+  if (!appToken) throw new Error("app_token_missing");
+  const source = new TextEncoder().encode(`telewindy:proactive-credential:v1:${appToken}`);
+  const digest = await crypto.subtle.digest("SHA-256", source);
+  return await crypto.subtle.importKey("raw", digest, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function base64ToBytes(value) {
+  const binary = atob(String(value || ""));
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+async function encryptProactiveCredential(apiKey, env) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    await proactiveCredentialKey(env),
+    new TextEncoder().encode(String(apiKey || ""))
+  );
+  return {
+    version: 1,
+    iv: bytesToBase64(iv),
+    ciphertext: bytesToBase64(new Uint8Array(encrypted))
+  };
+}
+
+async function decryptProactiveCredential(credential, env) {
+  if (!credential?.iv || !credential?.ciphertext) throw new Error("stored_credential_missing");
+  const decrypted = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: base64ToBytes(credential.iv) },
+    await proactiveCredentialKey(env),
+    base64ToBytes(credential.ciphertext)
+  );
+  const apiKey = new TextDecoder().decode(decrypted);
+  if (!apiKey) throw new Error("stored_credential_empty");
+  return apiKey;
+}
+
+async function fingerprintSecret(value) {
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(value || ""))));
+  return Array.from(digest.slice(0, 6), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+// ★★★★★ 主动消息加密凭据 END ★★★★★
 
 function getProactivePrefilter(capsule, runtime, now) {
   const policy = capsule.policy || {};
@@ -1783,6 +1903,23 @@ function addDays(dateKey, days) {
   return getDateKey(date);
 }
 // ★★★★★ 后台 Agent：TODO 管理 END ★★★★★
+
+// ★ 普通后台回复与主动 Alarm 共用同一个文本模型传输入口：
+// 统一请求头、禁止隐式跳转并共用超时策略，避免两条业务链路以后逐渐分叉。
+async function fetchChatCompletion(provider, payload, label) {
+  return await fetchWithTimeout(provider.url, {
+    method: "POST",
+    redirect: "manual",
+    headers: {
+      "Authorization": `Bearer ${provider.apiKey}`,
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+      "Accept-Language": "en-US,en",
+      "User-Agent": "TeleWindy/1.0"
+    },
+    body: typeof payload === "string" ? payload : JSON.stringify(payload)
+  }, UPSTREAM_TIMEOUT_MS, label);
+}
 
 async function fetchWithTimeout(url, options, timeoutMs, label) {
   const controller = new AbortController();
