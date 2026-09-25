@@ -930,14 +930,21 @@ const API = {
     loadAsyncBackendDiagnostics() {
         try {
             const logs = JSON.parse(localStorage.getItem(this.asyncBackendDiagnosticStorageKey()) || '[]');
-            return Array.isArray(logs) ? logs : [];
+            if (!Array.isArray(logs)) return [];
+            // ★ 旧版本可能已留存 80 条；读取时就缩到新上限，避免必须等下一次事件才清理。
+            if (logs.length > 40) {
+                const recentLogs = logs.slice(-40);
+                this.saveAsyncBackendDiagnostics(recentLogs);
+                return recentLogs;
+            }
+            return logs;
         } catch (error) {
             return [];
         }
     },
 
     saveAsyncBackendDiagnostics(logs) {
-        const safeLogs = Array.isArray(logs) ? logs.slice(-80) : [];
+        const safeLogs = Array.isArray(logs) ? logs.slice(-40) : [];
         localStorage.setItem(this.asyncBackendDiagnosticStorageKey(), JSON.stringify(safeLogs));
     },
 
@@ -9760,12 +9767,12 @@ const App = {
             ].join('');
 
             return `
-                <div class="async-backend-diagnostic-item">
-                    <div class="async-backend-diagnostic-main">
-                        <span class="async-backend-diagnostic-code">${code}</span>
-                        <span class="async-backend-diagnostic-text">${message}</span>
+                <div class="diagnostic-log-item">
+                    <div class="diagnostic-log-main">
+                        <span class="diagnostic-log-code">${code}</span>
+                        <span class="diagnostic-log-text">${message}</span>
                     </div>
-                    <div class="async-backend-diagnostic-meta">${this.escapeHtml(meta)}</div>
+                    <div class="diagnostic-log-meta">${this.escapeHtml(meta)}</div>
                 </div>
             `;
         }).join('');

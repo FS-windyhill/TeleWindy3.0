@@ -27,7 +27,7 @@ new_sqlite_classes = ["ChatJobObject"]
 # ★ 主动消息复用 CHAT_JOB_OBJECT，不需要新增 Durable Object binding 或 migration。
 # 已部署过旧版 PROACTIVE_CHARACTER_OBJECT 的用户可以暂时保留，Worker 会帮忙领取旧 outbox。
 
-# ★ Worker 控制台可按 proactive_* 事件检索每次唤醒；角色对象里另存最近 20 条精简事件。
+# ★ Worker 控制台可按 proactive_* 事件检索每次唤醒；角色对象里另存最近 10 条精简事件。
 [observability]
 enabled = true
 head_sampling_rate = 1

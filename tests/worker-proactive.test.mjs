@@ -77,6 +77,63 @@ test('停用主动角色会删除凭据和 Alarm，不要求再次提供 Key', a
     assert.equal(await storage.getAlarm(), null);
 });
 
+test('未参与角色手动判断绕过自动开关和预筛选，且不创建 Alarm', async () => {
+    const storage = new MemoryStorage();
+    const object = new workerModule.ChatJobObject({ storage }, { APP_TOKEN: 'worker-token' });
+    const response = await object.fetch(new Request('https://worker.local/proactive/object/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(proactiveCapsule({
+            enabled: false,
+            apiUrl: 'http://localhost/invalid',
+            policy: { activeStartMinutes: 0, activeEndMinutes: 1, dailyLimit: 1 }
+        }))
+    }));
+    const result = await response.json();
+    const events = await storage.get('events');
+
+    assert.equal(result.ok, false);
+    assert.notEqual(result.error, 'disabled');
+    assert.ok(events.some(event => event.code === 'proactive_manual_started' && event.source === 'manual'));
+    assert.ok(events.some(event => event.code === 'proactive_run_failed'));
+    assert.equal(await storage.getAlarm(), null);
+    assert.equal(await storage.get('capsule'), undefined);
+});
+
+test('手动判断得到 silent 时不改变已有自动 Alarm', async () => {
+    const storage = new MemoryStorage();
+    const object = new workerModule.ChatJobObject({ storage }, { APP_TOKEN: 'worker-token' });
+    await storage.setAlarm(123456789);
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => Response.json({
+        choices: [{ message: { content: '{"decision":"silent","content":"","sent_at":null,"next_wake_at":null}' } }]
+    });
+    try {
+        const response = await object.fetch(new Request('https://worker.local/proactive/object/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(proactiveCapsule({ enabled: false }))
+        }));
+        const result = await response.json();
+        assert.equal(result.ok, true);
+        assert.equal(result.decision, 'silent');
+        assert.equal(await storage.getAlarm(), 123456789);
+        assert.equal(await storage.get('capsule'), undefined);
+        assert.ok((await storage.get('events')).some(event => event.code === 'proactive_decision_silent'));
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
+test('Worker 每个角色只暂存最近 10 条诊断事件', async () => {
+    const storage = new MemoryStorage();
+    const object = new workerModule.ProactiveCharacterObject({ storage }, {});
+    for (let index = 0; index < 15; index += 1) await object.appendEvent(`event_${index}`);
+    const events = await storage.get('events');
+    assert.equal(events.length, 10);
+    assert.equal(events[0].code, 'event_5');
+});
+
 test('普通后台 job 的 Alarm 仍保持原有过期删除行为', async () => {
     const storage = new MemoryStorage();
     await storage.put('job', { status: 'completed' });

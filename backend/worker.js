@@ -90,7 +90,7 @@ export class ChatJobObject {
 // 每个“浏览器安装实例 × 角色”使用一个 Durable Object：
 // 1. 前端只同步主动判断需要的精简上下文，不上传图片和完整数据库；
 // 2. Alarm 到点后给角色一次“可以思考要不要联系”的机会，而不是强制发消息；
-// 3. 消息先写进 outbox，PWA 下次打开时仍能可靠取回；诊断事件只保留最近 20 条。
+// 3. 消息先写进 outbox，PWA 下次打开时仍能可靠取回；每个角色只暂存最近 10 条离线诊断事件。
 export class ProactiveCharacterObject {
   constructor(state, env) {
     this.state = state;
@@ -135,10 +135,7 @@ export class ProactiveCharacterObject {
 
       await this.state.storage.put("capsule", nextCapsule);
       await this.state.storage.put("runtime", runtime);
-      await this.appendEvent("proactive_sync", {
-        enabled: nextCapsule.enabled,
-        contextCount: nextCapsule.messages.length
-      });
+      // ★ 同步可能在每次打开页面时重复发生，不写诊断事件，避免挤掉决策和失败日志。
 
       if (nextCapsule.enabled) {
         const currentAlarm = await this.state.storage.getAlarm();
@@ -182,7 +179,10 @@ export class ProactiveCharacterObject {
     }
 
     if (request.method === "POST" && action === "run") {
-      const result = await this.runHeartbeat({ source: "manual" });
+      const rawCapsule = await request.json().catch(() => null);
+      // ★ 手动判断使用本次请求的角色胶囊，不改自动参与名单，也不为未参与角色创建 Alarm。
+      const capsule = rawCapsule ? sanitizeProactiveCapsule(rawCapsule) : null;
+      const result = await this.runHeartbeat({ source: "manual", capsule, apiKey: String(rawCapsule?.apiKey || "") });
       return Response.json(result);
     }
 
@@ -197,7 +197,8 @@ export class ProactiveCharacterObject {
   }
 
   async runHeartbeat(meta = {}) {
-    const capsule = await this.state.storage.get("capsule");
+    const manual = meta.source === "manual";
+    const capsule = meta.capsule ? { ...meta.capsule, enabled: true } : await this.state.storage.get("capsule");
     const runtime = await this.readRuntime();
     const heartbeatRunId = crypto.randomUUID();
     const startedAt = Date.now();
@@ -207,13 +208,13 @@ export class ProactiveCharacterObject {
       return { ok: true, skipped: "disabled", heartbeatRunId };
     }
 
-    await this.appendEvent("proactive_alarm_fired", {
+    await this.appendEvent(manual ? "proactive_manual_started" : "proactive_alarm_fired", {
       heartbeatRunId,
       source: meta.source || "alarm",
       retryCount: Number(meta.retryCount || 0)
     });
 
-    const prefilter = getProactivePrefilter(capsule, runtime, startedAt);
+    const prefilter = manual ? { ok: true } : getProactivePrefilter(capsule, runtime, startedAt);
     if (!prefilter.ok) {
       const nextWakeAt = normalizeFutureWakeAt(
         prefilter.retryAt,
@@ -234,16 +235,18 @@ export class ProactiveCharacterObject {
     const credentialMode = capsule.credentialMode === "stored_client_key" ? "stored_client_key" : "server_secret";
     let apiKey = "";
     if (credentialMode === "stored_client_key") {
-      const credential = await this.state.storage.get("credential");
       try {
-        apiKey = await decryptProactiveCredential(credential, this.env);
+        // ★ 手动请求里的 Key 只用于本次调用；自动 Alarm 才读取事先加密保存的凭据。
+        apiKey = manual
+          ? String(meta.apiKey || "")
+          : await decryptProactiveCredential(await this.state.storage.get("credential"), this.env);
       } catch (error) {
         await this.appendEvent("proactive_run_failed", {
           heartbeatRunId,
           error: "stored_credential_unavailable"
         });
         const nextWakeAt = startedAt + getHeartbeatMs(capsule.policy);
-        await this.setNextAlarm(nextWakeAt, "credential_missing");
+        if (!manual) await this.setNextAlarm(nextWakeAt, "credential_missing");
         return { ok: false, error: "stored_credential_unavailable", heartbeatRunId, nextWakeAt };
       }
     }
@@ -260,7 +263,7 @@ export class ProactiveCharacterObject {
         error: upstream.error,
         nextWakeAt
       });
-      await this.setNextAlarm(nextWakeAt, "provider_missing");
+      if (!manual) await this.setNextAlarm(nextWakeAt, "provider_missing");
       return { ok: false, error: upstream.error, heartbeatRunId, nextWakeAt };
     }
 
@@ -276,7 +279,7 @@ export class ProactiveCharacterObject {
         temperature: clampNumber(capsule.temperature, 0, 2, 1),
         max_tokens: capsule.maxTokens,
         ...(capsule.requestBodyExtra || {}),
-        messages: buildProactiveDecisionMessages(capsule, runtime, startedAt),
+        messages: buildProactiveDecisionMessages(capsule, runtime, startedAt, manual),
         stream: false
       }, "proactive_upstream");
 
@@ -324,9 +327,9 @@ export class ProactiveCharacterObject {
         startedAt + getHeartbeatMs(capsule.policy),
         capsule.policy
       );
-      runtime.nextWakeAt = nextWakeAt;
+      if (!manual) runtime.nextWakeAt = nextWakeAt;
       await this.state.storage.put("runtime", runtime);
-      await this.setNextAlarm(nextWakeAt, "model_decision");
+      if (!manual) await this.setNextAlarm(nextWakeAt, "model_decision");
       await this.appendEvent("proactive_model_request_finished", {
         heartbeatRunId,
         decision: decision.decision,
@@ -348,7 +351,7 @@ export class ProactiveCharacterObject {
         error: sanitizeLogText(error?.message || String(error)),
         nextWakeAt
       });
-      await this.setNextAlarm(nextWakeAt, "run_failed");
+      if (!manual) await this.setNextAlarm(nextWakeAt, "run_failed");
       console.error("proactive_heartbeat_failed", {
         heartbeatRunId,
         error: sanitizeLogText(error?.message || String(error)),
@@ -385,7 +388,7 @@ export class ProactiveCharacterObject {
   async appendEvent(code, detail = {}) {
     const events = await this.state.storage.get("events") || [];
     events.push({ code, ts: Date.now(), ...detail });
-    await this.state.storage.put("events", events.slice(-20));
+    await this.state.storage.put("events", events.slice(-10));
   }
 
   async buildStatus() {
@@ -398,7 +401,7 @@ export class ProactiveCharacterObject {
       credentialMode: capsule?.credentialMode || "server_secret",
       runtime,
       pendingMessageCount: outbox.filter((item) => item.acknowledged !== true).length,
-      events: events.slice(-20)
+      events: events.slice(-10)
     };
   }
 }
@@ -1783,15 +1786,17 @@ function getProactivePrefilter(capsule, runtime, now) {
   return { ok: true };
 }
 
-function buildProactiveDecisionMessages(capsule, runtime, now) {
+function buildProactiveDecisionMessages(capsule, runtime, now, manual = false) {
   const history = capsule.messages.map((message) => {
     const time = message.eventAt ? new Date(message.eventAt).toISOString() : "未知时间";
     const speaker = message.role === "assistant" ? capsule.characterName : "对方";
     return `[${time}] ${speaker}：${message.content}`;
   }).join("\n");
   const system = [
-    `你就是 ${capsule.characterName}。这不是用户发起的聊天，而是你在一个自主唤醒时刻决定要不要主动联系对方。`,
-    "外部定时器只提供思考机会，不要求你必须发送。没有真实而自然的理由时，请选择 silent。",
+    manual
+      ? `你就是 ${capsule.characterName}。现在提供一次手动触发的主动判断机会，请决定要不要联系对方。`
+      : `你就是 ${capsule.characterName}。这不是用户发起的聊天，而是你在一个自主唤醒时刻决定要不要主动联系对方。`,
+    "这次机会不要求你必须发送。没有真实而自然的理由时，请选择 silent。",
     "不要解释决策过程，不要假装对方刚刚说了不存在的话，不要提及系统、定时器、JSON 或 AI。",
     "只输出一个严格 JSON 对象，不要输出 Markdown：",
     '{"decision":"silent或send","content":"send时填写消息正文，silent时为空字符串","sent_at":"send时填写带时区ISO 8601时间，silent时为null","next_wake_at":"下一次想重新判断的带时区ISO 8601时间，或null"}',

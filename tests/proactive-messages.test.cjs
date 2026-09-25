@@ -53,14 +53,52 @@ test('发送正文为空时安全降级为沉默', () => {
     assert.equal(result.content, '');
 });
 
-test('每个角色只保留最近 20 条主动消息事件', () => {
-    for (let index = 0; index < 25; index += 1) {
-        ProactiveMessages.addLocalEvent('char-1', `event_${index}`);
+test('主动消息所有角色共用最近 40 条日志，旧角色状态不再重复保存事件', () => {
+    STATE.settings.PROACTIVE_MESSAGES = JSON.parse(JSON.stringify(CONFIG.DEFAULT.PROACTIVE_MESSAGES));
+    for (let index = 0; index < 45; index += 1) {
+        ProactiveMessages.addLocalEvent(index % 2 ? 'char-2' : 'char-1', `event_${index}`);
     }
-    const events = ProactiveMessages.localRuntime('char-1').events;
-    assert.equal(events.length, 20);
+    const events = ProactiveMessages.settings().diagnosticEvents;
+    assert.equal(events.length, 40);
     assert.equal(events[0].code, 'event_5');
-    assert.equal(events[19].code, 'event_24');
+    assert.equal(events[39].code, 'event_44');
+    assert.equal(ProactiveMessages.localRuntime('char-1').events, undefined);
+});
+
+test('旧版重复同步事件不会进入统一日志', () => {
+    STATE.settings.PROACTIVE_MESSAGES = JSON.parse(JSON.stringify(CONFIG.DEFAULT.PROACTIVE_MESSAGES));
+    STATE.settings.PROACTIVE_MESSAGES.workerStatusByChar = {
+        'char-1': { events: [{ code: 'proactive_sync', ts: 1 }, { code: 'proactive_decision_silent', ts: 2 }] }
+    };
+    const settings = ProactiveMessages.settings();
+    assert.deepEqual(settings.diagnosticEvents.map(event => event.code), ['proactive_decision_silent']);
+    assert.equal(settings.workerStatusByChar['char-1'].events, undefined);
+    ProactiveMessages.mergeDiagnosticEvents('char-1', [{ code: 'proactive_sync', ts: 3 }], 'Worker');
+    assert.equal(settings.diagnosticEvents.length, 1);
+});
+
+test('浏览器手动判断未参与角色不会创建自动唤醒', async () => {
+    STATE.settings.PROACTIVE_MESSAGES = JSON.parse(JSON.stringify(CONFIG.DEFAULT.PROACTIVE_MESSAGES));
+    STATE.settings.API_URL = 'https://example.com/v1/chat/completions';
+    STATE.settings.API_KEY = 'test-key';
+    STATE.settings.MODEL = 'test-model';
+    const contact = { id: 'manual-only', name: '手动角色', prompt: '角色设定', history: [] };
+    STATE.contacts = [contact];
+    const previousWindow = global.window;
+    const previousApi = global.API;
+    global.window = { crypto: { randomUUID: () => 'manual-test-run' } };
+    global.API = { chat: async () => '{"decision":"silent","content":"","sent_at":null,"next_wake_at":null}' };
+    try {
+        const result = await ProactiveMessages.runLocalCatchup(contact, true);
+        const settings = ProactiveMessages.settings();
+        assert.equal(result.decision, 'silent');
+        assert.deepEqual(settings.characterIds, []);
+        assert.equal(settings.nextLocalWakeAtByChar[contact.id], undefined);
+        assert.ok(settings.diagnosticEvents.some(event => event.code === 'proactive_decision_silent' && event.characterId === contact.id));
+    } finally {
+        global.window = previousWindow;
+        global.API = previousApi;
+    }
 });
 
 test('主动判断胶囊只携带最近 15 条文字聊天', () => {

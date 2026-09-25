@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="./vendor/katex/katex.min.css">
 
     <!-- ★ Agent 面板相关资源同步更新版本号，避免浏览器沿用旧脚本和样式。 -->
-    <link rel="stylesheet" href="./style.css?v=20260925-proactive-card-save-2">
+    <link rel="stylesheet" href="./style.css?v=20260925-proactive-diagnostics-1">
 </head>
 <body>
 
@@ -804,7 +804,7 @@
             <main class="proactive-page">
                 <section class="proactive-card">
                     <div class="proactive-title-row"><div class="input-label">让角色自己决定是否联系你</div><span id="proactive-mode-badge" class="proactive-badge">纯前端</span></div>
-                    <p id="proactive-mode-help" class="input-hint">没有配置 Worker 时，会在下次打开 PWA 后补上离线期间可能发出的消息。</p>
+                    <p id="proactive-mode-help" class="input-hint">可以前往“探索”-“后台运行服务”配置后台服务。没有配置后台服务时，会采用纯前端补发模式拉起主动消息。</p>
                 </section>
                 <!-- ★ 主动消息页只选择运行方式；Worker URL、访问密钥和连接状态统一放在“后台运行服务”。 -->
                 <section class="proactive-card">
@@ -846,9 +846,14 @@
                     <div id="proactive-character-list" class="proactive-character-list"></div>
                     <button id="proactive-characters-save-btn" type="button" class="proactive-save-button">保存角色</button>
                 </section>
-                <section class="proactive-card proactive-debug-card">
-                    <div class="proactive-title-row"><div class="input-label">运行状态</div><button id="proactive-test-btn" type="button">立即测试一次</button></div>
+                <!-- ★ 手动判断与自动参与名单独立；运行日志汇总所有角色，不受上方下拉框筛选。 -->
+                <section class="proactive-card proactive-manual-card">
+                    <div class="input-label">手动触发消息（测试）</div>
                     <select id="proactive-debug-character"></select>
+                    <button id="proactive-test-btn" type="button" class="proactive-save-button">手动触发消息</button>
+                </section>
+                <section class="proactive-card proactive-manual-card">
+                    <div class="input-label">运行日志</div>
                     <div id="proactive-status-summary" class="proactive-status-summary">尚未运行</div>
                     <div id="proactive-event-list" class="proactive-event-list"></div>
                 </section>
@@ -2843,7 +2848,7 @@
     
 
     <!-- 项目脚本：先加载独立服务，再加载主业务入口 -->
-    <script src="./js/config.js"></script>
+    <script src="./js/config.js?v=20260925-proactive-diagnostics-1"></script>
     <script src="./js/storage.js"></script>
     <script src="./js/world-info.js"></script>
     <script src="./js/cloud-sync.js"></script>
@@ -2858,9 +2863,9 @@
     <script src="./js/agent-todo-manager.js"></script>
     <script src="./js/agent-heart-note-manager.js"></script>
     <script src="./js/pomodoro.js"></script>
-    <script src="./js/proactive-messages.js?v=20260925-proactive-v10"></script>
+    <script src="./js/proactive-messages.js?v=20260925-proactive-diagnostics-2"></script>
     <!-- ★ 主动消息 v5 增加正文时间戳与轻量 Toast，更新版本参数避免 PWA 继续使用旧脚本。 -->
-    <script src="./script.js?v=20260924-proactive-v5"></script>
+    <script src="./script.js?v=20260925-proactive-diagnostics-1"></script>
 </body>
 </html>
 

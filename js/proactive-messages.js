@@ -5,7 +5,7 @@
 // 1. 定时器只提供思考机会，模型可以选择 silent；
 // 2. sentAt 是聊天界面的角色时间，generatedAt 是真实生成时间，冷却永远使用后者；
 // 3. Worker 和前端都用 messageId / heartbeatRunId 去重，避免 Alarm 重试或重复拉取产生两条消息；
-// 4. 每个角色的调试事件只保留最近 20 条。
+// 4. 浏览器统一保留最近 40 条调试事件；Worker 每个角色只暂存少量离线事件。
 
 const ProactiveMessages = {
     installationKey: 'telewindy_proactive_installation_v1',
@@ -14,6 +14,7 @@ const ProactiveMessages = {
     running: false,
     wakeTimer: null,
     savingCard: false,
+    diagnosticMigrationPending: false,
     // ★ 卡片有未保存输入时，后台同步触发的 render 不覆盖用户正在编辑的内容。
     dirtyCards: new Set(),
     draftRevisions: { time: 0, characters: 0, mode: 0 },
@@ -37,7 +38,67 @@ const ProactiveMessages = {
         ['lastLocalCheckAtByChar', 'nextLocalWakeAtByChar', 'localRuntimeByChar', 'workerStatusByChar'].forEach(key => {
             if (!settings[key] || typeof settings[key] !== 'object' || Array.isArray(settings[key])) settings[key] = {};
         });
+        if (!Array.isArray(settings.diagnosticEvents)) settings.diagnosticEvents = [];
+        // ★ 旧版频繁写入的同步事件没有排障价值，升级后从统一日志清除；旧 Worker 回传时也不再收录。
+        const withoutSyncEvents = settings.diagnosticEvents.filter(event => event?.code !== 'proactive_sync');
+        if (withoutSyncEvents.length !== settings.diagnosticEvents.length) {
+            settings.diagnosticEvents = withoutSyncEvents;
+            this.diagnosticMigrationPending = true;
+        }
+        if (settings.diagnosticEvents.length > 40) {
+            settings.diagnosticEvents = settings.diagnosticEvents.slice(-40);
+            this.diagnosticMigrationPending = true;
+        }
+        // ★ 旧版本把事件数组放在每个角色状态中；迁入统一日志后只保留运行状态，避免备份重复携带日志。
+        for (const [id, runtime] of Object.entries(settings.localRuntimeByChar)) {
+            if (!Array.isArray(runtime?.events)) continue;
+            this.mergeDiagnosticEvents(id, runtime.events, '浏览器', settings);
+            delete runtime.events;
+            this.diagnosticMigrationPending = true;
+        }
+        for (const [id, status] of Object.entries(settings.workerStatusByChar)) {
+            if (!Array.isArray(status?.events)) continue;
+            this.mergeDiagnosticEvents(id, status.events, 'Worker', settings);
+            delete status.events;
+            this.diagnosticMigrationPending = true;
+        }
+        if (!settings.lastDecisionSummary) {
+            const latest = [...settings.diagnosticEvents].reverse().find(event => ['proactive_decision_send', 'proactive_decision_silent'].includes(event.code));
+            if (latest) {
+                settings.lastDecisionSummary = {
+                    code: latest.code, ts: latest.ts, characterId: latest.characterId, characterName: latest.characterName
+                };
+                this.diagnosticMigrationPending = true;
+            }
+        }
         return settings;
+    },
+
+    mergeDiagnosticEvents(contactId, events, source, settings = this.settings()) {
+        const list = settings.diagnosticEvents;
+        const contact = (STATE.contacts || []).find(item => String(item.id) === String(contactId));
+        for (const event of events || []) {
+            if (!event?.code || event.code === 'proactive_sync') continue;
+            const entry = {
+                ...event,
+                characterId: String(contactId),
+                characterName: contact?.name || event.characterName || '已删除角色',
+                source,
+                ts: Number(event.ts || Date.now())
+            };
+            const key = `${entry.characterId}:${entry.source}:${entry.code}:${entry.heartbeatRunId || ''}:${entry.ts}`;
+            if (!list.some(item => `${item.characterId}:${item.source}:${item.code}:${item.heartbeatRunId || ''}:${item.ts}` === key)) list.push(entry);
+            if (['proactive_decision_send', 'proactive_decision_silent'].includes(entry.code)
+                && entry.ts >= Number(settings.lastDecisionSummary?.ts || 0)) {
+                // ★ 最近决策单独保留一份简要状态，防止统一日志滚动到 40 条后摘要变回“无”。
+                settings.lastDecisionSummary = {
+                    code: entry.code, ts: entry.ts, characterId: entry.characterId, characterName: entry.characterName
+                };
+            }
+        }
+        // ★ 先按时间排序再裁剪，旧快照迁移和多角色 Worker 回传都不能冲掉较新的记录。
+        list.sort((a, b) => Number(a.ts || 0) - Number(b.ts || 0));
+        settings.diagnosticEvents = list.slice(-40);
     },
 
     installationId() {
@@ -454,6 +515,10 @@ const ProactiveMessages = {
 
     async init() {
         this.settings();
+        if (this.diagnosticMigrationPending) {
+            await Storage.saveSettings();
+            this.diagnosticMigrationPending = false;
+        }
         this.restoreWorkerProbe();
         if (this.ensureMessageIds()) await Storage.saveContacts();
         this.bindUi();
@@ -486,7 +551,6 @@ const ProactiveMessages = {
         document.getElementById('proactive-execution-mode')?.addEventListener('change', () => this.markDraft('mode'));
         document.getElementById('proactive-test-btn')?.addEventListener('click', () => this.testSelectedCharacter());
         document.getElementById('proactive-worker-probe-btn')?.addEventListener('click', () => this.manualProbeWorker());
-        document.getElementById('proactive-debug-character')?.addEventListener('change', () => this.renderDebug());
         document.getElementById('proactive-api-preset-btn')?.addEventListener('click', () => this.openApiPresetModal());
         document.getElementById('proactive-api-cancel-btn')?.addEventListener('click', () => this.closeApiPresetModal());
         document.getElementById('proactive-api-save-btn')?.addEventListener('click', () => this.saveApiPresetModal());
@@ -721,34 +785,56 @@ const ProactiveMessages = {
     },
 
     renderDebug() {
-        const select = document.getElementById('proactive-debug-character');
         const summary = document.getElementById('proactive-status-summary');
         const list = document.getElementById('proactive-event-list');
-        if (!select || !summary || !list) return;
-        const id = String(select.value || '');
-        const status = this.workerModeAvailable()
-            ? this.settings().workerStatusByChar[id]
-            : this.settings().localRuntimeByChar[id];
-        const runtime = status?.runtime || status || {};
-        const next = Number(runtime.nextWakeAt || this.settings().nextLocalWakeAtByChar[id] || 0);
-        summary.textContent = `下次唤醒：${next ? new Date(next).toLocaleString() : '尚未安排'}　上次决策：${runtime.lastDecision || '无'}　未回复：${runtime.unansweredCount || 0}　今日发送：${runtime.dailyCount || 0}`;
+        if (!summary || !list) return;
+        const events = this.settings().diagnosticEvents.slice(-12).reverse();
+        const lastDecision = this.settings().lastDecisionSummary
+            || [...this.settings().diagnosticEvents].reverse().find(event => ['proactive_decision_send', 'proactive_decision_silent'].includes(event.code));
+        summary.textContent = lastDecision
+            ? `上次决策：${lastDecision.characterName} · ${lastDecision.code === 'proactive_decision_send' ? '发送' : '未发送'} · ${new Date(lastDecision.ts).toLocaleString()}`
+            : '上次决策：无';
         list.textContent = '';
-        const events = Array.isArray(status?.events) ? status.events.slice(-20).reverse() : [];
         if (!events.length) {
             const empty = document.createElement('div');
             empty.className = 'todo-empty-hint';
-            empty.textContent = '暂无运行事件';
+            empty.textContent = '暂无运行日志';
             list.appendChild(empty);
             return;
         }
+        const descriptions = {
+            proactive_sync: '已同步角色运行配置',
+            proactive_alarm_fired: '开始主动消息判断',
+            proactive_manual_started: '手动开始主动消息判断',
+            proactive_model_request_started: '正在请求模型',
+            proactive_model_request_finished: '模型判断完成',
+            proactive_decision_send: '角色决定发送主动消息',
+            proactive_decision_silent: '角色决定暂不发送',
+            proactive_prefilter_skipped: '本次判断被运行规则跳过',
+            proactive_run_failed: '主动消息运行失败',
+            proactive_next_alarm_set: '已安排下次唤醒',
+            proactive_initial_wake_set: '已安排首次唤醒',
+            proactive_disabled: '角色的自动运行已停用'
+        };
         events.forEach(event => {
             const row = document.createElement('div');
-            row.className = 'proactive-event-item';
-            const time = document.createElement('time');
-            time.textContent = new Date(Number(event.ts || 0)).toLocaleTimeString();
-            const text = document.createElement('span');
-            text.textContent = `${event.code}${event.reason ? ` · ${event.reason}` : ''}${event.error ? ` · ${event.error}` : ''}`;
-            row.append(time, text);
+            row.className = 'diagnostic-log-item';
+            const main = document.createElement('div');
+            main.className = 'diagnostic-log-main';
+            const code = document.createElement('span');
+            code.className = 'diagnostic-log-code';
+            code.textContent = event.code;
+            const description = document.createElement('span');
+            description.className = 'diagnostic-log-text';
+            description.textContent = `${descriptions[event.code] || '主动消息事件'}${event.reason ? ` · ${event.reason}` : ''}${event.error ? ` · ${event.error}` : ''}`;
+            main.append(code, description);
+            const meta = document.createElement('div');
+            meta.className = 'diagnostic-log-meta';
+            // ★ 纯前端运行 ID 带固定前缀；展示随机部分才能区分不同的判断。
+            const shortRunId = String(event.heartbeatRunId || '').replace(/^proactive_local_/, '').slice(0, 8);
+            const runId = shortRunId ? ` · ${shortRunId}` : '';
+            meta.textContent = `${new Date(event.ts).toLocaleTimeString()}${runId} · ${event.source} · ${event.characterName}`;
+            row.append(main, meta);
             list.appendChild(row);
         });
     },
@@ -884,7 +970,20 @@ const ProactiveMessages = {
             const reason = data.error ? ` · ${data.error}` : '';
             throw new Error(`主动消息同步失败：HTTP ${response.status}${reason}`);
         }
-        this.settings().workerStatusByChar[String(contact.id)] = await response.json();
+        const status = await response.json();
+        this.mergeDiagnosticEvents(contact.id, status.events, 'Worker');
+        // ★ Worker 事件只进入统一日志；按角色状态快照不再重复保存事件数组。
+        const { events, ...runtimeStatus } = status;
+        this.settings().workerStatusByChar[String(contact.id)] = runtimeStatus;
+    },
+
+    async refreshWorkerStatus(contact) {
+        const response = await fetch(`${this.workerBaseUrl(contact.id)}/status`, { headers: this.workerHeaders() });
+        if (!response.ok) throw new Error(`主动消息状态读取失败：HTTP ${response.status}`);
+        const status = await response.json();
+        this.mergeDiagnosticEvents(contact.id, status.events, 'Worker');
+        const { events, ...runtimeStatus } = status;
+        this.settings().workerStatusByChar[String(contact.id)] = runtimeStatus;
     },
 
     async disableWorkerContacts(contactIds) {
@@ -926,15 +1025,12 @@ const ProactiveMessages = {
         const key = String(contactId);
         const settings = this.settings();
         const runtime = settings.localRuntimeByChar[key] || {};
-        if (!Array.isArray(runtime.events)) runtime.events = [];
         settings.localRuntimeByChar[key] = runtime;
         return runtime;
     },
 
     addLocalEvent(contactId, code, detail = {}) {
-        const runtime = this.localRuntime(contactId);
-        runtime.events.push({ code, ts: Date.now(), ...detail });
-        runtime.events = runtime.events.slice(-20);
+        this.mergeDiagnosticEvents(contactId, [{ code, ts: Date.now(), ...detail }], '浏览器');
     },
 
     localPrefilter(contact, now) {
@@ -956,13 +1052,15 @@ const ProactiveMessages = {
         return '';
     },
 
-    buildLocalMessages(contact, windowStart, windowEnd) {
+    buildLocalMessages(contact, windowStart, windowEnd, manual = false) {
         const capsule = this.buildCapsule(contact);
         const history = capsule.messages.map(message => `[${new Date(message.eventAt || windowStart).toISOString()}] ${message.role === 'assistant' ? capsule.characterName : '对方'}：${message.content}`).join('\n');
         return [
             { role: 'system', content: `${capsule.characterPrompt}\n\n${capsule.contextPrompt}`.trim() },
             { role: 'system', content: [
-                `你就是 ${capsule.characterName}。PWA 刚刚重新打开，现在补做离线期间本应发生的一次主动判断。`,
+                manual
+                    ? `你就是 ${capsule.characterName}。现在手动提供一次主动判断机会，请根据当前对话决定是否联系对方。`
+                    : `你就是 ${capsule.characterName}。PWA 刚刚重新打开，现在补做离线期间本应发生的一次主动判断。`,
                 '没有自然理由就选择 silent。不要解释，不要提到补发、系统、PWA、JSON 或 AI。',
                 `允许的消息展示时间：${new Date(windowStart).toISOString()} 至 ${new Date(windowEnd).toISOString()}。sent_at 必须在这个范围内。`,
                 '只输出严格 JSON：{"decision":"silent或send","content":"send时的正文，silent时为空","sent_at":"send时的ISO时间，silent时为null","next_wake_at":"未来ISO时间或null"}',
@@ -1006,14 +1104,14 @@ const ProactiveMessages = {
             return;
         }
         const lastCheck = Number(settings.lastLocalCheckAtByChar[key] || existingNext || now);
-        const windowStart = Math.max(lastCheck, now - this.duration(settings.catchupMaxHours, 168, 24, false) * 3600000);
+        const windowStart = force ? now : Math.max(lastCheck, now - this.duration(settings.catchupMaxHours, 168, 24, false) * 3600000);
         const windowEnd = now;
         const heartbeatRunId = this.makeId('proactive_local');
-        settings.lastLocalCheckAtByChar[key] = now;
-        this.addLocalEvent(key, 'proactive_model_request_started', { heartbeatRunId });
+        if (!force) settings.lastLocalCheckAtByChar[key] = now;
+        this.addLocalEvent(key, 'proactive_model_request_started', { heartbeatRunId, source: force ? 'manual' : 'browser' });
         try {
             // ★ buildLocalMessages 在 fetch 前完成，用户随后快速发出的新消息不会倒灌进这次离线补发判断。
-            const frozenMessages = this.buildLocalMessages(contact, windowStart, windowEnd);
+            const frozenMessages = this.buildLocalMessages(contact, windowStart, windowEnd, force);
             const raw = await API.chat(frozenMessages, this.getRequestSettings(contact));
             const result = this.parseDecision(raw, windowStart, windowEnd);
             const runtime = this.localRuntime(key);
@@ -1036,12 +1134,16 @@ const ProactiveMessages = {
                 this.addLocalEvent(key, 'proactive_decision_silent', { heartbeatRunId });
             }
             const maxWake = now + this.getPolicy().heartbeatHours * 3600000;
-            settings.nextLocalWakeAtByChar[key] = result.nextWakeAt && result.nextWakeAt > now ? Math.min(result.nextWakeAt, maxWake) : maxWake;
-            runtime.nextWakeAt = settings.nextLocalWakeAtByChar[key];
-            this.addLocalEvent(key, 'proactive_next_alarm_set', { nextWakeAt: runtime.nextWakeAt });
+            if (!force) {
+                settings.nextLocalWakeAtByChar[key] = result.nextWakeAt && result.nextWakeAt > now ? Math.min(result.nextWakeAt, maxWake) : maxWake;
+                runtime.nextWakeAt = settings.nextLocalWakeAtByChar[key];
+                this.addLocalEvent(key, 'proactive_next_alarm_set', { nextWakeAt: runtime.nextWakeAt });
+            }
+            return { decision: result.decision };
         } catch (error) {
-            settings.nextLocalWakeAtByChar[key] = now + this.getPolicy().heartbeatHours * 3600000;
+            if (!force) settings.nextLocalWakeAtByChar[key] = now + this.getPolicy().heartbeatHours * 3600000;
             this.addLocalEvent(key, 'proactive_run_failed', { error: String(error?.message || error).slice(0, 180) });
+            return { error: String(error?.message || error) };
         }
     },
 
@@ -1079,31 +1181,37 @@ const ProactiveMessages = {
         const contactId = document.getElementById('proactive-debug-character')?.value;
         const contact = (STATE.contacts || []).find(item => String(item.id) === String(contactId));
         if (!contact) return;
-        const settings = this.settings();
-        if (!settings.enabled || !settings.characterIds.map(String).includes(String(contact.id))) {
-            alert('请先开启主动消息、勾选该角色，并点击“保存角色”，然后再测试。');
-            return;
-        }
         const button = document.getElementById('proactive-test-btn');
         if (button) button.disabled = true;
         try {
-            // ★ “立即测试”只沿用已应用的运行结果；Worker 能力检测统一由上方专用按钮显式触发。
+            let decision;
+            // ★ 手动判断沿用已保存的运行方式，但不改变“参与角色”和自动定时安排。
             if (this.workerModeAvailable()) {
-                await this.syncWorker(contact);
-                const response = await fetch(`${this.workerBaseUrl(contact.id)}/run`, { method: 'POST', headers: this.workerHeaders() });
+                const response = await fetch(`${this.workerBaseUrl(contact.id)}/run`, {
+                    method: 'POST', headers: this.workerHeaders(), body: JSON.stringify(this.buildCapsule(contact))
+                });
                 if (!response.ok) throw new Error(`测试失败：HTTP ${response.status}`);
                 const result = await response.json();
-                // ★ /run 的业务失败或预筛选跳过仍可能返回 HTTP 200，测试入口必须把真实结果告诉用户。
                 if (result.ok === false) throw new Error(`主动消息测试失败：${result.error || 'Worker 运行失败'}`);
                 if (result.skipped) throw new Error(`本次未请求模型：${result.skipped}`);
+                decision = result.decision;
                 await this.pullWorkerMessages(contact);
-                await this.syncWorker(contact);
+                await this.refreshWorkerStatus(contact);
             } else {
-                await this.runLocalCatchup(contact, true);
-                await Storage.saveSettings();
+                const result = await this.runLocalCatchup(contact, true);
+                if (result?.error) throw new Error(result.error);
+                decision = result?.decision;
             }
-            this.render();
+            await Storage.saveSettings();
+            this.renderDebug();
+            if (typeof Toast !== 'undefined') Toast.show(decision === 'send' ? '角色已发送主动消息' : '角色决定暂不发送', { icon: 'settings' });
         } catch (error) {
+            // ★ Worker 已执行但返回业务失败时，仍取回本次失败事件，供统一日志排查。
+            if (this.workerModeAvailable()) {
+                try { await this.refreshWorkerStatus(contact); } catch (statusError) {}
+            }
+            await Storage.saveSettings();
+            this.renderDebug();
             alert(error?.message || String(error));
         } finally {
             if (button) button.disabled = false;

@@ -88,6 +88,9 @@ const CONFIG = {
             nextLocalWakeAtByChar: {},
             localRuntimeByChar: {},
             workerStatusByChar: {},
+            // ★ 所有角色共用最近 40 条浏览器诊断日志；Worker 只暂存每个角色的离线事件。
+            diagnosticEvents: [],
+            lastDecisionSummary: null,
             developerMode: false
         },
         WORLD_SENSE_ENABLED: false,
