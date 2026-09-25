@@ -217,3 +217,202 @@ test('Worker 检测失败会明确保存为浏览器运行模式', async () => {
         ProactiveMessages.rememberWorkerProbe = originalRememberWorkerProbe;
     }
 });
+
+test('已授权时可从浏览器模式应用私人 Worker，不会把模式写入失效设置对象', async () => {
+    STATE.settings = {
+        ASYNC_BACKEND_URL: 'https://worker.example',
+        ASYNC_BACKEND_TOKEN: 'worker-token',
+        PROACTIVE_MESSAGES: {
+            ...JSON.parse(JSON.stringify(CONFIG.DEFAULT.PROACTIVE_MESSAGES)),
+            executionMode: 'frontend',
+            privateWorkerCredentialConsent: true
+        }
+    };
+    STATE.contacts = [];
+
+    const previousDocument = global.document;
+    const previousStorage = global.Storage;
+    const originalProbeWorkerCapability = ProactiveMessages.probeWorkerCapability;
+    const originalRunStartup = ProactiveMessages.runStartup;
+    const originalRender = ProactiveMessages.render;
+    const originalDisableWorkerContacts = ProactiveMessages.disableWorkerContacts;
+    let modeSeenByProbe = '';
+
+    global.document = {
+        getElementById(id) {
+            return id === 'proactive-execution-mode' ? { value: 'private_worker' } : null;
+        }
+    };
+    global.Storage = { saveSettings: async () => {} };
+    ProactiveMessages.probeWorkerCapability = async () => {
+        modeSeenByProbe = ProactiveMessages.executionMode();
+        ProactiveMessages.workerProbe = { status: 'ready', code: '', message: 'Worker 主动消息可用' };
+        return true;
+    };
+    ProactiveMessages.runStartup = async () => {};
+    ProactiveMessages.render = () => {};
+    ProactiveMessages.disableWorkerContacts = async () => {};
+
+    try {
+        await ProactiveMessages.manualProbeWorker();
+        assert.equal(modeSeenByProbe, 'private_worker');
+        assert.equal(ProactiveMessages.executionMode(), 'private_worker');
+        assert.equal(ProactiveMessages.settings().followFrontendApiKey, false);
+    } finally {
+        global.document = previousDocument;
+        global.Storage = previousStorage;
+        ProactiveMessages.probeWorkerCapability = originalProbeWorkerCapability;
+        ProactiveMessages.runStartup = originalRunStartup;
+        ProactiveMessages.render = originalRender;
+        ProactiveMessages.disableWorkerContacts = originalDisableWorkerContacts;
+    }
+});
+
+test('保存角色只持久化勾选角色，并让 Worker 胶囊保持启用', async () => {
+    const contact = { id: 'char-selected', name: '测试角色', prompt: '', history: [] };
+    STATE.contacts = [contact];
+    STATE.settings = {
+        API_URL: 'https://api.example.com/v1/chat/completions',
+        API_KEY: 'private-test-key',
+        MODEL: 'test-model',
+        API_PRESETS: [],
+        PROACTIVE_MESSAGES: {
+            ...JSON.parse(JSON.stringify(CONFIG.DEFAULT.PROACTIVE_MESSAGES)),
+            enabled: true,
+            executionMode: 'private_worker',
+            privateWorkerCredentialConsent: true
+        }
+    };
+
+    const previousDocument = global.document;
+    const previousStorage = global.Storage;
+    const originalDisableWorkerContacts = ProactiveMessages.disableWorkerContacts;
+    const originalRunStartup = ProactiveMessages.runStartup;
+    const originalRender = ProactiveMessages.render;
+    let savedCharacterIds = null;
+
+    global.document = {
+        getElementById(id) {
+            const values = {
+                'proactive-heartbeat-hours': '12',
+                'proactive-catchup-hours': '24',
+                'proactive-active-start': '11:00',
+                'proactive-active-end': '23:00',
+                'proactive-min-cooldown': '180',
+                'proactive-chat-quiet': '45',
+                'proactive-daily-limit': '3',
+                'proactive-unanswered-limit': '2'
+            };
+            return Object.hasOwn(values, id) ? { value: values[id] } : null;
+        },
+        querySelectorAll(selector) {
+            return selector === '[data-proactive-character-id]:checked'
+                ? [{ dataset: { proactiveCharacterId: contact.id } }]
+                : [];
+        }
+    };
+    global.Storage = {
+        saveSettings: async () => {
+            savedCharacterIds = [...STATE.settings.PROACTIVE_MESSAGES.characterIds];
+        }
+    };
+    ProactiveMessages.disableWorkerContacts = async () => {};
+    ProactiveMessages.runStartup = async () => {};
+    ProactiveMessages.render = () => {};
+
+    try {
+        await ProactiveMessages.saveCharacters();
+        assert.deepEqual(savedCharacterIds, [contact.id]);
+        assert.deepEqual(ProactiveMessages.settings().characterIds, [contact.id]);
+        assert.equal(ProactiveMessages.settings().activeStart, '09:00');
+        assert.equal(ProactiveMessages.buildCapsule(contact).enabled, true);
+    } finally {
+        global.document = previousDocument;
+        global.Storage = previousStorage;
+        ProactiveMessages.disableWorkerContacts = originalDisableWorkerContacts;
+        ProactiveMessages.runStartup = originalRunStartup;
+        ProactiveMessages.render = originalRender;
+    }
+});
+
+test('保存时段只更新本卡片设置，不保存未提交的角色勾选', async () => {
+    STATE.contacts = [{ id: 'char-unsaved', name: '未保存角色' }];
+    STATE.settings = { PROACTIVE_MESSAGES: JSON.parse(JSON.stringify(CONFIG.DEFAULT.PROACTIVE_MESSAGES)) };
+    const previousDocument = global.document;
+    const previousStorage = global.Storage;
+    const originalRunStartup = ProactiveMessages.runStartup;
+    const originalRender = ProactiveMessages.render;
+    let saved = null;
+
+    global.document = {
+        getElementById(id) {
+            const values = {
+                'proactive-active-start': '10:30',
+                'proactive-active-end': '21:45',
+                'proactive-min-cooldown': '90',
+                'proactive-chat-quiet': '30',
+                'proactive-daily-limit': '4',
+                'proactive-unanswered-limit': '3',
+                'proactive-heartbeat-hours': '6',
+                'proactive-catchup-hours': '12'
+            };
+            return Object.hasOwn(values, id) ? { value: values[id] } : null;
+        },
+        querySelectorAll() {
+            throw new Error('保存时段不应读取角色勾选');
+        }
+    };
+    global.Storage = { saveSettings: async () => { saved = structuredClone(STATE.settings.PROACTIVE_MESSAGES); } };
+    ProactiveMessages.runStartup = async () => {};
+    ProactiveMessages.render = () => {};
+
+    try {
+        await ProactiveMessages.saveTimeSettings();
+        assert.equal(saved.activeStart, '10:30');
+        assert.equal(saved.activeEnd, '21:45');
+        assert.equal(saved.heartbeatHours, 6);
+        assert.deepEqual(saved.characterIds, []);
+    } finally {
+        global.document = previousDocument;
+        global.Storage = previousStorage;
+        ProactiveMessages.runStartup = originalRunStartup;
+        ProactiveMessages.render = originalRender;
+    }
+});
+
+test('后台重绘保留其他卡片未保存的时段、角色和运行方式输入', () => {
+    STATE.contacts = [];
+    STATE.settings = { PROACTIVE_MESSAGES: JSON.parse(JSON.stringify(CONFIG.DEFAULT.PROACTIVE_MESSAGES)) };
+    const previousDocument = global.document;
+    const originalRenderModeStatus = ProactiveMessages.renderModeStatus;
+    const originalRenderCharacters = ProactiveMessages.renderCharacters;
+    const originalRenderDebugSelector = ProactiveMessages.renderDebugSelector;
+    const originalRenderDebug = ProactiveMessages.renderDebug;
+    const elements = {
+        'proactive-active-start': { value: '11:30' },
+        'proactive-execution-mode': { value: 'private_worker' }
+    };
+    let characterRenders = 0;
+    global.document = { getElementById: id => elements[id] || null };
+    ProactiveMessages.renderModeStatus = () => {};
+    ProactiveMessages.renderCharacters = () => { characterRenders += 1; };
+    ProactiveMessages.renderDebugSelector = () => {};
+    ProactiveMessages.renderDebug = () => {};
+    ProactiveMessages.dirtyCards.add('time');
+    ProactiveMessages.dirtyCards.add('characters');
+    ProactiveMessages.dirtyCards.add('mode');
+
+    try {
+        ProactiveMessages.render();
+        assert.equal(elements['proactive-active-start'].value, '11:30');
+        assert.equal(elements['proactive-execution-mode'].value, 'private_worker');
+        assert.equal(characterRenders, 0);
+    } finally {
+        ProactiveMessages.dirtyCards.clear();
+        global.document = previousDocument;
+        ProactiveMessages.renderModeStatus = originalRenderModeStatus;
+        ProactiveMessages.renderCharacters = originalRenderCharacters;
+        ProactiveMessages.renderDebugSelector = originalRenderDebugSelector;
+        ProactiveMessages.renderDebug = originalRenderDebug;
+    }
+});

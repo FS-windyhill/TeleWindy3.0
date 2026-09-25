@@ -2404,15 +2404,18 @@ function isAllowedOrigin(request, env) {
 }
 
 function withCors(response, request, env) {
+  // ★ Durable Object 子请求返回的响应头可能只读；复制响应后再补 CORS，保留原状态和正文。
+  const corsResponse = new Response(response.body, response);
   const origin = request.headers.get("Origin");
   if (origin && (isWildcardOrigin(env) || getAllowedOrigins(env).includes(origin))) {
-    response.headers.set("Access-Control-Allow-Origin", origin);
-    response.headers.set("Vary", "Origin");
+    corsResponse.headers.set("Access-Control-Allow-Origin", origin);
+    corsResponse.headers.set("Vary", "Origin");
   }
-  response.headers.set("Access-Control-Allow-Methods", "POST, GET, DELETE, OPTIONS");
-  response.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
-  response.headers.set("Access-Control-Max-Age", "86400");
-  return response;
+  // ★ 主动角色同步使用 PUT；预检未声明时浏览器会在请求到达 Worker 路由前直接拦截。
+  corsResponse.headers.set("Access-Control-Allow-Methods", "POST, PUT, GET, DELETE, OPTIONS");
+  corsResponse.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  corsResponse.headers.set("Access-Control-Max-Age", "86400");
+  return corsResponse;
 }
 
 function json(data, status, request, env) {

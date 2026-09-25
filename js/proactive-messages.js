@@ -13,6 +13,10 @@ const ProactiveMessages = {
     contextMessageLimit: 15,
     running: false,
     wakeTimer: null,
+    savingCard: false,
+    // ★ 卡片有未保存输入时，后台同步触发的 render 不覆盖用户正在编辑的内容。
+    dirtyCards: new Set(),
+    draftRevisions: { time: 0, characters: 0, mode: 0 },
     // ★ 只持久化无敏感信息的检测摘要；启动时恢复上次结果，新的真实检测必须由用户点击按钮触发。
     workerProbe: { status: 'idle', code: '', message: '尚未检测', signature: '', checkedAt: 0 },
 
@@ -25,7 +29,8 @@ const ProactiveMessages = {
         if (!current || typeof current !== 'object' || Array.isArray(current)) {
             STATE.settings.PROACTIVE_MESSAGES = this.defaults();
         } else {
-            STATE.settings.PROACTIVE_MESSAGES = { ...this.defaults(), ...current };
+            // ★ 只补默认字段，不替换已被保存、开关或同步流程持有的设置对象。
+            Object.assign(current, { ...this.defaults(), ...current });
         }
         const settings = STATE.settings.PROACTIVE_MESSAGES;
         ['characterIds'].forEach(key => { if (!Array.isArray(settings[key])) settings[key] = []; });
@@ -469,7 +474,16 @@ const ProactiveMessages = {
         ['proactive-messages-enable-toggle', 'async-backend-proactive-capability-toggle'].forEach(id => {
             document.getElementById(id)?.addEventListener('change', event => this.setEnabled(event.target.checked, event.target));
         });
-        document.getElementById('proactive-save-btn')?.addEventListener('click', () => this.saveFromUi());
+        document.getElementById('proactive-time-save-btn')?.addEventListener('click', () => this.saveTimeSettings());
+        document.getElementById('proactive-characters-save-btn')?.addEventListener('click', () => this.saveCharacters());
+        const timeCard = document.querySelector('.proactive-settings-grid');
+        ['input', 'change'].forEach(type => timeCard?.addEventListener(type, event => {
+            if (event.target?.matches('input')) this.markDraft('time');
+        }));
+        document.getElementById('proactive-character-list')?.addEventListener('change', event => {
+            if (event.target?.matches('[data-proactive-character-id]')) this.markDraft('characters');
+        });
+        document.getElementById('proactive-execution-mode')?.addEventListener('change', () => this.markDraft('mode'));
         document.getElementById('proactive-test-btn')?.addEventListener('click', () => this.testSelectedCharacter());
         document.getElementById('proactive-worker-probe-btn')?.addEventListener('click', () => this.manualProbeWorker());
         document.getElementById('proactive-debug-character')?.addEventListener('change', () => this.renderDebug());
@@ -485,6 +499,11 @@ const ProactiveMessages = {
         });
     },
 
+    markDraft(card) {
+        this.dirtyCards.add(card);
+        this.draftRevisions[card] += 1;
+    },
+
     render() {
         const settings = this.settings();
         const setValue = (id, value) => { const element = document.getElementById(id); if (element) element.value = value; };
@@ -492,22 +511,24 @@ const ProactiveMessages = {
         if (master) master.checked = settings.enabled === true;
         const serviceToggle = document.getElementById('async-backend-proactive-capability-toggle');
         if (serviceToggle) serviceToggle.checked = settings.enabled === true;
-        setValue('proactive-active-start', settings.activeStart);
-        setValue('proactive-active-end', settings.activeEnd);
-        setValue('proactive-min-cooldown', settings.minCooldownMinutes);
-        setValue('proactive-chat-quiet', settings.recentChatQuietMinutes);
-        setValue('proactive-daily-limit', settings.dailyLimit);
-        setValue('proactive-unanswered-limit', settings.unansweredLimit);
-        setValue('proactive-heartbeat-hours', settings.heartbeatHours);
-        setValue('proactive-catchup-hours', settings.catchupMaxHours);
-        const catchup = document.getElementById('proactive-catchup-enabled');
-        if (catchup) catchup.checked = settings.catchupEnabled !== false;
+        if (!this.dirtyCards.has('time')) {
+            setValue('proactive-active-start', settings.activeStart);
+            setValue('proactive-active-end', settings.activeEnd);
+            setValue('proactive-min-cooldown', settings.minCooldownMinutes);
+            setValue('proactive-chat-quiet', settings.recentChatQuietMinutes);
+            setValue('proactive-daily-limit', settings.dailyLimit);
+            setValue('proactive-unanswered-limit', settings.unansweredLimit);
+            setValue('proactive-heartbeat-hours', settings.heartbeatHours);
+            setValue('proactive-catchup-hours', settings.catchupMaxHours);
+            const catchup = document.getElementById('proactive-catchup-enabled');
+            if (catchup) catchup.checked = settings.catchupEnabled !== false;
+        }
         const executionMode = this.executionMode();
-        setValue('proactive-execution-mode', executionMode);
+        if (!this.dirtyCards.has('mode')) setValue('proactive-execution-mode', executionMode);
         const apiButton = document.getElementById('proactive-api-preset-btn');
         if (apiButton) apiButton.title = `主动消息 API：${this.selectedPresetLabel()}`;
         this.renderModeStatus();
-        this.renderCharacters();
+        if (!this.dirtyCards.has('characters')) this.renderCharacters();
         this.renderDebugSelector();
         this.renderDebug();
     },
@@ -534,16 +555,19 @@ const ProactiveMessages = {
     async manualProbeWorker() {
         const selectedMode = document.getElementById('proactive-execution-mode')?.value || this.executionMode();
         const previousMode = this.executionMode();
-        const settings = this.settings();
 
         if (selectedMode === 'private_worker' && !this.ensurePrivateWorkerConsent()) {
+            this.dirtyCards.delete('mode');
             this.render();
             return;
         }
 
-        // ★ 这里只应用三种运行方式；页面里的时间、次数、参与角色等输入仍由“保存并同步”单独负责。
+        // ★ 凭据确认后再取得当前设置；后续检测和同步会继续使用这份对象。
+        const settings = this.settings();
+        // ★ 这里只应用三种运行方式；时段和参与角色分别由各自卡片的按钮保存。
         settings.executionMode = selectedMode;
         settings.followFrontendApiKey = selectedMode === 'frontend';
+        this.dirtyCards.delete('mode');
         this.invalidateWorkerProbe('运行方式已变化，正在检测');
         await Storage.saveSettings();
 
@@ -729,10 +753,9 @@ const ProactiveMessages = {
         });
     },
 
-    async saveFromUi() {
+    async saveTimeSettings() {
+        if (this.savingCard) return;
         const settings = this.settings();
-        const savedExecutionMode = this.executionMode();
-        const previousCharacterIds = [...settings.characterIds];
         const value = id => document.getElementById(id)?.value;
         const heartbeatHours = Number(value('proactive-heartbeat-hours'));
         const catchupHours = Number(value('proactive-catchup-hours'));
@@ -740,6 +763,8 @@ const ProactiveMessages = {
             alert('“最长多久再想一次”和“纯前端最多回看”需要填写大于 0 的数字，可以使用小数。');
             return;
         }
+        const fields = ['activeStart', 'activeEnd', 'minCooldownMinutes', 'recentChatQuietMinutes', 'dailyLimit', 'unansweredLimit', 'heartbeatHours', 'catchupMaxHours', 'catchupEnabled'];
+        const previous = Object.fromEntries(fields.map(key => [key, settings[key]]));
         settings.activeStart = value('proactive-active-start') || '09:00';
         settings.activeEnd = value('proactive-active-end') || '23:00';
         settings.minCooldownMinutes = this.duration(value('proactive-min-cooldown'), 10080, 180, true);
@@ -749,8 +774,15 @@ const ProactiveMessages = {
         settings.heartbeatHours = this.duration(heartbeatHours, 168, 12, false);
         settings.catchupMaxHours = this.duration(catchupHours, 168, 24, false);
         settings.catchupEnabled = document.getElementById('proactive-catchup-enabled')?.checked !== false;
+        await this.persistCard('time', previous);
+    },
+
+    async saveCharacters() {
+        if (this.savingCard) return;
+        const settings = this.settings();
+        const previousCharacterIds = [...settings.characterIds];
         const nextCharacterIds = [...document.querySelectorAll('[data-proactive-character-id]:checked')].map(input => String(input.dataset.proactiveCharacterId));
-        if (savedExecutionMode === 'private_worker') {
+        if (this.executionMode() === 'private_worker') {
             const missingKeyContact = (STATE.contacts || [])
                 .filter(contact => nextCharacterIds.includes(String(contact.id)))
                 .find(contact => !this.getRequestSettings(contact).API_KEY);
@@ -759,15 +791,41 @@ const ProactiveMessages = {
                 return;
             }
         }
-        // ★ 普通“保存并同步”只保存时段、频率与参与角色；运行方式必须由上方专用按钮应用。
+        // ★ 只更新角色选择；时段卡片里尚未保存的输入不会随本次保存落盘。
         settings.characterIds = nextCharacterIds;
-        await Storage.saveSettings();
-        // ★ 取消角色时主动撤销旧 Alarm，并删除该角色留在 Worker 的加密凭据。
-        const removedIds = previousCharacterIds.filter(id => !nextCharacterIds.includes(String(id)));
-        await this.disableWorkerContacts(removedIds);
-        await this.runStartup();
-        this.render();
-        if (typeof Toast !== 'undefined') Toast.show('主动消息设置已保存', { icon: 'settings' });
+        await this.persistCard('characters', { characterIds: previousCharacterIds }, async () => {
+            // ★ 取消角色时主动撤销旧 Alarm，并删除该角色留在 Worker 的加密凭据。
+            const removedIds = previousCharacterIds.filter(id => !nextCharacterIds.includes(String(id)));
+            await this.disableWorkerContacts(removedIds);
+        });
+    },
+
+    async persistCard(card, previous, afterSave = null) {
+        this.savingCard = true;
+        const buttons = ['proactive-time-save-btn', 'proactive-characters-save-btn']
+            .map(id => document.getElementById(id)).filter(Boolean);
+        const revision = this.draftRevisions[card];
+        this.dirtyCards.add(card);
+        // ★ 两张卡片共用一份设置对象，保存期间禁止另一张卡片同时写入落盘。
+        buttons.forEach(button => { button.disabled = true; });
+        let persisted = false;
+        try {
+            await Storage.saveSettings();
+            persisted = true;
+            if (afterSave) await afterSave();
+            await this.runStartup();
+            // ★ 保存期间若又改了输入，保留新草稿，不用已保存的值重绘覆盖它。
+            if (this.draftRevisions[card] === revision) this.dirtyCards.delete(card);
+            this.render();
+            if (typeof Toast !== 'undefined') Toast.show('已保存');
+        } catch (error) {
+            if (!persisted) Object.assign(this.settings(), previous);
+            console.warn(`[主动消息] ${card === 'time' ? '时段' : '角色'}保存或同步失败:`, error);
+            alert(`${persisted ? '设置已保存，但同步失败' : '设置保存失败'}：${error?.message || error}`);
+        } finally {
+            buttons.forEach(button => { button.disabled = false; });
+            this.savingCard = false;
+        }
     },
 
     async runStartup() {
@@ -1021,6 +1079,11 @@ const ProactiveMessages = {
         const contactId = document.getElementById('proactive-debug-character')?.value;
         const contact = (STATE.contacts || []).find(item => String(item.id) === String(contactId));
         if (!contact) return;
+        const settings = this.settings();
+        if (!settings.enabled || !settings.characterIds.map(String).includes(String(contact.id))) {
+            alert('请先开启主动消息、勾选该角色，并点击“保存角色”，然后再测试。');
+            return;
+        }
         const button = document.getElementById('proactive-test-btn');
         if (button) button.disabled = true;
         try {
@@ -1029,6 +1092,10 @@ const ProactiveMessages = {
                 await this.syncWorker(contact);
                 const response = await fetch(`${this.workerBaseUrl(contact.id)}/run`, { method: 'POST', headers: this.workerHeaders() });
                 if (!response.ok) throw new Error(`测试失败：HTTP ${response.status}`);
+                const result = await response.json();
+                // ★ /run 的业务失败或预筛选跳过仍可能返回 HTTP 200，测试入口必须把真实结果告诉用户。
+                if (result.ok === false) throw new Error(`主动消息测试失败：${result.error || 'Worker 运行失败'}`);
+                if (result.skipped) throw new Error(`本次未请求模型：${result.skipped}`);
                 await this.pullWorkerMessages(contact);
                 await this.syncWorker(contact);
             } else {

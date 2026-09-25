@@ -84,3 +84,45 @@ test('普通后台 job 的 Alarm 仍保持原有过期删除行为', async () =>
     await object.alarm();
     assert.equal(await storage.get('job'), undefined);
 });
+
+test('主动消息同步的 CORS 预检明确允许 PUT', async () => {
+    const origin = 'https://795799.xyz';
+    const response = await workerModule.default.fetch(new Request('https://worker.local/proactive/object/sync', {
+        method: 'OPTIONS',
+        headers: {
+            Origin: origin,
+            'Access-Control-Request-Method': 'PUT',
+            'Access-Control-Request-Headers': 'authorization,content-type'
+        }
+    }), {
+        ALLOWED_ORIGIN: origin,
+        APP_TOKEN: 'worker-token'
+    });
+
+    assert.equal(response.status, 204);
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'), origin);
+    assert.match(response.headers.get('Access-Control-Allow-Methods') || '', /\bPUT\b/);
+});
+
+test('主动消息同步能给只读的 Durable Object 响应添加 CORS 响应头', async () => {
+    const origin = 'https://795799.xyz';
+    const immutableResponse = await fetch('data:application/json,%7B%22enabled%22%3Atrue%7D');
+    assert.throws(() => immutableResponse.headers.set('X-Test', 'value'), TypeError);
+
+    const response = await workerModule.default.fetch(new Request('https://worker.local/proactive/object/sync', {
+        method: 'PUT',
+        headers: { Origin: origin, Authorization: 'Bearer worker-token' },
+        body: '{}'
+    }), {
+        ALLOWED_ORIGIN: origin,
+        APP_TOKEN: 'worker-token',
+        CHAT_JOB_OBJECT: {
+            idFromName: name => name,
+            get: () => ({ fetch: async () => immutableResponse })
+        }
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'), origin);
+    assert.deepEqual(await response.json(), { enabled: true });
+});

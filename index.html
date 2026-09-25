@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="./vendor/katex/katex.min.css">
 
     <!-- ★ Agent 面板相关资源同步更新版本号，避免浏览器沿用旧脚本和样式。 -->
-    <link rel="stylesheet" href="./style.css?v=20260907-agent-panel-2">
+    <link rel="stylesheet" href="./style.css?v=20260925-proactive-card-save-2">
 </head>
 <body>
 
@@ -838,10 +838,13 @@
                     <div class="input-group"><label for="proactive-heartbeat-hours">最长多久再想一次（小时）</label><input id="proactive-heartbeat-hours" type="number" step="any" inputmode="decimal"></div>
                     <div class="input-group"><label class="proactive-check-row"><input id="proactive-catchup-enabled" type="checkbox"><span>纯前端模式允许离线补发</span></label></div>
                     <div class="input-group"><label for="proactive-catchup-hours">纯前端最多回看（小时）</label><input id="proactive-catchup-hours" type="number" step="any" inputmode="decimal"></div>
+                    <!-- ★ 时段卡片内的频率、次数与补发设置统一由本卡片保存。 -->
+                    <button id="proactive-time-save-btn" type="button" class="proactive-save-button">保存时段</button>
                 </section>
                 <section class="proactive-card">
-                    <div class="proactive-title-row"><div class="input-label">参与角色</div><button id="proactive-save-btn" class="primary">保存并同步</button></div>
+                    <div class="input-label">参与角色</div>
                     <div id="proactive-character-list" class="proactive-character-list"></div>
+                    <button id="proactive-characters-save-btn" type="button" class="proactive-save-button">保存角色</button>
                 </section>
                 <section class="proactive-card proactive-debug-card">
                     <div class="proactive-title-row"><div class="input-label">运行状态</div><button id="proactive-test-btn" type="button">立即测试一次</button></div>
@@ -2855,7 +2858,7 @@
     <script src="./js/agent-todo-manager.js"></script>
     <script src="./js/agent-heart-note-manager.js"></script>
     <script src="./js/pomodoro.js"></script>
-    <script src="./js/proactive-messages.js?v=20260924-proactive-v7"></script>
+    <script src="./js/proactive-messages.js?v=20260925-proactive-v10"></script>
     <!-- ★ 主动消息 v5 增加正文时间戳与轻量 Toast，更新版本参数避免 PWA 继续使用旧脚本。 -->
     <script src="./script.js?v=20260924-proactive-v5"></script>
 </body>
