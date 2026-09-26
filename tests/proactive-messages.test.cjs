@@ -1,5 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
 
 global.CONFIG = {
     DEFAULT: {
@@ -28,6 +30,7 @@ global.CONFIG = {
     }
 };
 global.STATE = { settings: {}, contacts: [] };
+global.HistoryVisibility = vm.runInNewContext(`${fs.readFileSync(require.resolve('../js/history-visibility.js'), 'utf8')}\nHistoryVisibility`);
 
 const ProactiveMessages = require('../js/proactive-messages.js');
 
@@ -294,6 +297,24 @@ test('主动判断胶囊只携带最近 15 条文字聊天', () => {
     assert.equal(capsule.messages.length, 15);
     assert.equal(capsule.messages[0].messageId, 'message_5');
     assert.equal(capsule.messages[14].messageId, 'message_19');
+});
+
+test('主动判断快照清洗思考链，并跳过只含思考的消息', () => {
+    const contact = {
+        id: 'char-thought',
+        name: '测试角色',
+        history: [
+            { messageId: 'one', role: 'assistant', content: '<think>不应传给模型</think>\n\n你好', eventAt: 1000 },
+            { messageId: 'two', role: 'assistant', content: '<think>只有思考</think>', eventAt: 2000 },
+            { messageId: 'three', role: 'user', content: '最近说的话', eventAt: 3000 }
+        ]
+    };
+
+    const capsule = ProactiveMessages.buildCapsule(contact);
+    assert.deepEqual(capsule.messages.map(message => message.messageId), ['one', 'three']);
+    assert.equal(capsule.messages[0].content, '你好');
+    const localMessages = ProactiveMessages.buildLocalMessages(contact, 1000, 3000, true);
+    assert.equal(localMessages.some(message => message.content.includes('不应传给模型') || message.content.includes('只有思考')), false);
 });
 
 test('主动消息把 sent_at 写入正文，但聊天气泡隐藏该前缀', async () => {

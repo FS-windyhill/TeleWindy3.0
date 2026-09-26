@@ -372,12 +372,20 @@ const ProactiveMessages = {
             // ★ API 预设保存时已经校验 JSON；这里仍兜底为空对象，避免旧数据阻断整次后台同步。
             console.warn('[主动消息] API 预设附加参数不是有效 JSON，Worker 模式将忽略:', error);
         }
-        const messages = (contact.history || []).slice(-this.contextMessageLimit).map(message => ({
-            messageId: message.messageId,
-            role: message.role === 'assistant' ? 'assistant' : 'user',
-            content: String(message.content || '').replace(/^\[\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\]\s*/, '').slice(0, 4000),
-            eventAt: Number(message.eventAt) || this.parseChatTime(message.timestamp)
-        }));
+        // ★ 与普通聊天共用 AI 可见历史规则：主动判断不读取思考链、隐藏气泡或纯思考消息。
+        const messages = [];
+        const history = contact.history || [];
+        for (let index = history.length - 1; index >= 0 && messages.length < this.contextMessageLimit; index -= 1) {
+            const message = history[index];
+            const visible = HistoryVisibility.buildVisibleMessage(message);
+            if (!visible) continue;
+            messages.unshift({
+                messageId: message.messageId,
+                role: visible.role,
+                content: visible.content.replace(/^\[\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\]\s*/, '').slice(0, 4000),
+                eventAt: Number(message.eventAt) || this.parseChatTime(message.timestamp)
+            });
+        }
         return {
             enabled: this.settings().enabled === true && this.settings().characterIds.map(String).includes(String(contact.id)),
             characterId: String(contact.id),
