@@ -77,6 +77,66 @@ test('旧版重复同步事件不会进入统一日志', () => {
     assert.equal(settings.diagnosticEvents.length, 1);
 });
 
+test('浏览器连续未回复时仍使用固定的最短主动间隔', () => {
+    const now = new Date('2026-09-23T12:00:00+08:00').getTime();
+    const contact = { id: 'cooldown-char', history: [] };
+    STATE.settings.PROACTIVE_MESSAGES = {
+        ...JSON.parse(JSON.stringify(CONFIG.DEFAULT.PROACTIVE_MESSAGES)),
+        minCooldownMinutes: 60,
+        recentChatQuietMinutes: 0
+    };
+    const runtime = ProactiveMessages.localRuntime(contact.id);
+    runtime.lastProactiveGeneratedAt = now - 90 * 60000;
+    runtime.unansweredCount = 1;
+    assert.equal(ProactiveMessages.localPrefilter(contact, now), '');
+    runtime.lastProactiveGeneratedAt = now - 30 * 60000;
+    assert.equal(ProactiveMessages.localPrefilter(contact, now), 'cooldown');
+});
+
+test('运行摘要展示参与角色最早的下次计划唤醒', () => {
+    const now = Date.now();
+    STATE.contacts = [
+        { id: 'char-later', name: '较晚角色' },
+        { id: 'char-first', name: '较早角色' },
+        { id: 'char-unused', name: '未参与角色' }
+    ];
+    STATE.settings.PROACTIVE_MESSAGES = {
+        ...JSON.parse(JSON.stringify(CONFIG.DEFAULT.PROACTIVE_MESSAGES)),
+        enabled: true,
+        characterIds: ['char-later', 'char-first'],
+        nextLocalWakeAtByChar: {
+            'char-later': now + 7200000,
+            'char-first': now + 3600000,
+            'char-unused': now + 60000
+        },
+        workerStatusByChar: {
+            'char-later': { runtime: { nextWakeAt: now + 1800000 } },
+            'char-first': { runtime: { nextWakeAt: now + 5400000 } }
+        }
+    };
+    const previousDocument = global.document;
+    const originalWorkerModeAvailable = ProactiveMessages.workerModeAvailable;
+    const summary = { textContent: '' };
+    const list = { textContent: '', appendChild() {} };
+    global.document = {
+        getElementById(id) {
+            return id === 'proactive-status-summary' ? summary : id === 'proactive-event-list' ? list : null;
+        },
+        createElement() { return { className: '', textContent: '' }; }
+    };
+    try {
+        ProactiveMessages.workerModeAvailable = () => false;
+        ProactiveMessages.renderDebug();
+        assert.match(summary.textContent, new RegExp(`下次计划唤醒：较早角色 · ${new Date(now + 3600000).toLocaleString()}`));
+        ProactiveMessages.workerModeAvailable = () => true;
+        ProactiveMessages.renderDebug();
+        assert.match(summary.textContent, new RegExp(`下次计划唤醒：较晚角色 · ${new Date(now + 1800000).toLocaleString()}`));
+    } finally {
+        global.document = previousDocument;
+        ProactiveMessages.workerModeAvailable = originalWorkerModeAvailable;
+    }
+});
+
 test('浏览器手动判断未参与角色不会创建自动唤醒', async () => {
     STATE.settings.PROACTIVE_MESSAGES = JSON.parse(JSON.stringify(CONFIG.DEFAULT.PROACTIVE_MESSAGES));
     STATE.settings.API_URL = 'https://example.com/v1/chat/completions';

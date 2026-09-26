@@ -1780,8 +1780,8 @@ function getProactivePrefilter(capsule, runtime, now) {
   if (runtime.unansweredCount >= policy.unansweredLimit) return { ok: false, reason: "unanswered_limit", retryAt: now + getHeartbeatMs(policy) };
   const quietUntil = Number(capsule.lastChatAt || 0) + policy.recentChatQuietMinutes * 60 * 1000;
   if (quietUntil > now) return { ok: false, reason: "recent_chat", retryAt: quietUntil };
-  const backoffFactor = Math.pow(2, Math.max(0, Number(runtime.unansweredCount || 0)));
-  const cooldownUntil = Number(runtime.lastProactiveGeneratedAt || 0) + policy.minCooldownMinutes * 60 * 1000 * backoffFactor;
+  // ★ 最短主动间隔保持用户设置的固定值；连续未回复由连发上限单独拦截。
+  const cooldownUntil = Number(runtime.lastProactiveGeneratedAt || 0) + policy.minCooldownMinutes * 60 * 1000;
   if (cooldownUntil > now) return { ok: false, reason: "cooldown", retryAt: cooldownUntil };
   return { ok: true };
 }

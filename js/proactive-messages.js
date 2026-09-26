@@ -534,6 +534,8 @@ const ProactiveMessages = {
         document.getElementById('explore-proactive-messages-btn')?.addEventListener('click', event => {
             if (event.target.closest('.proactive-menu-switch')) return;
             UI.switchView('proactive-messages');
+            // ★ 打开运行日志时拉取最新 Worker 状态，避免摘要继续显示上次打开页面时的唤醒计划。
+            this.runStartup().catch(error => console.warn('[主动消息] 打开页面检查失败:', error));
         });
         document.getElementById('proactive-messages-back-btn')?.addEventListener('click', () => UI.switchView('explore'));
         ['proactive-messages-enable-toggle', 'async-backend-proactive-capability-toggle'].forEach(id => {
@@ -788,12 +790,32 @@ const ProactiveMessages = {
         const summary = document.getElementById('proactive-status-summary');
         const list = document.getElementById('proactive-event-list');
         if (!summary || !list) return;
-        const events = this.settings().diagnosticEvents.slice(-12).reverse();
-        const lastDecision = this.settings().lastDecisionSummary
-            || [...this.settings().diagnosticEvents].reverse().find(event => ['proactive_decision_send', 'proactive_decision_silent'].includes(event.code));
-        summary.textContent = lastDecision
+        const settings = this.settings();
+        const events = settings.diagnosticEvents.slice(-12).reverse();
+        const lastDecision = settings.lastDecisionSummary
+            || [...settings.diagnosticEvents].reverse().find(event => ['proactive_decision_send', 'proactive_decision_silent'].includes(event.code));
+        const lastDecisionText = lastDecision
             ? `上次决策：${lastDecision.characterName} · ${lastDecision.code === 'proactive_decision_send' ? '发送' : '未发送'} · ${new Date(lastDecision.ts).toLocaleString()}`
             : '上次决策：无';
+        // ★ 摘要只看当前参与角色的自动唤醒；Worker 与浏览器分别读取各自实际保存的计划时间。
+        const worker = this.workerModeAvailable();
+        const selectedIds = new Set(settings.characterIds.map(String));
+        const plannedWakes = settings.enabled && (worker || settings.catchupEnabled !== false)
+            ? (STATE.contacts || [])
+                .filter(contact => selectedIds.has(String(contact.id)))
+                .map(contact => ({
+                    name: contact.name || '未命名角色',
+                    at: Number(worker
+                        ? settings.workerStatusByChar[String(contact.id)]?.runtime?.nextWakeAt
+                        : settings.nextLocalWakeAtByChar[String(contact.id)])
+                }))
+                .filter(item => Number.isFinite(item.at) && item.at > 0)
+            : [];
+        const nextWake = plannedWakes.sort((a, b) => a.at - b.at)[0];
+        const nextWakeText = nextWake
+            ? `下次计划唤醒：${nextWake.name} · ${new Date(nextWake.at).toLocaleString()}`
+            : '下次计划唤醒：暂无';
+        summary.textContent = `${lastDecisionText}\n${nextWakeText}`;
         list.textContent = '';
         if (!events.length) {
             const empty = document.createElement('div');
@@ -1047,7 +1069,8 @@ const ProactiveMessages = {
         if (Number(runtime.dailyCount || 0) >= policy.dailyLimit) return 'daily_limit';
         if (Number(runtime.unansweredCount || 0) >= policy.unansweredLimit) return 'unanswered_limit';
         if (now - this.lastActivity(contact) < policy.recentChatQuietMinutes * 60000) return 'recent_chat';
-        const cooldown = policy.minCooldownMinutes * 60000 * Math.pow(2, Number(runtime.unansweredCount || 0));
+        // ★ 最短主动间隔按用户填写的固定值执行；未回复次数只交给连发上限控制。
+        const cooldown = policy.minCooldownMinutes * 60000;
         if (now - Number(runtime.lastProactiveGeneratedAt || 0) < cooldown) return 'cooldown';
         return '';
     },

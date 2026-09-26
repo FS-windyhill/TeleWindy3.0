@@ -11492,7 +11492,7 @@ body.dark-mode .heart-note-setting-row input { background: rgba(255, 255, 255, 0
 .proactive-manual-card select { margin-top: 12px; }
 /* ★ 运行日志卡片沿用后台任务状态的浅底面板，条目共用中性的诊断日志样式。 */
 .proactive-log-card { padding: 12px; background: rgba(0, 0, 0, 0.05); border-color: rgba(0, 0, 0, 0.15); }
-.proactive-status-summary { margin: 12px 0; padding: 10px 12px; border-radius: 12px; background: rgba(125,125,150,.07); font-size: .84rem; line-height: 1.55; }
+.proactive-status-summary { margin: 12px 0; padding: 10px 12px; border-radius: 12px; background: rgba(125,125,150,.07); font-size: .84rem; line-height: 1.55; white-space: pre-line; }
 .proactive-event-list { display: grid; gap: 6px; max-height: 360px; overflow-y: auto; }
 
 body.dark-mode .proactive-card {

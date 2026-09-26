@@ -77,6 +77,37 @@ test('停用主动角色会删除凭据和 Alarm，不要求再次提供 Key', a
     assert.equal(await storage.getAlarm(), null);
 });
 
+test('Worker 连续未回复时仍使用固定的最短主动间隔', async () => {
+    const storage = new MemoryStorage();
+    const object = new workerModule.ChatJobObject({ storage }, { APP_TOKEN: 'worker-token' });
+    await object.fetch(new Request('https://worker.local/proactive/object/sync', {
+        method: 'PUT',
+        body: JSON.stringify(proactiveCapsule({ policy: {
+            activeStartMinutes: 0, activeEndMinutes: 0,
+            minCooldownMinutes: 60, recentChatQuietMinutes: 0,
+            unansweredLimit: 2, heartbeatHours: 12
+        } }))
+    }));
+    await storage.put('runtime', {
+        lastProactiveGeneratedAt: Date.now() - 90 * 60000,
+        unansweredCount: 1,
+        dailyCount: 1,
+        dailyDateKey: new Date().toISOString().slice(0, 10)
+    });
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => Response.json({
+        choices: [{ message: { content: '{"decision":"silent","content":"","sent_at":null,"next_wake_at":null}' } }]
+    });
+    try {
+        await object.alarm();
+        const events = await storage.get('events');
+        assert.ok(events.some(event => event.code === 'proactive_decision_silent'));
+        assert.equal(events.some(event => event.code === 'proactive_prefilter_skipped' && event.reason === 'cooldown'), false);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
 test('未参与角色手动判断绕过自动开关和预筛选，且不创建 Alarm', async () => {
     const storage = new MemoryStorage();
     const object = new workerModule.ChatJobObject({ storage }, { APP_TOKEN: 'worker-token' });
