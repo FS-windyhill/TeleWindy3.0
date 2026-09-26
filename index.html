@@ -898,9 +898,26 @@
                     <div id="proactive-status-summary" class="proactive-status-summary">尚未运行</div>
                     <div id="proactive-event-list" class="proactive-event-list"></div>
                 </section>
+                <!-- ★ 请求日志放在全部卡片之后；只展示最近一次真正发往模型的内容。 -->
+                <section class="proactive-card proactive-manual-card">
+                    <div class="input-label">上下文日志</div>
+                    <button id="proactive-context-log-btn" type="button" class="proactive-save-button">查看最近一次 API 请求</button>
+                </section>
             </main>
         </div>
         <!-- ★★★★★ 主动消息页面 END ★★★★★ -->
+
+        <!-- ★ 主动消息沿用聊天上下文日志的弹窗结构，内容独立保存。 -->
+        <div id="proactive-context-log-modal" class="log-modal hidden">
+            <div class="glass-panel log-modal-content">
+                <div class="log-modal-header">
+                    <h3 class="shangxiawen">主动消息上下文日志</h3>
+                    <button id="proactive-context-log-close-btn" class="log-close-btn" type="button" aria-label="关闭日志">&times;</button>
+                </div>
+                <div class="log-modal-body"><pre><code id="proactive-context-log-content" class="log-content-text">暂无主动消息 API 请求记录...</code></pre></div>
+                <div id="proactive-context-log-meta" class="log-token-count"></div>
+            </div>
+        </div>
 
         <!-- ★ 主动消息 API 选择独立保存；预设内容仍来自全局 API 预设列表。 -->
         <div id="proactive-api-modal" class="proactive-api-modal hidden">
@@ -2889,7 +2906,7 @@
     
 
     <!-- 项目脚本：先加载独立服务，再加载主业务入口 -->
-    <script src="./js/config.js?v=20260925-proactive-diagnostics-1"></script>
+    <script src="./js/config.js?v=20260926-proactive-context-log-1"></script>
     <script src="./js/storage.js"></script>
     <script src="./js/world-info.js"></script>
     <script src="./js/cloud-sync.js"></script>
@@ -2905,9 +2922,9 @@
     <script src="./js/agent-heart-note-manager.js"></script>
     <script src="./js/pomodoro.js"></script>
     <!-- ★ 主动消息调整纯前端跳过后的唤醒时间，更新版本参数避免 PWA 沿用旧脚本。 -->
-    <script src="./js/proactive-messages.js?v=20260926-proactive-retry-time-1"></script>
+    <script src="./js/proactive-messages.js?v=20260926-proactive-context-log-2"></script>
     <!-- ★ 主动消息 v5 增加正文时间戳与轻量 Toast，更新版本参数避免 PWA 继续使用旧脚本。 -->
-    <script src="./script.js?v=20260925-proactive-diagnostics-1"></script>
+    <script src="./script.js?v=20260926-proactive-context-log-1"></script>
 </body>
 </html>
 

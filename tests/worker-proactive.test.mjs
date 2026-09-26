@@ -156,6 +156,39 @@ test('手动判断得到 silent 时不改变已有自动 Alarm', async () => {
     }
 });
 
+test('Worker 上下文日志保存实际模型请求体，且不混入状态或明文凭据', async () => {
+    const storage = new MemoryStorage();
+    const object = new workerModule.ChatJobObject({ storage }, { APP_TOKEN: 'worker-token' });
+    const originalFetch = globalThis.fetch;
+    let sentBody;
+    globalThis.fetch = async (_url, options) => {
+        sentBody = JSON.parse(options.body);
+        return Response.json({ choices: [{ message: { content: '{"decision":"silent","content":"","sent_at":null,"next_wake_at":null}' } }] });
+    };
+    try {
+        const response = await object.fetch(new Request('https://worker.local/proactive/object/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(proactiveCapsule({ requestBodyExtra: { top_p: 0.7, secret: 'hidden-extra' } }))
+        }));
+        assert.equal((await response.json()).ok, true);
+        const logResponse = await object.fetch(new Request('https://worker.local/proactive/object/request-log'));
+        const { log } = await logResponse.json();
+        const loggedBody = JSON.parse(log.content);
+        assert.deepEqual(loggedBody.messages, sentBody.messages);
+        assert.equal(loggedBody.top_p, sentBody.top_p);
+        assert.equal(loggedBody.secret, '[已隐藏]');
+        assert.equal(loggedBody.auth_mode, 'client_key');
+        assert.equal(log.source, 'Worker');
+        assert.equal(JSON.stringify(log).includes('private-test-key'), false);
+        assert.equal(JSON.stringify(log).includes('hidden-extra'), false);
+        const status = await object.fetch(new Request('https://worker.local/proactive/object/status'));
+        assert.equal(JSON.stringify(await status.json()).includes('proactiveRequestLog'), false);
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
 test('Worker 每个角色只暂存最近 10 条诊断事件', async () => {
     const storage = new MemoryStorage();
     const object = new workerModule.ProactiveCharacterObject({ storage }, {});

@@ -161,6 +161,11 @@ export class ProactiveCharacterObject {
       return Response.json(await this.buildStatus());
     }
 
+    if (request.method === "GET" && action === "request-log") {
+      // ★ 完整请求体只在用户打开上下文日志时读取，不混入频繁同步的状态快照。
+      return Response.json({ log: await this.state.storage.get("proactiveRequestLog") || null });
+    }
+
     if (request.method === "GET" && action === "messages") {
       const outbox = await this.state.storage.get("outbox") || [];
       return Response.json({ messages: outbox.filter((item) => item.acknowledged !== true) });
@@ -274,14 +279,36 @@ export class ProactiveCharacterObject {
         model: capsule.model
       });
       // ★ 与普通后台回复共用文本模型传输层；主动消息只负责构造自己的判断协议。
-      const response = await fetchChatCompletion(upstream.provider, {
+      const requestBody = {
         model: sanitizeModel(capsule.model || this.env.DEFAULT_MODEL),
         temperature: clampNumber(capsule.temperature, 0, 2, 1),
         max_tokens: capsule.maxTokens,
         ...(capsule.requestBodyExtra || {}),
         messages: buildProactiveDecisionMessages(capsule, runtime, startedAt, manual),
         stream: false
-      }, "proactive_upstream");
+      };
+      // ★ 这里保存的是实际交给文本模型传输层的请求体；凭据只用于请求头，日志永不保存明文 Key。
+      const logBody = JSON.parse(JSON.stringify(requestBody, (key, value) =>
+        /^(?:api[_-]?key|authorization|access[_-]?token|secret|password)$/i.test(key) ? '[已隐藏]' : value
+      ));
+      try {
+        await this.state.storage.put("proactiveRequestLog", {
+          createdAt: Date.now(),
+          characterId: capsule.characterId,
+          characterName: capsule.characterName,
+          source: "Worker",
+          trigger: meta.source || "alarm",
+          content: JSON.stringify({
+            api_url: sanitizeUrlForLog(upstream.provider.url),
+            auth_mode: credentialMode === "stored_client_key" ? "client_key" : "server_secret",
+            ...logBody
+          }, null, 2)
+        });
+      } catch (logError) {
+        // ★ 日志写入失败不能阻断已获准的主动判断；模型请求仍按原流程执行。
+        console.warn("proactive_request_log_save_failed", { error: sanitizeLogText(logError?.message || String(logError)) });
+      }
+      const response = await fetchChatCompletion(upstream.provider, requestBody, "proactive_upstream");
 
       const text = await response.text();
       if (!response.ok) {
@@ -483,7 +510,7 @@ export default {
       }
 
       // ★ 新版优先复用 CHAT_JOB_OBJECT；旧 binding 只在读取/确认消息时参与，帮助已部署用户排空旧 outbox。
-      const proactiveMatch = url.pathname.match(/^\/proactive\/([^/]+)\/(sync|status|messages|run|ack)$/i);
+      const proactiveMatch = url.pathname.match(/^\/proactive\/([^/]+)\/(sync|status|request-log|messages|run|ack)$/i);
       if (proactiveMatch && (env.CHAT_JOB_OBJECT || env.PROACTIVE_CHARACTER_OBJECT)) {
         const objectName = decodeURIComponent(proactiveMatch[1]);
         const action = proactiveMatch[2].toLowerCase();

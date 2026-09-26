@@ -1768,6 +1768,24 @@ const API = {
         return null;
     },
 
+    setLatestProactiveContextLog(log) {
+        if (!log) return null;
+        window.LAST_PROACTIVE_API_LOG = log;
+        // ★ 主动消息日志只保留最新一次；独立于普通聊天和 Agent 的上下文日志。
+        if (typeof DB !== 'undefined' && CONFIG.PROACTIVE_CONTEXT_LOG_KEY) {
+            DB.set(CONFIG.PROACTIVE_CONTEXT_LOG_KEY, log).catch(error => console.warn('[主动消息] 上下文日志保存失败:', error));
+        }
+        return log;
+    },
+
+    async getLatestProactiveContextLog() {
+        if (window.LAST_PROACTIVE_API_LOG) return window.LAST_PROACTIVE_API_LOG;
+        if (typeof DB === 'undefined' || !CONFIG.PROACTIVE_CONTEXT_LOG_KEY) return null;
+        const log = await DB.get(CONFIG.PROACTIVE_CONTEXT_LOG_KEY);
+        if (log) window.LAST_PROACTIVE_API_LOG = log;
+        return log || null;
+    },
+
     async getLatestAgentContextLogPersisted() {
         const logs = this.ensureAgentContextLogs();
         if (logs.latest) return logs.latest;
@@ -1858,6 +1876,8 @@ const API = {
         if (settings.COUNT_AS_INTERACTION !== false) this.recordDesktopInteractionCount();
         const agentLogPhase = ['pre', 'post'].includes(settings.AGENT_LOG_PHASE) ? settings.AGENT_LOG_PHASE : '';
         const isAgentContextLog = !!agentLogPhase;
+        const isProactiveContextLog = settings.PROACTIVE_CONTEXT_LOG === true;
+        let proactiveLogEntry = null;
 
         // ★ 后台回复接收入口：如果用户在探索页填写了 Worker URL + Token，
         //   这里就不直接请求模型 API，而是交给后端创建 job 并轮询结果。
@@ -2056,6 +2076,23 @@ const API = {
                     createdAt: Date.now(),
                     ...apiLogEntry
                 });
+            } else if (isProactiveContextLog) {
+                // ★ 记录 provider 转换和附加请求参数之后的最终请求体；不让主动判断覆盖正常聊天日志。
+                const logUrl = new URL(fetchUrl, window.location.href);
+                logUrl.search = '';
+                logUrl.hash = '';
+                proactiveLogEntry = this.setLatestProactiveContextLog({
+                    ...apiLogEntry,
+                    content: JSON.stringify({
+                        api_url: logUrl.toString(),
+                        auth_mode: 'client_key',
+                        ...requestBodyObject
+                    }, (key, value) => /^(?:api[_-]?key|authorization|access[_-]?token|secret|password)$/i.test(key) ? '[已隐藏]' : value, 2),
+                    source: '浏览器',
+                    characterId: String(settings.PROACTIVE_CHARACTER_ID || ''),
+                    characterName: settings.PROACTIVE_CHARACTER_NAME || '角色',
+                    createdAt: Date.now()
+                });
             } else {
                 this.setLatestMainContextLog(apiLogEntry);
             }
@@ -2137,7 +2174,7 @@ const API = {
 
             const updateLogTarget = isAgentContextLog
                 ? this.getLatestAgentContextLog(agentLogPhase)
-                : window.LAST_API_LOG;
+                : (isProactiveContextLog ? proactiveLogEntry : window.LAST_API_LOG);
 
             if (updateLogTarget) {
                 if (promptTokens || completionTokens || totalTokens) {
@@ -2177,7 +2214,8 @@ const API = {
 
                     console.log("API未返回真实Token，已使用估算Token:", estimatedTokens);
                 }
-                this.persistContextLog(isAgentContextLog ? 'agent' : 'main', updateLogTarget);
+                if (isProactiveContextLog) this.setLatestProactiveContextLog(updateLogTarget);
+                else this.persistContextLog(isAgentContextLog ? 'agent' : 'main', updateLogTarget);
             }
         } catch (error) {
             console.error("【Token日志处理失败】", error);

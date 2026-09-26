@@ -65,6 +65,70 @@ test('主动消息所有角色共用最近 40 条日志，旧角色状态不再�
     assert.equal(ProactiveMessages.localRuntime('char-1').events, undefined);
 });
 
+test('浏览器主动判断给模型请求标记独立上下文日志和角色', async () => {
+    STATE.settings.PROACTIVE_MESSAGES = {
+        ...JSON.parse(JSON.stringify(CONFIG.DEFAULT.PROACTIVE_MESSAGES)),
+        activeStart: '00:00', activeEnd: '00:00'
+    };
+    const contact = { id: 'log-char', name: '测试角色', prompt: '角色设定', history: [] };
+    const originalApi = global.API;
+    const originalWindow = global.window;
+    let sentSettings;
+    global.window = { crypto: { randomUUID: () => 'context-log-test' } };
+    global.API = {
+        chat: async (_messages, settings) => {
+            sentSettings = settings;
+            return '{"decision":"silent","content":"","sent_at":null,"next_wake_at":null}';
+        }
+    };
+    try {
+        const result = await ProactiveMessages.runLocalCatchup(contact, true);
+        assert.equal(result.decision, 'silent');
+        assert.equal(sentSettings.PROACTIVE_CONTEXT_LOG, true);
+        assert.equal(sentSettings.PROACTIVE_CHARACTER_ID, 'log-char');
+        assert.equal(sentSettings.PROACTIVE_CHARACTER_NAME, '测试角色');
+        assert.equal(sentSettings.ASYNC_BACKEND_ENABLED, false);
+    } finally {
+        global.API = originalApi;
+        global.window = originalWindow;
+    }
+});
+
+test('主动消息弹窗先显示本地日志，Worker 较新记录异步到达后再更新', async () => {
+    const originalApi = global.API;
+    const originalDocument = global.document;
+    const originalRefresh = ProactiveMessages.refreshWorkerContextLog;
+    const hidden = new Set(['hidden']);
+    const modal = { classList: { remove: value => hidden.delete(value), contains: value => hidden.has(value) } };
+    const content = { textContent: '' };
+    const meta = { textContent: '', rows: [], appendChild(row) { this.rows.push(row); } };
+    global.document = {
+        getElementById: id => ({
+            'proactive-context-log-modal': modal,
+            'proactive-context-log-content': content,
+            'proactive-context-log-meta': meta
+        })[id],
+        createElement: () => ({ textContent: '' })
+    };
+    global.API = { getLatestProactiveContextLog: async () => ({
+        content: '本地请求', source: '浏览器', characterName: '本地角色', createdAt: 1
+    }) };
+    let resolveWorker;
+    ProactiveMessages.refreshWorkerContextLog = () => new Promise(resolve => { resolveWorker = resolve; });
+    try {
+        await ProactiveMessages.openContextLogModal();
+        assert.equal(content.textContent, '本地请求');
+        assert.equal(hidden.has('hidden'), false);
+        resolveWorker({ content: 'Worker 请求', source: 'Worker', characterName: '后台角色', createdAt: 2 });
+        await new Promise(setImmediate);
+        assert.equal(content.textContent, 'Worker 请求');
+    } finally {
+        global.API = originalApi;
+        global.document = originalDocument;
+        ProactiveMessages.refreshWorkerContextLog = originalRefresh;
+    }
+});
+
 test('旧版重复同步事件不会进入统一日志', () => {
     STATE.settings.PROACTIVE_MESSAGES = JSON.parse(JSON.stringify(CONFIG.DEFAULT.PROACTIVE_MESSAGES));
     STATE.settings.PROACTIVE_MESSAGES.workerStatusByChar = {

@@ -28,6 +28,8 @@ Durable Object Alarm 到点唤醒角色
 
 主动消息页里的 Worker URL 和访问口令与“后台回复接收”共用。页面会调用 `POST /proactive/capabilities` 检查新版接口、现有 `CHAT_JOB_OBJECT` binding 和所选凭据模式；旧版 Worker 返回 404 时会安全回退纯前端，不影响原有 `/jobs`。
 
+主动消息页底部的“上下文日志”显示最近一次实际发往模型的请求。浏览器请求保存在本机 IndexedDB；Worker 请求按角色保存在现有 Durable Object，打开日志时通过 `GET /proactive/:id/request-log` 读取并选出最新一条。日志包含角色、时间、来源和请求体，不保存 API Key 或鉴权头；Worker 需要更新到包含此接口的版本后才能显示后台请求。
+
 角色对象只保留最近 15 条文字聊天组成的精简决策上下文、运行计数、待领取消息和最近 10 条诊断事件，不保存图片 base64。浏览器将各角色事件合并为最近 40 条，页面展示最近 12 条。Worker 控制台日志也只记录决策、耗时和正文长度，不打印模型 Key、完整 Prompt 或消息正文。
 
 主动消息直接复用原有 `CHAT_JOB_OBJECT` binding，不需要新增 Durable Object migration。已经部署过独立 `PROACTIVE_CHARACTER_OBJECT` 的用户可以保留旧 binding 一段时间，新 Worker 会在拉取和确认消息时兼容旧 outbox。

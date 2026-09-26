@@ -536,6 +536,8 @@ const ProactiveMessages = {
             UI.switchView('proactive-messages');
             // ★ 打开运行日志时拉取最新 Worker 状态，避免摘要继续显示上次打开页面时的唤醒计划。
             this.runStartup().catch(error => console.warn('[主动消息] 打开页面检查失败:', error));
+            // ★ 后台预取只更新本地最新请求缓存；查看弹窗仍然先走本地日志。
+            this.refreshWorkerContextLog().catch(error => console.warn('[主动消息] 后台预取上下文日志失败:', error));
         });
         document.getElementById('proactive-messages-back-btn')?.addEventListener('click', () => UI.switchView('explore'));
         ['proactive-messages-enable-toggle', 'async-backend-proactive-capability-toggle'].forEach(id => {
@@ -552,6 +554,12 @@ const ProactiveMessages = {
         });
         document.getElementById('proactive-execution-mode')?.addEventListener('change', () => this.markDraft('mode'));
         document.getElementById('proactive-test-btn')?.addEventListener('click', () => this.testSelectedCharacter());
+        document.getElementById('proactive-context-log-btn')?.addEventListener('click', () => this.openContextLogModal());
+        document.getElementById('proactive-context-log-modal')?.addEventListener('click', event => {
+            if (event.target.id === 'proactive-context-log-modal' || event.target.closest('#proactive-context-log-close-btn')) {
+                event.currentTarget.classList.add('hidden');
+            }
+        });
         document.getElementById('proactive-worker-probe-btn')?.addEventListener('click', () => this.manualProbeWorker());
         document.getElementById('proactive-api-preset-btn')?.addEventListener('click', () => this.openApiPresetModal());
         document.getElementById('proactive-api-cancel-btn')?.addEventListener('click', () => this.closeApiPresetModal());
@@ -908,6 +916,67 @@ const ProactiveMessages = {
         });
     },
 
+    async openContextLogModal() {
+        const modal = document.getElementById('proactive-context-log-modal');
+        const content = document.getElementById('proactive-context-log-content');
+        const meta = document.getElementById('proactive-context-log-meta');
+        if (!modal || !content || !meta) return;
+
+        // ★ 与常规聊天一致：先从内存或 IndexedDB 取本地最新一条，再打开已经填好内容的弹窗。
+        const latest = typeof API !== 'undefined' && API.getLatestProactiveContextLog
+            ? await API.getLatestProactiveContextLog() : null;
+        this.renderContextLog(latest, content, meta);
+        modal.classList.remove('hidden');
+
+        // ★ 常规聊天的 Worker 请求由前端先记快照；主动 Alarm 无前端参与，所以后台核对最新记录。
+        // 网络请求不阻塞弹窗，取得较新日志后再更新本地缓存和当前打开的内容。
+        this.refreshWorkerContextLog().then(updated => {
+            if (updated && !modal.classList.contains('hidden')) this.renderContextLog(updated, content, meta);
+        }).catch(error => console.warn('[主动消息] Worker 上下文日志刷新失败:', error));
+    },
+
+    renderContextLog(log, content, meta) {
+        content.textContent = log?.content || '暂无主动消息 API 请求记录。';
+        meta.textContent = '';
+        const lines = log ? [
+            `来源：${log.source || '未知'}${log.trigger ? ` · ${log.trigger}` : ''}`,
+            `角色：${log.characterName || '未知角色'}`,
+            `请求时间：${new Date(log.createdAt).toLocaleString()}`,
+            log.source === '浏览器'
+                ? `输入 Token：${log.prompt_tokens ?? 0} · 输出 Token：${log.completion_tokens ?? 0} · 总 Token：${log.total_tokens ?? 0}${log.isEstimated ? '（估算）' : ''}`
+                : 'Token：Worker 未记录'
+        ] : ['来源：无'];
+        lines.forEach(line => {
+            const row = document.createElement('div');
+            row.textContent = line;
+            meta.appendChild(row);
+        });
+    },
+
+    async refreshWorkerContextLog(contacts = STATE.contacts || []) {
+        if (!STATE.settings.ASYNC_BACKEND_URL || !STATE.settings.ASYNC_BACKEND_TOKEN) return null;
+        // ★ Worker 按角色各存一条；只在后台查询所有角色，手动触发的非参与角色也能参与最近记录比较。
+        const results = await Promise.allSettled(contacts.map(async contact => {
+            const response = await fetch(`${this.workerBaseUrl(contact.id)}/request-log`, { headers: this.workerHeaders() });
+            if (!response.ok) return null;
+            return (await response.json()).log || null;
+        }));
+        let latest = typeof API !== 'undefined' && API.getLatestProactiveContextLog
+            ? await API.getLatestProactiveContextLog() : null;
+        let changed = false;
+        for (const result of results) {
+            const workerLog = result.status === 'fulfilled' ? result.value : null;
+            if (workerLog && Number(workerLog.createdAt) > Number(latest?.createdAt || 0)) {
+                latest = workerLog;
+                changed = true;
+            }
+        }
+        if (changed && typeof API !== 'undefined' && API.setLatestProactiveContextLog) {
+            API.setLatestProactiveContextLog(latest);
+        }
+        return changed ? latest : null;
+    },
+
     async persistCard(card, previous, afterSave = null) {
         this.savingCard = true;
         const buttons = ['proactive-time-save-btn', 'proactive-characters-save-btn']
@@ -1147,7 +1216,12 @@ const ProactiveMessages = {
         try {
             // ★ buildLocalMessages 在 fetch 前完成，用户随后快速发出的新消息不会倒灌进这次离线补发判断。
             const frozenMessages = this.buildLocalMessages(contact, windowStart, windowEnd, force);
-            const raw = await API.chat(frozenMessages, this.getRequestSettings(contact));
+            const raw = await API.chat(frozenMessages, {
+                ...this.getRequestSettings(contact),
+                PROACTIVE_CONTEXT_LOG: true,
+                PROACTIVE_CHARACTER_ID: String(contact.id),
+                PROACTIVE_CHARACTER_NAME: contact.name || '角色'
+            });
             const result = this.parseDecision(raw, windowStart, windowEnd);
             const runtime = this.localRuntime(key);
             runtime.lastDecision = result.decision;
@@ -1232,6 +1306,8 @@ const ProactiveMessages = {
                 decision = result.decision;
                 await this.pullWorkerMessages(contact);
                 await this.refreshWorkerStatus(contact);
+                // ★ 手动 Worker 请求完成后提前缓存该角色请求，和常规聊天发送时先记录日志的体验一致。
+                this.refreshWorkerContextLog([contact]).catch(error => console.warn('[主动消息] 手动请求日志同步失败:', error));
             } else {
                 const result = await this.runLocalCatchup(contact, true);
                 if (result?.error) throw new Error(result.error);
