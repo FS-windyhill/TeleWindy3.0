@@ -868,7 +868,7 @@ const ProactiveMessages = {
         const heartbeatHours = Number(value('proactive-heartbeat-hours'));
         const catchupHours = Number(value('proactive-catchup-hours'));
         if (!Number.isFinite(heartbeatHours) || heartbeatHours <= 0 || !Number.isFinite(catchupHours) || catchupHours <= 0) {
-            alert('“最长多久再想一次”和“纯前端最多回看”需要填写大于 0 的数字，可以使用小数。');
+            alert('“最长判断间隔”和“离线补做最多回看”需要填写大于 0 的数字，可以使用小数。');
             return;
         }
         const fields = ['activeStart', 'activeEnd', 'minCooldownMinutes', 'recentChatQuietMinutes', 'dailyLimit', 'unansweredLimit', 'heartbeatHours', 'catchupMaxHours', 'catchupEnabled'];
@@ -1065,27 +1065,37 @@ const ProactiveMessages = {
             || (policy.activeStartMinutes < policy.activeEndMinutes
                 ? minutes >= policy.activeStartMinutes && minutes < policy.activeEndMinutes
                 : minutes >= policy.activeStartMinutes || minutes < policy.activeEndMinutes);
-        if (!inWindow) return 'quiet_hours';
-        if (Number(runtime.dailyCount || 0) >= policy.dailyLimit) return 'daily_limit';
-        if (Number(runtime.unansweredCount || 0) >= policy.unansweredLimit) return 'unanswered_limit';
-        if (now - this.lastActivity(contact) < policy.recentChatQuietMinutes * 60000) return 'recent_chat';
+        if (!inWindow) {
+            // ★ 用本地日历时间求下次允许时段，跨午夜和夏令时切换时都不按固定 24 小时推算。
+            const nextStart = new Date(now);
+            nextStart.setHours(Math.floor(policy.activeStartMinutes / 60), policy.activeStartMinutes % 60, 0, 0);
+            if (nextStart.getTime() <= now) nextStart.setDate(nextStart.getDate() + 1);
+            return { reason: 'quiet_hours', retryAt: nextStart.getTime() };
+        }
+        if (Number(runtime.dailyCount || 0) >= policy.dailyLimit) return { reason: 'daily_limit' };
+        if (Number(runtime.unansweredCount || 0) >= policy.unansweredLimit) return { reason: 'unanswered_limit' };
+        const quietUntil = this.lastActivity(contact) + policy.recentChatQuietMinutes * 60000;
+        if (quietUntil > now) return { reason: 'recent_chat', retryAt: quietUntil };
         // ★ 最短主动间隔按用户填写的固定值执行；未回复次数只交给连发上限控制。
-        const cooldown = policy.minCooldownMinutes * 60000;
-        if (now - Number(runtime.lastProactiveGeneratedAt || 0) < cooldown) return 'cooldown';
-        return '';
+        const cooldownUntil = Number(runtime.lastProactiveGeneratedAt || 0) + policy.minCooldownMinutes * 60000;
+        if (cooldownUntil > now) return { reason: 'cooldown', retryAt: cooldownUntil };
+        return null;
     },
 
     buildLocalMessages(contact, windowStart, windowEnd, manual = false) {
         const capsule = this.buildCapsule(contact);
         const history = capsule.messages.map(message => `[${new Date(message.eventAt || windowStart).toISOString()}] ${message.role === 'assistant' ? capsule.characterName : '对方'}：${message.content}`).join('\n');
+        // ★ 只向模型说明下一次判断的时间范围；实际发送仍由前置条件和程序校验决定。
+        const latestWakeAt = windowEnd + this.getPolicy().heartbeatHours * 3600000;
         return [
             { role: 'system', content: `${capsule.characterPrompt}\n\n${capsule.contextPrompt}`.trim() },
             { role: 'system', content: [
                 manual
                     ? `你就是 ${capsule.characterName}。现在手动提供一次主动判断机会，请根据当前对话决定是否联系对方。`
-                    : `你就是 ${capsule.characterName}。PWA 刚刚重新打开，现在补做离线期间本应发生的一次主动判断。`,
+                    : `你就是 ${capsule.characterName}。现在获得一次主动判断机会；如果此前离线，只需判断一次是否联系对方。`,
                 '没有自然理由就选择 silent。不要解释，不要提到补发、系统、PWA、JSON 或 AI。',
                 `允许的消息展示时间：${new Date(windowStart).toISOString()} 至 ${new Date(windowEnd).toISOString()}。sent_at 必须在这个范围内。`,
+                `下次判断时间请选在 ${new Date(windowEnd).toISOString()} 之后、${new Date(latestWakeAt).toISOString()} 之前；是否实际发送由程序按设置检查。`,
                 '只输出严格 JSON：{"decision":"silent或send","content":"send时的正文，silent时为空","sent_at":"send时的ISO时间，silent时为null","next_wake_at":"未来ISO时间或null"}',
                 `【最近聊天快照】\n${history || '暂无聊天记录'}`
             ].join('\n\n') },
@@ -1122,8 +1132,10 @@ const ProactiveMessages = {
         if (!force && existingNext > now) return;
         const blocked = this.localPrefilter(contact, now);
         if (blocked && !force) {
-            settings.nextLocalWakeAtByChar[key] = now + this.getPolicy().heartbeatHours * 3600000;
-            this.addLocalEvent(key, 'proactive_prefilter_skipped', { reason: blocked });
+            // ★ 有明确解禁时间就优先到点再查；最长检查间隔仍作为上限和未知解禁时间的兜底。
+            const maxWake = now + this.getPolicy().heartbeatHours * 3600000;
+            settings.nextLocalWakeAtByChar[key] = blocked.retryAt > now ? Math.min(blocked.retryAt, maxWake) : maxWake;
+            this.addLocalEvent(key, 'proactive_prefilter_skipped', { reason: blocked.reason, nextWakeAt: settings.nextLocalWakeAtByChar[key] });
             return;
         }
         const lastCheck = Number(settings.lastLocalCheckAtByChar[key] || existingNext || now);

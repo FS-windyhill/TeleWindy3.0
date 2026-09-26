@@ -82,15 +82,64 @@ test('浏览器连续未回复时仍使用固定的最短主动间隔', () => {
     const contact = { id: 'cooldown-char', history: [] };
     STATE.settings.PROACTIVE_MESSAGES = {
         ...JSON.parse(JSON.stringify(CONFIG.DEFAULT.PROACTIVE_MESSAGES)),
+        activeStart: '00:00',
+        activeEnd: '00:00',
         minCooldownMinutes: 60,
         recentChatQuietMinutes: 0
     };
     const runtime = ProactiveMessages.localRuntime(contact.id);
     runtime.lastProactiveGeneratedAt = now - 90 * 60000;
     runtime.unansweredCount = 1;
-    assert.equal(ProactiveMessages.localPrefilter(contact, now), '');
+    assert.equal(ProactiveMessages.localPrefilter(contact, now), null);
     runtime.lastProactiveGeneratedAt = now - 30 * 60000;
-    assert.equal(ProactiveMessages.localPrefilter(contact, now), 'cooldown');
+    assert.deepEqual(ProactiveMessages.localPrefilter(contact, now), {
+        reason: 'cooldown', retryAt: now + 30 * 60000
+    });
+});
+
+test('纯前端冷却跳过后在冷却结束时重查，而不是等待最长检查间隔', async () => {
+    const contact = { id: 'retry-cooldown', name: '测试角色', history: [] };
+    const now = Date.now();
+    const lastSentAt = now - 30 * 60000;
+    STATE.contacts = [contact];
+    STATE.settings.PROACTIVE_MESSAGES = {
+        ...JSON.parse(JSON.stringify(CONFIG.DEFAULT.PROACTIVE_MESSAGES)),
+        enabled: true,
+        characterIds: [contact.id],
+        activeStart: '00:00',
+        activeEnd: '00:00',
+        minCooldownMinutes: 60,
+        recentChatQuietMinutes: 0,
+        heartbeatHours: 12,
+        nextLocalWakeAtByChar: { [contact.id]: now - 1000 },
+        localRuntimeByChar: { [contact.id]: { lastProactiveGeneratedAt: lastSentAt, unansweredCount: 1 } }
+    };
+    const previousApi = global.API;
+    global.API = { chat: async () => { throw new Error('冷却期间不应请求模型'); } };
+    try {
+        await ProactiveMessages.runLocalCatchup(contact);
+        const nextWake = ProactiveMessages.settings().nextLocalWakeAtByChar[contact.id];
+        assert.equal(nextWake, lastSentAt + 60 * 60000);
+        assert.ok(ProactiveMessages.settings().diagnosticEvents.some(event => event.code === 'proactive_prefilter_skipped' && event.reason === 'cooldown'));
+    } finally {
+        global.API = previousApi;
+    }
+});
+
+test('纯前端按聊天安静期和下一允许时段计算重查时间', () => {
+    const now = new Date(2026, 8, 23, 12, 0).getTime();
+    const contact = { id: 'retry-window', history: [{ role: 'user', eventAt: now - 15 * 60000 }] };
+    STATE.settings.PROACTIVE_MESSAGES = {
+        ...JSON.parse(JSON.stringify(CONFIG.DEFAULT.PROACTIVE_MESSAGES)),
+        activeStart: '09:00', activeEnd: '23:00', recentChatQuietMinutes: 45
+    };
+    assert.deepEqual(ProactiveMessages.localPrefilter(contact, now), {
+        reason: 'recent_chat', retryAt: now + 30 * 60000
+    });
+    const late = new Date(2026, 8, 23, 23, 30).getTime();
+    assert.deepEqual(ProactiveMessages.localPrefilter(contact, late), {
+        reason: 'quiet_hours', retryAt: new Date(2026, 8, 24, 9, 0).getTime()
+    });
 });
 
 test('运行摘要展示参与角色最早的下次计划唤醒', () => {

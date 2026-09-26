@@ -1792,6 +1792,8 @@ function buildProactiveDecisionMessages(capsule, runtime, now, manual = false) {
     const speaker = message.role === "assistant" ? capsule.characterName : "对方";
     return `[${time}] ${speaker}：${message.content}`;
   }).join("\n");
+  // ★ 告诉模型下一次判断的最晚时间；发送频率和其他前置条件继续由程序处理。
+  const latestWakeAt = now + getHeartbeatMs(capsule.policy);
   const system = [
     manual
       ? `你就是 ${capsule.characterName}。现在提供一次手动触发的主动判断机会，请决定要不要联系对方。`
@@ -1801,6 +1803,7 @@ function buildProactiveDecisionMessages(capsule, runtime, now, manual = false) {
     "只输出一个严格 JSON 对象，不要输出 Markdown：",
     '{"decision":"silent或send","content":"send时填写消息正文，silent时为空字符串","sent_at":"send时填写带时区ISO 8601时间，silent时为null","next_wake_at":"下一次想重新判断的带时区ISO 8601时间，或null"}',
     `当前真实时间：${new Date(now).toISOString()}`,
+    `下次判断时间请选在当前真实时间之后、${new Date(latestWakeAt).toISOString()} 之前；是否实际发送由程序按设置检查。`,
     `连续主动未回复数：${Number(runtime.unansweredCount || 0)}`,
     "sent_at 不得晚于当前时间；next_wake_at 必须晚于当前时间。"
   ].join("\n");
