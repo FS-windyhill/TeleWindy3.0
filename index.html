@@ -16,8 +16,8 @@
     <!-- LateX -->
     <link rel="stylesheet" href="./vendor/katex/katex.min.css">
 
-    <!-- ★ 主动消息分组和字段说明更新样式版本，避免浏览器沿用旧的时段卡片布局。 -->
-    <link rel="stylesheet" href="./style.css?v=20260926-proactive-setting-groups-1">
+    <!-- ★ 后台服务与切屏回复拆页后更新样式版本，避免 PWA 沿用旧卡片排版。 -->
+    <link rel="stylesheet" href="./style.css?v=20260926-async-reply-page-2">
 </head>
 <body>
 
@@ -387,6 +387,15 @@
                 </li>
                 <!-- ★★★★★ 主动消息：探索页入口 END ★★★★★ -->
 
+                <!-- ★★★★★ 切屏回复接收：探索页入口 START ★★★★★ -->
+                <li id="explore-async-reply-btn">
+                    <span class="icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-message-square-share preview-icon"><path d="M12 3H4a2 2 0 0 0-2 2v16.286a.71.71 0 0 0 1.212.502l2.202-2.202A2 2 0 0 1 6.828 19H20a2 2 0 0 0 2-2v-4"/><path d="M16 3h6v6"/><path d="m16 9 6-6"/></svg></span>
+                    <span class="text">切屏回复接收</span>
+                    <label class="async-backend-switch" title="启用/关闭切屏回复接收"><input type="checkbox" id="async-backend-enable-toggle"><span class="app-switch-slider async-backend-slider"></span></label>
+                    <span class="arrow"><svg width="1.5em" height="1.5em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6L16 12L9 18"></path></svg></span>
+                </li>
+                <!-- ★★★★★ 切屏回复接收：探索页入口 END ★★★★★ -->
+
 
                 <!-- ★★★★★ 探索 TO DO 计划：入口 START ★★★★★ -->
                 <li id="explore-todo-plan-btn">
@@ -490,10 +499,6 @@
                         </svg>
                     </span>
                     <span class="text">后台运行服务</span>
-                    <label class="async-backend-switch" title="启用/关闭切屏后台回复">
-                        <input type="checkbox" id="async-backend-enable-toggle" checked>
-                        <span class="app-switch-slider async-backend-slider"></span>
-                    </label>
                     <span class="arrow">
                         <svg width="1.5em" height="1.5em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg" style="vertical-align: -0.125em;">
                             <path d="M9 6L16 12L9 18" />
@@ -980,13 +985,15 @@
                     <!-- ★ 两个能力共用下方连接配置，但可以分别启用，互不修改对方的运行模式。 -->
                     <div class="async-backend-capability-section">
                         <div class="input-label">后台能力</div>
-                        <div class="async-backend-capability-row">
+                        <div class="async-backend-capability-row" data-target-view="async-reply" role="button" tabindex="0" aria-label="打开切屏回复接收设置">
                             <span><strong>切屏后继续生成回复</strong><small>用户发消息后，把当前任务交给 Worker 继续完成。</small></span>
                             <label class="async-backend-switch"><input type="checkbox" id="async-backend-reply-capability-toggle"><span class="app-switch-slider async-backend-slider"></span></label>
+                            <span class="async-backend-capability-arrow" aria-hidden="true"><svg width="1.5em" height="1.5em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6L16 12L9 18"></path></svg></span>
                         </div>
-                        <div class="async-backend-capability-row">
+                        <div class="async-backend-capability-row" data-target-view="proactive-messages" role="button" tabindex="0" aria-label="打开主动消息设置">
                             <span><strong>后台主动消息</strong><small>由主动消息页面选择浏览器、私人 Worker 或 Worker Secret 模式。</small></span>
                             <label class="async-backend-switch"><input type="checkbox" id="async-backend-proactive-capability-toggle"><span class="app-switch-slider async-backend-slider"></span></label>
+                            <span class="async-backend-capability-arrow" aria-hidden="true"><svg width="1.5em" height="1.5em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6L16 12L9 18"></path></svg></span>
                         </div>
                     </div>
                     <div class="input-group">
@@ -1018,56 +1025,11 @@
                         <small class="input-hint">可选。访问后端用的私有口令。留空时保持纯前端模式。</small>
                     </div>
 
-                    <!-- ★★★★★ 后台 Key 模式 START ★★★★★
-                         client_key：跟随当前前端 API 预设，适合每个人部署自己的私人 Worker。
-                         server_secret：使用 Worker 里提前写好的 secret，适合固定服务商和固定 Key。 -->
-                    <div class="async-backend-key-mode-section">
-                        <div class="input-label">后台调用模式</div>
-
-                        <div class="async-backend-key-mode-item">
-                            <label class="async-backend-key-mode-card">
-                                <input type="radio" name="async-backend-key-mode" value="client_key" id="async-backend-mode-client">
-                                <span>跟随前端 API Key（推荐）</span>
-                            </label>
-                            <div class="async-backend-note async-backend-key-mode-note">
-                                使用当前 API 预设里的 URL 和 Key 创建后台任务。适合私人 Worker，也支持中转站和任意 OpenAI 兼容接口。
-                            </div>
-                        </div>
-
-                        <div class="async-backend-key-mode-item">
-                            <label class="async-backend-key-mode-card">
-                                <input type="radio" name="async-backend-key-mode" value="server_secret" id="async-backend-mode-server">
-                                <span>使用 Worker 内置 Key（进阶）</span>
-                            </label>
-                            <div class="async-backend-note async-backend-key-mode-note">
-                                前端不发送模型 Key，由 Worker 使用 Cloudflare secret 里提前配置的 Key。适合固定服务商或更保守部署。
-                            </div>
-                        </div>
-                    </div>
-                    <!-- ★★★★★ 后台 Key 模式 END ★★★★★ -->
-
-                    <div class="input-group">
-                        <label class="input-label">回复保留时间（小时）</label>
-                        <input type="number" id="async-backend-ttl-hours" class="setting-input"
-                            min="0.25" max="24" step="0.1" inputmode="decimal" placeholder="6">
-                        <small class="input-hint">后台只临时保存 AI 回复结果。支持 1.5 这种小数，范围 0.25 - 24 小时，取回后会删除。</small>
-                    </div>
-
-
-                    <!-- ★★★★★ 后台任务状态 START ★★★★★
-                         手机端没有 F12，这里把 localStorage 里的 pending job 摆到页面上。 -->
-                    <div class="async-backend-pending-panel">
-                        <div class="async-backend-pending-title">后台任务状态（可点击清理按钮清理卡住的任务）</div>
-                        <div id="async-backend-pending-summary" class="async-backend-pending-summary">暂无待接收任务</div>
-                        <div id="async-backend-pending-list" class="async-backend-pending-list"></div>
-                    </div>
-                    <!-- ★★★★★ 后台任务状态 END ★★★★★ -->
                     </div>
                 </div>
                 <div class="async-backend-footer">
                     <div class="async-backend-actions">
                         <button type="button" id="async-backend-test-btn" class="gist-btn async-backend-test-btn">测试连接</button>
-                        <button type="button" id="async-backend-clear-jobs-btn" class="gist-btn async-backend-clear-jobs-btn">清理失效任务</button>
                         <button type="button" id="async-backend-save-btn" class="gist-btn primary async-backend-save-btn">保存</button>
                         <button type="button" id="async-backend-cancel-btn" class="gist-btn async-backend-cancel-btn">取消</button>
 
@@ -1076,6 +1038,60 @@
                 </div>
             </main>
         </div>
+
+        <!-- ★★★★★ 切屏回复接收：沿用后台运行服务的卡片与按钮风格 START ★★★★★ -->
+        <div id="view-async-reply" class="page-view" style="display: none;">
+            <header class="app-header">
+                <button id="async-reply-back-btn" class="header-icon-btn left" title="返回"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg></button>
+                <h1>切屏回复接收</h1>
+            </header>
+            <main class="async-backend-page">
+                <div class="gist-sync-card async-backend-card">
+                    <div class="async-backend-card-scroll">
+                        <!-- ★★★★★ 切屏回复后台调用模式 START ★★★★★
+                             client_key：跟随当前前端 API 预设；server_secret：使用 Worker 中预设的 Key。 -->
+                        <div class="async-backend-key-mode-section">
+                            <div class="input-label">后台调用模式</div>
+                            <div class="async-backend-key-mode-item">
+                                <label class="async-backend-key-mode-card">
+                                    <input type="radio" name="async-backend-key-mode" value="client_key" id="async-backend-mode-client">
+                                    <span>跟随前端 API Key（推荐）</span>
+                                </label>
+                                <div class="async-backend-note async-backend-key-mode-note">使用当前 API 预设里的 URL 和 Key 创建后台任务。适合私人 Worker，也支持中转站和任意 OpenAI 兼容接口。</div>
+                            </div>
+                            <div class="async-backend-key-mode-item">
+                                <label class="async-backend-key-mode-card">
+                                    <input type="radio" name="async-backend-key-mode" value="server_secret" id="async-backend-mode-server">
+                                    <span>使用 Worker 内置 Key（进阶）</span>
+                                </label>
+                                <div class="async-backend-note async-backend-key-mode-note">前端不发送模型 Key，由 Worker 使用 Cloudflare secret 里提前配置的 Key。适合固定服务商或更保守部署。</div>
+                            </div>
+                        </div>
+                        <!-- ★★★★★ 切屏回复后台调用模式 END ★★★★★ -->
+                        <div class="input-group">
+                            <label class="input-label" for="async-backend-ttl-hours">回复保留时间（小时）</label>
+                            <input type="number" id="async-backend-ttl-hours" class="setting-input" min="0.25" max="24" step="0.1" inputmode="decimal" placeholder="6">
+                            <small class="input-hint">后台只临时保存 AI 回复结果。支持 1.5 这种小数，范围 0.25 - 24 小时，取回后会删除。</small>
+                        </div>
+                        <!-- ★ 手机端没有 F12，继续在这里展示本机待接收任务和诊断日志。 -->
+                        <div class="async-backend-pending-panel">
+                            <div class="async-backend-pending-title">后台任务状态（可点击清理按钮清理卡住的任务）</div>
+                            <div id="async-backend-pending-summary" class="async-backend-pending-summary">暂无待接收任务</div>
+                            <div id="async-backend-pending-list" class="async-backend-pending-list"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="async-backend-footer">
+                    <div class="async-backend-actions">
+                        <button type="button" id="async-backend-clear-jobs-btn" class="gist-btn async-backend-clear-jobs-btn">清理失效任务</button>
+                        <button type="button" id="async-reply-save-btn" class="gist-btn primary async-backend-save-btn">保存</button>
+                        <button type="button" id="async-reply-cancel-btn" class="gist-btn async-backend-cancel-btn">取消</button>
+                    </div>
+                    <div id="async-reply-status" class="api-status-text status-idle"></div>
+                </div>
+            </main>
+        </div>
+        <!-- ★★★★★ 切屏回复接收页面 END ★★★★★ -->
 
         <!-- ★★★★★ 世界书独立页面 START：从设置中心搬到探索页，保留原有编辑器结构 ★★★★★ -->
         <div id="view-worldbook" class="page-view" style="display: none;">
@@ -2921,10 +2937,10 @@
     <script src="./js/agent-todo-manager.js"></script>
     <script src="./js/agent-heart-note-manager.js"></script>
     <script src="./js/pomodoro.js"></script>
-    <!-- ★ 主动消息调整纯前端跳过后的唤醒时间，更新版本参数避免 PWA 沿用旧脚本。 -->
-    <script src="./js/proactive-messages.js?v=20260926-proactive-context-log-2"></script>
-    <!-- ★ 主动消息 v5 增加正文时间戳与轻量 Toast，更新版本参数避免 PWA 继续使用旧脚本。 -->
-    <script src="./script.js?v=20260926-proactive-context-log-1"></script>
+    <!-- ★ 主动消息返回路径与后台设置拆页同步更新，避免 PWA 沿用旧脚本。 -->
+    <script src="./js/proactive-messages.js?v=20260926-async-reply-page-1"></script>
+    <!-- ★ 切屏调用模式移入独立页面，更新版本参数避免 PWA 沿用旧保存逻辑。 -->
+    <script src="./script.js?v=20260926-async-reply-page-2"></script>
 </body>
 </html>
 

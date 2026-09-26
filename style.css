@@ -7355,13 +7355,14 @@ body.dark-mode button#del-request-body-preset-btn.icon-btn.danger {
     cursor: pointer;
 }
 
-#explore-async-backend-btn .text,
+#explore-async-reply-btn .text,
 #explore-world-sense-btn .text {
     flex-grow: 0;
 }
 
-#explore-async-backend-btn .async-backend-switch {
+#explore-async-reply-btn .async-backend-switch {
     margin-left: auto;
+    margin-right: 10px;
 }
 
 .async-backend-card {
@@ -7444,6 +7445,12 @@ body.dark-mode .gist-sync-card.async-backend-card{
     border: 1px solid rgba(0, 0, 0, 0.15);
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.3);
+    cursor: pointer;
+}
+
+.async-backend-capability-row:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
 }
 
 .async-backend-capability-row > span:first-child {
@@ -7455,6 +7462,7 @@ body.dark-mode .gist-sync-card.async-backend-card{
 .async-backend-capability-row strong { font-size: 0.9rem; }
 .async-backend-capability-row small { color: #777; font-size: 0.75rem; line-height: 1.4; }
 .async-backend-capability-row .async-backend-switch { margin-left: auto; }
+.async-backend-capability-arrow { display: inline-flex; flex: 0 0 auto; align-items: center; }
 
 body.dark-mode .async-backend-capability-row {
     border-color: rgba(255, 255, 255, 0.25);
@@ -7675,7 +7683,8 @@ body.dark-mode .diagnostic-log-meta {
   margin-top: 0;
 }
 
-#async-backend-status {
+#async-backend-status,
+#async-reply-status {
   margin-top: 12px;
 }
 
@@ -11538,11 +11547,23 @@ body.dark-mode .proactive-card {
 }
 body.dark-mode .proactive-log-card { background: rgba(255, 255, 255, 0.1); border-color: rgba(245, 245, 245, 0.3); }
 
-body.dark-mode #proactive-execution-mode { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.18); color: #f5f5f7; }
+body.dark-mode #proactive-execution-mode { 
+    background: rgba(30, 30, 30, 0.5);
+    border-color: #9f9f9f;
+    color: #fff;
+
+}
+
+
 body.dark-mode .proactive-worker-check > div, body.dark-mode .proactive-worker-check button, body.dark-mode .proactive-save-button { background: rgba(255,255,255,.07); border-color: rgba(255,255,255,.18); color: #f5f5f7; }
 body.dark-mode .proactive-worker-check span { color: rgba(255,255,255,.58); }
 body.dark-mode .proactive-worker-check strong { color: rgba(255,255,255,.82); }
-body.dark-mode .proactive-settings-grid input, body.dark-mode .proactive-manual-card select { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.18); color: #f5f5f7; }
+body.dark-mode .proactive-settings-grid input, body.dark-mode .proactive-manual-card select { 
+    background: rgba(30, 30, 30, 0.5);
+    border-color: #9f9f9f;
+    color: #fff;    
+
+}
 body.dark-mode .proactive-setting-section { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.16); }
 body.dark-mode .proactive-setting-heading { color: rgba(255,255,255,.85); }
 body.dark-mode .proactive-setting-note { color: rgba(255,255,255,.62); }

@@ -510,16 +510,18 @@
 //     - markAsyncMomentJobFailed(context): 朋友圈后台任务失败时恢复“重新生成中”的旧评论
 //     - buildMomentsAsyncContext(type, data): 为朋友圈后台任务生成回填定位信息
 //     - applyAsyncBackendToMomentConfig(config, context): 给朋友圈 API 配置补上后台接收参数
-//     - loadAsyncBackendSettings(): 打开后台回复接收页面时填充启用状态、URL、Token、TTL 和 pending 状态
-//     - saveAsyncBackendSettings(): 保存后台回复接收启用状态、URL、Token、TTL 到设置
+//     - loadAsyncBackendSettings(): 打开后台运行服务时填充共享 URL、Token 和能力开关
+//     - loadAsyncReplySettings(): 打开切屏回复接收时填充调用模式、保留时间和任务状态
+//     - saveAsyncBackendSettings(): 保存共享的后台服务连接配置
+//     - saveAsyncReplySettings(): 保存切屏回复接收的调用模式和保留时间
 //     - syncAsyncBackendToggle(): 同步探索页胶囊开关状态
 //     - toggleAsyncBackendEnabled(enabled): 切换后台回复接收启用状态
 //     - clearAsyncBackendPendingJobs(): 手动清理本地 pending job，并尝试删除 Worker 临时任务
-//     - renderAsyncBackendPendingJobs(): 在后台回复接收页面显示待接收/已停止/可能卡住的任务
+//     - renderAsyncBackendPendingJobs(): 在切屏回复接收页面显示待接收/已停止/可能卡住的任务
 //     - renderAsyncBackendDiagnosticList(diagnostics): 渲染手机端可见的后台接收诊断日志
 //     - formatAsyncBackendDiagnosticTime(ts): 把诊断日志时间戳格式化成 HH:mm:ss
 //     - formatAsyncBackendPendingAge(ageMs): 把 pending job 等待时间格式化成“几分钟/几小时”
-//     - testAsyncBackendSettings(): 测试后台回复接收 URL/Token/模型链路是否可用
+//     - testAsyncBackendSettings(): 测试后台服务 URL/Token/模型链路是否可用
 //     - syncTodoContextToggles(): 同步 TO DO / 倒数日注入开关
 //     - toggleTodoPlanInjectEnabled(enabled): 保存 TO DO 注入开关
 //     - toggleCountdownInjectEnabled(enabled): 保存倒数日注入开关
@@ -2718,6 +2720,7 @@ const UI = {
         const viewProactiveMessages = document.getElementById('view-proactive-messages');
         const viewAgent = document.getElementById('view-agent');
         const viewAsyncBackend = document.getElementById('view-async-backend');
+        const viewAsyncReply = document.getElementById('view-async-reply');
         const viewWorldbook = document.getElementById('view-worldbook');
         const viewWorldSense = document.getElementById('view-world-sense');
         const viewMoments = document.getElementById('view-moments');
@@ -2732,6 +2735,7 @@ const UI = {
         if (viewHeartNote && viewName !== 'heart-note') viewHeartNote.style.display = 'none';
         if (viewHeartNoteDetail && viewName !== 'heart-note-detail') viewHeartNoteDetail.style.display = 'none';
         if (viewProactiveMessages && viewName !== 'proactive-messages') viewProactiveMessages.style.display = 'none';
+        if (viewAsyncReply && viewName !== 'async-reply') viewAsyncReply.style.display = 'none';
 
         // ★ 番茄钟独立页统一收口，切去其它页面不会停止计时。
         const viewPomodoro = document.getElementById('view-pomodoro');
@@ -2882,6 +2886,17 @@ const UI = {
             if (typeof App !== 'undefined' && typeof App.renderAgentList === 'function') {
                 App.renderAgentList();
             }
+
+        } else if (viewName === 'async-reply') {
+            // ★ 切屏回复接收复用后台服务的卡片样式，打开时单独恢复保留时间与任务列表。
+            App.rememberReturnView('async-reply', STATE.currentMainView || 'explore');
+            appContainer.classList.remove('in-chat-mode');
+            document.querySelectorAll('.page-view').forEach(view => {
+                if (view !== this.els.viewChat) view.style.display = 'none';
+            });
+            if (viewAsyncReply) viewAsyncReply.style.display = 'flex';
+            if (bottomTabBar) bottomTabBar.style.display = 'none';
+            App.loadAsyncReplySettings();
 
         } else if (viewName === 'async-backend') {
             if (typeof App !== 'undefined' && typeof App.rememberReturnView === 'function') {
@@ -5356,6 +5371,7 @@ const App = {
             ['heart-note', 'view-heart-note'],
             ['heart-note-detail', 'view-heart-note-detail'],
             ['proactive-messages', 'view-proactive-messages'],
+            ['async-reply', 'view-async-reply'],
             ['agent', 'view-agent'],
             ['async-backend', 'view-async-backend'],
             ['worldbook', 'view-worldbook'],
@@ -5406,6 +5422,7 @@ const App = {
             'heart-note': 'heart-note-back-btn',
             'heart-note-detail': 'heart-note-detail-back-btn',
             'proactive-messages': 'proactive-messages-back-btn',
+            'async-reply': 'async-reply-back-btn',
             agent: 'agent-back-btn',
             'async-backend': 'async-backend-back-btn',
             worldbook: 'worldbook-back-btn',
@@ -9639,46 +9656,39 @@ const App = {
     loadAsyncBackendSettings() {
         const urlInput = document.getElementById('async-backend-url');
         const tokenInput = document.getElementById('async-backend-token');
-        const ttlInput = document.getElementById('async-backend-ttl-hours');
         const status = document.getElementById('async-backend-status');
-        const keyMode = STATE.settings.ASYNC_BACKEND_KEY_MODE || CONFIG.DEFAULT.ASYNC_BACKEND_KEY_MODE || 'client_key';
-        const modeInput = document.querySelector(`input[name="async-backend-key-mode"][value="${keyMode}"]`);
 
         this.syncAsyncBackendToggle();
         const proactiveToggle = document.getElementById('async-backend-proactive-capability-toggle');
         if (proactiveToggle) proactiveToggle.checked = STATE.settings.PROACTIVE_MESSAGES?.enabled === true;
         if (urlInput) urlInput.value = STATE.settings.ASYNC_BACKEND_URL || '';
         if (tokenInput) tokenInput.value = STATE.settings.ASYNC_BACKEND_TOKEN || '';
-        if (modeInput) modeInput.checked = true;
-        if (ttlInput) ttlInput.value = STATE.settings.ASYNC_BACKEND_TTL_HOURS || CONFIG.DEFAULT.ASYNC_BACKEND_TTL_HOURS;
         if (status && STATE.asyncBackendTestStatus) {
             status.textContent = STATE.asyncBackendTestStatus.text;
             status.className = STATE.asyncBackendTestStatus.className;
         }
+    },
+
+    loadAsyncReplySettings() {
+        const ttlInput = document.getElementById('async-backend-ttl-hours');
+        const keyMode = STATE.settings.ASYNC_BACKEND_KEY_MODE || CONFIG.DEFAULT.ASYNC_BACKEND_KEY_MODE || 'client_key';
+        const modeInput = document.querySelector(`input[name="async-backend-key-mode"][value="${keyMode}"]`);
+        if (modeInput) modeInput.checked = true;
+        if (ttlInput) ttlInput.value = STATE.settings.ASYNC_BACKEND_TTL_HOURS || CONFIG.DEFAULT.ASYNC_BACKEND_TTL_HOURS;
         this.renderAsyncBackendPendingJobs();
     },
 
     async saveAsyncBackendSettings() {
         const urlInput = document.getElementById('async-backend-url');
         const tokenInput = document.getElementById('async-backend-token');
-        const ttlInput = document.getElementById('async-backend-ttl-hours');
         const status = document.getElementById('async-backend-status');
-        const modeInput = document.querySelector('input[name="async-backend-key-mode"]:checked');
-        const ttlHours = ttlInput && ttlInput.value.trim()
-            ? Number(ttlInput.value)
-            : CONFIG.DEFAULT.ASYNC_BACKEND_TTL_HOURS;
 
         STATE.settings.ASYNC_BACKEND_URL = urlInput ? urlInput.value.trim().replace(/\/+$/, '') : '';
         STATE.settings.ASYNC_BACKEND_TOKEN = tokenInput ? tokenInput.value.trim() : '';
-        STATE.settings.ASYNC_BACKEND_KEY_MODE = modeInput ? modeInput.value : (CONFIG.DEFAULT.ASYNC_BACKEND_KEY_MODE || 'client_key');
-        STATE.settings.ASYNC_BACKEND_TTL_HOURS = Number.isFinite(ttlHours)
-            ? Math.min(Math.max(ttlHours, 0.25), 24)
-            : CONFIG.DEFAULT.ASYNC_BACKEND_TTL_HOURS;
-        if (ttlInput) ttlInput.value = STATE.settings.ASYNC_BACKEND_TTL_HOURS;
         this.syncAsyncBackendToggle();
 
         await Storage.saveSettings();
-        // ★ 两个页面共用 Worker URL/访问口令；在后台回复页保存后，主动消息状态立即重新检测。
+        // ★ 两个能力共用 Worker URL/访问口令；在后台服务页保存后，主动消息状态立即重新检测。
         if (typeof ProactiveMessages !== 'undefined' && typeof ProactiveMessages.onSharedBackendSettingsChanged === 'function') {
             ProactiveMessages.onSharedBackendSettingsChanged();
         }
@@ -9690,6 +9700,26 @@ const App = {
                 text: status.textContent,
                 className: status.className
             };
+        }
+    },
+
+    async saveAsyncReplySettings() {
+        const ttlInput = document.getElementById('async-backend-ttl-hours');
+        const modeInput = document.querySelector('input[name="async-backend-key-mode"]:checked');
+        const status = document.getElementById('async-reply-status');
+        const ttlHours = ttlInput && ttlInput.value.trim()
+            ? Number(ttlInput.value)
+            : CONFIG.DEFAULT.ASYNC_BACKEND_TTL_HOURS;
+        // ★ 调用模式和保留时间只归切屏回复页保存，避免后台服务页覆盖未提交的输入。
+        STATE.settings.ASYNC_BACKEND_KEY_MODE = modeInput ? modeInput.value : (CONFIG.DEFAULT.ASYNC_BACKEND_KEY_MODE || 'client_key');
+        STATE.settings.ASYNC_BACKEND_TTL_HOURS = Number.isFinite(ttlHours)
+            ? Math.min(Math.max(ttlHours, 0.25), 24)
+            : CONFIG.DEFAULT.ASYNC_BACKEND_TTL_HOURS;
+        if (ttlInput) ttlInput.value = STATE.settings.ASYNC_BACKEND_TTL_HOURS;
+        await Storage.saveSettings();
+        if (status) {
+            status.textContent = '已保存';
+            status.className = 'api-status-text status-success';
         }
     },
 
@@ -9708,14 +9738,13 @@ const App = {
     },
 
     async clearAsyncBackendPendingJobs() {
-        const status = document.getElementById('async-backend-status');
+        const status = document.getElementById('async-reply-status');
         const jobs = API.loadPendingJobs();
 
         const setStatus = (text, className) => {
             if (!status) return;
             status.textContent = text;
             status.className = className;
-            STATE.asyncBackendTestStatus = { text, className };
         };
 
         if (!jobs.length) {
@@ -9839,15 +9868,12 @@ const App = {
     async testAsyncBackendSettings() {
         const urlInput = document.getElementById('async-backend-url');
         const tokenInput = document.getElementById('async-backend-token');
-        const ttlInput = document.getElementById('async-backend-ttl-hours');
         const status = document.getElementById('async-backend-status');
         const backendUrl = urlInput ? urlInput.value.trim().replace(/\/+$/, '') : '';
         const token = tokenInput ? tokenInput.value.trim() : '';
-        const modeInput = document.querySelector('input[name="async-backend-key-mode"]:checked');
-        const keyMode = modeInput ? modeInput.value : (STATE.settings.ASYNC_BACKEND_KEY_MODE || CONFIG.DEFAULT.ASYNC_BACKEND_KEY_MODE || 'client_key');
-        const ttlHours = ttlInput && ttlInput.value.trim()
-            ? Number(ttlInput.value)
-            : CONFIG.DEFAULT.ASYNC_BACKEND_TTL_HOURS;
+        // ★ 测试连接读取已保存的切屏调用模式，避免使用另一个页面尚未保存的草稿。
+        const keyMode = STATE.settings.ASYNC_BACKEND_KEY_MODE || CONFIG.DEFAULT.ASYNC_BACKEND_KEY_MODE || 'client_key';
+        const ttlHours = STATE.settings.ASYNC_BACKEND_TTL_HOURS || CONFIG.DEFAULT.ASYNC_BACKEND_TTL_HOURS;
         const model = STATE.settings.MODEL || CONFIG.DEFAULT.MODEL;
         const apiUrl = STATE.settings.API_URL || CONFIG.DEFAULT.API_URL;
         const apiKey = STATE.settings.API_KEY || CONFIG.DEFAULT.API_KEY || '';
@@ -15323,10 +15349,30 @@ const App = {
         // ★★★★★ Agent：探索页入口 + 设置事件 END ★★★★★
 
         // ================= 3. 探索页面 -> 返回桌面 =================
-        // ================= 后台回复接收：探索页 -> 后台回复接收页面 =================
+        // ================= 后台运行服务与切屏回复接收：探索页入口 =================
         document.getElementById('explore-async-backend-btn')?.addEventListener('click', (event) => {
-            if (event.target.closest('.async-backend-switch')) return;
             safeSwitchView('async-backend');
+        });
+        document.getElementById('explore-async-reply-btn')?.addEventListener('click', (event) => {
+            if (event.target.closest('.async-backend-switch')) return;
+            safeSwitchView('async-reply');
+        });
+        // ★ 能力行整行可进入详情；开关本身仍只切换状态，不触发页面跳转。
+        document.querySelectorAll('.async-backend-capability-row').forEach(row => {
+            const openSettings = () => {
+                safeSwitchView(row.dataset.targetView);
+                STATE.returnViewByPage = STATE.returnViewByPage || {};
+                STATE.returnViewByPage[row.dataset.targetView] = 'async-backend';
+            };
+            row.addEventListener('click', (event) => {
+                if (!event.target.closest('.async-backend-switch')) openSettings();
+            });
+            row.addEventListener('keydown', (event) => {
+                if (event.target === row && (event.key === 'Enter' || event.key === ' ')) {
+                    event.preventDefault();
+                    openSettings();
+                }
+            });
         });
 
         // ★★★★★ 世界书：探索页 -> 独立世界书页面 START ★★★★★
@@ -15789,11 +15835,21 @@ const App = {
         document.getElementById('async-backend-back-btn')?.addEventListener('click', () => {
             safeSwitchView(this.getReturnView('async-backend', 'explore'));
         });
+        document.getElementById('async-reply-back-btn')?.addEventListener('click', () => {
+            safeSwitchView(this.getReturnView('async-reply', 'explore'));
+        });
+        document.getElementById('async-reply-save-btn')?.addEventListener('click', async () => {
+            await this.saveAsyncReplySettings();
+            safeSwitchView(this.getReturnView('async-reply', 'explore'));
+        });
+        document.getElementById('async-reply-cancel-btn')?.addEventListener('click', () => {
+            safeSwitchView(this.getReturnView('async-reply', 'explore'));
+        });
 
         // 保存：写入 STATE.settings，并通过 Storage.saveSettings() 存进 IndexedDB。
         document.getElementById('async-backend-save-btn')?.addEventListener('click', async () => {
             // ★ 保存后按来源返回：
-            // 后台回复接收的保存本身还会写入 IndexedDB，这里只把“保存 + 返回”合成一次点击。
+            // 后台运行服务保存会写入 IndexedDB，这里把“保存 + 返回”合成一次点击。
             await this.saveAsyncBackendSettings();
             safeSwitchView(this.getReturnView('async-backend', 'explore'));
         });

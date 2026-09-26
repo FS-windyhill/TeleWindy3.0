@@ -539,7 +539,8 @@ const ProactiveMessages = {
             // ★ 后台预取只更新本地最新请求缓存；查看弹窗仍然先走本地日志。
             this.refreshWorkerContextLog().catch(error => console.warn('[主动消息] 后台预取上下文日志失败:', error));
         });
-        document.getElementById('proactive-messages-back-btn')?.addEventListener('click', () => UI.switchView('explore'));
+        // ★ 从后台能力行进入时返回后台服务；探索页直达时仍返回探索。
+        document.getElementById('proactive-messages-back-btn')?.addEventListener('click', () => UI.switchView(App.getReturnView('proactive-messages', 'explore')));
         ['proactive-messages-enable-toggle', 'async-backend-proactive-capability-toggle'].forEach(id => {
             document.getElementById(id)?.addEventListener('change', event => this.setEnabled(event.target.checked, event.target));
         });
