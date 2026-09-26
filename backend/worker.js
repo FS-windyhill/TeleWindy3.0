@@ -91,6 +91,7 @@ export class ChatJobObject {
 // 1. 前端只同步主动判断需要的精简上下文，不上传图片和完整数据库；
 // 2. Alarm 到点后给角色一次“可以思考要不要联系”的机会，而不是强制发消息；
 // 3. 消息先写进 outbox，PWA 下次打开时仍能可靠取回；每个角色只暂存最近 10 条离线诊断事件。
+// 4. 后台普通回复与主动发言先补进待领取上下文，前端恢复后按消息 ID 清理，避免离线期间失忆。
 export class ProactiveCharacterObject {
   constructor(state, env) {
     this.state = state;
@@ -106,7 +107,16 @@ export class ProactiveCharacterObject {
       const capsule = sanitizeProactiveCapsule(rawCapsule);
       const previous = await this.state.storage.get("capsule") || {};
       const runtime = await this.readRuntime();
-      const nextCapsule = { ...previous, ...capsule, updatedAt: Date.now() };
+      // ★ 较早发出的快照即使晚到，也不能覆盖角色回复后的新快照。
+      if (capsule.contextRevision < Number(previous.contextRevision || 0)) {
+        return Response.json(await this.buildStatus());
+      }
+      const nextCapsule = {
+        ...previous, ...capsule,
+        lastUserAt: Math.max(Number(previous.lastUserAt || 0), capsule.lastUserAt),
+        lastChatAt: Math.max(Number(previous.lastChatAt || 0), capsule.lastChatAt),
+        updatedAt: Date.now()
+      };
 
       // ★ 普通后台回复的 client_key 只存一小时；主动 Alarm 未来仍要使用，因此必须单独加密保存。
       // 密文使用 APP_TOKEN 派生的 AES-GCM key，接口永远不提供明文读取能力。
@@ -135,6 +145,13 @@ export class ProactiveCharacterObject {
 
       await this.state.storage.put("capsule", nextCapsule);
       await this.state.storage.put("runtime", runtime);
+      // ★ 前端已经收录的 Worker 消息从暂存层移除；未领取的消息继续供主动判断读取。
+      const deliveredIds = new Set([
+        ...nextCapsule.messages.map((message) => message.messageId),
+        ...nextCapsule.acknowledgedMessageIds
+      ]);
+      const pendingMessages = await this.state.storage.get("pendingMessages") || [];
+      await this.state.storage.put("pendingMessages", pendingMessages.filter((message) => !deliveredIds.has(message.messageId)));
       // ★ 同步可能在每次打开页面时重复发生，不写诊断事件，避免挤掉决策和失败日志。
 
       if (nextCapsule.enabled) {
@@ -150,6 +167,7 @@ export class ProactiveCharacterObject {
       } else {
         await this.state.storage.deleteAlarm();
         await this.state.storage.delete("credential");
+        await this.state.storage.delete("pendingMessages");
         runtime.nextWakeAt = null;
         await this.state.storage.put("runtime", runtime);
       }
@@ -159,6 +177,32 @@ export class ProactiveCharacterObject {
 
     if (request.method === "GET" && action === "status") {
       return Response.json(await this.buildStatus());
+    }
+
+    if (request.method === "POST" && action === "activity") {
+      const body = await request.json();
+      const capsule = await this.state.storage.get("capsule");
+      if (!capsule?.enabled) return Response.json({ ok: false, error: "proactive_disabled" }, { status: 409 });
+      const lastUserAt = clampInteger(body?.lastUserAt, 0, Number.MAX_SAFE_INTEGER, 0);
+      const lastChatAt = clampInteger(body?.lastChatAt, 0, Number.MAX_SAFE_INTEGER, 0);
+      capsule.lastUserAt = Math.max(Number(capsule.lastUserAt || 0), lastUserAt);
+      capsule.lastChatAt = Math.max(Number(capsule.lastChatAt || 0), lastChatAt);
+      const runtime = await this.readRuntime();
+      if (lastUserAt > runtime.lastProactiveGeneratedAt) runtime.unansweredCount = 0;
+      await this.state.storage.put("capsule", capsule);
+      await this.state.storage.put("runtime", runtime);
+      return Response.json({ ok: true });
+    }
+
+    if (request.method === "POST" && action === "append-chat-reply") {
+      // ★ 仅供普通聊天 Queue 通过 DO binding 调用；外部路由不暴露这个动作。
+      const body = await request.json();
+      const capsule = await this.state.storage.get("capsule");
+      if (!capsule?.enabled) return Response.json({ ok: false, error: "proactive_disabled" }, { status: 409 });
+      await this.appendPendingMessage(body);
+      capsule.lastChatAt = Math.max(Number(capsule.lastChatAt || 0), clampInteger(body?.eventAt, 0, Number.MAX_SAFE_INTEGER, 0));
+      await this.state.storage.put("capsule", capsule);
+      return Response.json({ ok: true });
     }
 
     if (request.method === "GET" && action === "request-log") {
@@ -279,12 +323,14 @@ export class ProactiveCharacterObject {
         model: capsule.model
       });
       // ★ 与普通后台回复共用文本模型传输层；主动消息只负责构造自己的判断协议。
+      const pendingMessages = await this.state.storage.get("pendingMessages") || [];
+      const decisionCapsule = { ...capsule, messages: mergeProactiveMessages(capsule.messages, pendingMessages) };
       const requestBody = {
         model: sanitizeModel(capsule.model || this.env.DEFAULT_MODEL),
         temperature: clampNumber(capsule.temperature, 0, 2, 1),
         max_tokens: capsule.maxTokens,
         ...(capsule.requestBodyExtra || {}),
-        messages: buildProactiveDecisionMessages(capsule, runtime, startedAt, manual),
+        messages: buildProactiveDecisionMessages(decisionCapsule, runtime, startedAt, manual),
         stream: false
       };
       // ★ 这里保存的是实际交给文本模型传输层的请求体；凭据只用于请求头，日志永不保存明文 Key。
@@ -336,6 +382,10 @@ export class ProactiveCharacterObject {
         };
         outbox.push(message);
         await this.state.storage.put("outbox", outbox.slice(-50));
+        // ★ Worker 自己发出的主动消息立即进入下一次判断上下文，不等用户打开页面领取。
+        if ((await this.state.storage.get("capsule"))?.enabled) {
+          await this.appendPendingMessage({ messageId: message.messageId, content: message.content, eventAt: message.generatedAt });
+        }
         runtime.lastProactiveGeneratedAt = message.generatedAt;
         runtime.unansweredCount = Number(runtime.unansweredCount || 0) + 1;
         runtime.dailyDateKey = getOffsetDateKey(startedAt, capsule.timezoneOffsetMinutes);
@@ -400,6 +450,16 @@ export class ProactiveCharacterObject {
       dailyDateKey: runtime.dailyDateKey || "",
       dailyCount: Math.max(0, Number(runtime.dailyCount || 0))
     };
+  }
+
+  async appendPendingMessage(raw) {
+    const messageId = String(raw?.messageId || "").slice(0, 120);
+    const content = stripProactiveThought(String(raw?.content || "")).trim().slice(0, 4000);
+    if (!messageId || !content) return;
+    const pendingMessages = await this.state.storage.get("pendingMessages") || [];
+    if (pendingMessages.some((message) => message.messageId === messageId)) return;
+    pendingMessages.push({ messageId, role: "assistant", content, eventAt: clampInteger(raw?.eventAt, 0, Number.MAX_SAFE_INTEGER, Date.now()) });
+    await this.state.storage.put("pendingMessages", pendingMessages.slice(-PROACTIVE_CONTEXT_MESSAGE_LIMIT));
   }
 
   async setNextAlarm(nextWakeAt, reason) {
@@ -502,7 +562,7 @@ export default {
         return json({
           ok: true,
           proactiveApi: true,
-          proactiveVersion: 3,
+          proactiveVersion: 4,
           sharedJobObject: !!env.CHAT_JOB_OBJECT,
           encryptedClientKey: true,
           providers: results
@@ -510,7 +570,7 @@ export default {
       }
 
       // ★ 新版优先复用 CHAT_JOB_OBJECT；旧 binding 只在读取/确认消息时参与，帮助已部署用户排空旧 outbox。
-      const proactiveMatch = url.pathname.match(/^\/proactive\/([^/]+)\/(sync|status|request-log|messages|run|ack)$/i);
+      const proactiveMatch = url.pathname.match(/^\/proactive\/([^/]+)\/(sync|activity|status|request-log|messages|run|ack)$/i);
       if (proactiveMatch && (env.CHAT_JOB_OBJECT || env.PROACTIVE_CHARACTER_OBJECT)) {
         const objectName = decodeURIComponent(proactiveMatch[1]);
         const action = proactiveMatch[2].toLowerCase();
@@ -665,6 +725,8 @@ async function createJob(request, env) {
 
   const jobPayload = {
     upstream: upstream.provider,
+    // ★ 后台普通回复完成后可直接补入同一安装实例的主动角色对象，页面关闭也能衔接上下文。
+    proactiveObjectName: String(payload.proactive_object_name || "").slice(0, 240),
     messages,
     model,
     temperature: clampNumber(payload.temperature, 0, 2, 1),
@@ -954,6 +1016,24 @@ async function runJob(jobId, body, env) {
       resultLength: content.trim().length,
       hasUsage: !!data.usage
     });
+
+    if (body.proactiveObjectName) {
+      try {
+        const namespace = env.CHAT_JOB_OBJECT || env.PROACTIVE_CHARACTER_OBJECT;
+        if (namespace) {
+          const objectName = env.CHAT_JOB_OBJECT ? `proactive:${body.proactiveObjectName}` : body.proactiveObjectName;
+          const objectId = namespace.idFromName(objectName);
+          const appendResponse = await namespace.get(objectId).fetch("https://proactive.local/proactive/append-chat-reply", {
+            method: "POST",
+            body: JSON.stringify({ messageId: `job_${jobId}`, content, eventAt: Date.now() })
+          });
+          if (!appendResponse.ok && appendResponse.status !== 409) throw new Error(`append_status_${appendResponse.status}`);
+        }
+      } catch (appendError) {
+        // ★ 主聊天回复必须正常完成；补写失败时，前端下次恢复后仍会同步完整快照。
+        console.warn("proactive_chat_reply_append_failed", { jobId: shortJobId(jobId), error: sanitizeLogText(appendError?.message || String(appendError)) });
+      }
+    }
 
     const job = await buildJobWithEvent(jobId, env, {
       status: "done",
@@ -1716,6 +1796,10 @@ function sanitizeProactiveCapsule(raw) {
     characterPrompt: String(source.characterPrompt || "").slice(0, 20000),
     contextPrompt: String(source.contextPrompt || "").slice(0, 30000),
     messages,
+    acknowledgedMessageIds: Array.isArray(source.acknowledgedMessageIds)
+      ? source.acknowledgedMessageIds.slice(-100).map((id) => String(id || "").slice(0, 120)).filter(Boolean)
+      : [],
+    contextRevision: clampInteger(source.contextRevision, 0, Number.MAX_SAFE_INTEGER, 0),
     credentialMode: source.credentialMode === "stored_client_key" ? "stored_client_key" : "server_secret",
     apiUrl: normalizeUrl(source.apiUrl),
     model: sanitizeModel(source.model || ""),
@@ -1811,6 +1895,22 @@ function getProactivePrefilter(capsule, runtime, now) {
   const cooldownUntil = Number(runtime.lastProactiveGeneratedAt || 0) + policy.minCooldownMinutes * 60 * 1000;
   if (cooldownUntil > now) return { ok: false, reason: "cooldown", retryAt: cooldownUntil };
   return { ok: true };
+}
+
+function stripProactiveThought(content) {
+  return String(content || "").replace(/<(?:think|thinking|thought)[^>]*>[\s\S]*?(?:<\/(?:think|thinking|thought)>|$)/gi, "");
+}
+
+function mergeProactiveMessages(snapshot, pending) {
+  // ★ Worker 自己生成的回复可能尚未被前端领取；按稳定 ID 合并，保持最近 15 条且不重复。
+  const byId = new Map();
+  for (const message of [...(snapshot || []), ...(pending || [])]) {
+    if (!message) continue;
+    // ★ 兼容升级前没有 messageId 的胶囊，旧聊天不能因为新去重逻辑被整批丢掉。
+    const key = message.messageId || `${message.role}:${message.eventAt}:${message.content}`;
+    byId.set(key, message);
+  }
+  return [...byId.values()].sort((a, b) => Number(a.eventAt || 0) - Number(b.eventAt || 0)).slice(-PROACTIVE_CONTEXT_MESSAGE_LIMIT);
 }
 
 function buildProactiveDecisionMessages(capsule, runtime, now, manual = false) {

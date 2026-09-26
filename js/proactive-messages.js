@@ -11,6 +11,7 @@ const ProactiveMessages = {
     installationKey: 'telewindy_proactive_installation_v1',
     // ★ Worker 与纯前端共用同一份精简窗口，防止两种模式切换后角色判断尺度突然变化。
     contextMessageLimit: 15,
+    contextRevision: 0,
     running: false,
     wakeTimer: null,
     savingCard: false,
@@ -380,7 +381,8 @@ const ProactiveMessages = {
             const visible = HistoryVisibility.buildVisibleMessage(message);
             if (!visible) continue;
             messages.unshift({
-                messageId: message.messageId,
+                // ★ 后台普通回复用 jobId 对齐 Worker 已补写的消息，避免页面恢复后出现两份上下文。
+                messageId: message.asyncJobId ? `job_${message.asyncJobId}` : message.messageId,
                 role: visible.role,
                 content: visible.content.replace(/^\[\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\]\s*/, '').slice(0, 4000),
                 eventAt: Number(message.eventAt) || this.parseChatTime(message.timestamp)
@@ -393,6 +395,11 @@ const ProactiveMessages = {
             characterPrompt: contact.prompt || '',
             contextPrompt: this.buildContextPrompt(contact),
             messages,
+            // ★ 即使某条后台回复被隐藏，也要告诉 Worker 已在前端落库，清掉服务端暂存的原文。
+            acknowledgedMessageIds: history.slice(-100).filter(message => message?.asyncJobId || message?.proactiveSource)
+                .map(message => message.asyncJobId ? `job_${message.asyncJobId}` : String(message.messageId || ''))
+                .filter(Boolean),
+            contextRevision: this.contextRevision = Math.max(Date.now(), this.contextRevision + 1),
             credentialMode: this.workerCredentialMode(),
             // ★ 私人 Worker 会立即加密并只保存密文；高级 Secret 模式不向 Worker 发送前端 Key。
             apiKey: this.executionMode() === 'private_worker' ? (requestSettings.API_KEY || '') : '',
@@ -1342,10 +1349,26 @@ const ProactiveMessages = {
         if (!contact || !this.settings().enabled) return;
         const runtime = this.localRuntime(contact.id);
         runtime.unansweredCount = 0;
-        if (this.workerModeAvailable()) {
-            this.syncWorker(contact).catch(error => console.warn('[主动消息] 用户消息后同步失败:', error));
-        }
         await Storage.saveSettings();
+        if (this.workerModeAvailable() && this.settings().characterIds.map(String).includes(String(contact.id))) {
+            // ★ 用户刚说话时只更新活跃时间与未回复计数；完整聊天等角色回复落库后再同步。
+            const response = await fetch(`${this.workerBaseUrl(contact.id)}/activity`, {
+                method: 'POST', headers: this.workerHeaders(), body: JSON.stringify({
+                    lastUserAt: this.lastActivity(contact, 'user'),
+                    lastChatAt: this.lastActivity(contact)
+                })
+            });
+            // ★ 旧版 Worker 没有轻量路由，或首次启动还没有角色胶囊；两者都退回完整同步建档。
+            if (response.status === 404 || response.status === 409) return await this.syncWorker(contact);
+            if (!response.ok) throw new Error(`主动消息活动同步失败：HTTP ${response.status}`);
+        }
+    },
+
+    async onAssistantMessage(contact) {
+        if (!contact || !this.settings().enabled || !this.workerModeAvailable()
+            || !this.settings().characterIds.map(String).includes(String(contact.id))) return;
+        // ★ 回复已经写入聊天历史后再上传快照，Worker 的下一次主动判断才能读到这句回答。
+        await this.syncWorker(contact);
     }
 };
 

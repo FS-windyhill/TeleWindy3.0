@@ -1287,6 +1287,12 @@ const API = {
             vision: visionPayload,
             agent: settings.ASYNC_BACKEND_AGENT || null
         };
+        // ★ 后台回复完成后由同一 Worker 补入主动判断上下文，页面关闭时也不会丢失角色刚说的话。
+        if (settings.CONTACT_ID && typeof ProactiveMessages !== 'undefined'
+            && ProactiveMessages.settings().enabled && ProactiveMessages.workerConfigured()
+            && ProactiveMessages.settings().characterIds.map(String).includes(String(settings.CONTACT_ID))) {
+            payload.proactive_object_name = `${ProactiveMessages.installationId()}:${String(settings.CONTACT_ID)}`;
+        }
         const payloadText = JSON.stringify(payload);
         const payloadBytes = new Blob([payloadText]).size;
         console.info('[AsyncBackend] job payload', {
@@ -4676,6 +4682,9 @@ const App = {
                         await API.deleteChatJob(pending.backendUrl, pending.jobId, pending.token);
                         API.forgetPendingJob(pending.jobId);
                         await Storage.saveContacts();
+                        if (!alreadySaved && assistantMessage) {
+                            ProactiveMessages.onAssistantMessage(contact).catch(error => console.warn('[主动消息] 后台恢复回复同步失败:', error));
+                        }
                         console.info('[AsyncBackend] resume saved result', {
                             jobId: API.asyncJobLogId(pending.jobId),
                             contactId: contact.id,
@@ -11049,6 +11058,9 @@ const App = {
             // 只有当前还在这个窗口才渲染
             if (this.isViewingContactChat(contact.id)) {
                 await Storage.saveContacts();
+                if (!alreadySavedByResume) {
+                    ProactiveMessages.onAssistantMessage(contact).catch(error => console.warn('[主动消息] 角色回复同步失败:', error));
+                }
                 
                 // 渲染 AI 瀑布流
                 if (!alreadySavedByResume) {
@@ -11061,6 +11073,9 @@ const App = {
                     this.markContactIncomingMessage(contact);
                 }
                 await Storage.saveContacts();
+                if (!alreadySavedByResume) {
+                    ProactiveMessages.onAssistantMessage(contact).catch(error => console.warn('[主动消息] 角色回复同步失败:', error));
+                }
                 UI.renderContacts(); 
                 this.refreshDesktopUnreadDotsIfNeeded();
             }
