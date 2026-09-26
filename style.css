@@ -11463,7 +11463,8 @@ body.dark-mode .heart-note-setting-row input { background: rgba(255, 255, 255, 0
     -webkit-backdrop-filter: blur(8px);
 }
 .proactive-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.proactive-badge { padding: 4px 9px; border-radius: 999px; background: rgba(115,94,255,.12); color: #6252c7; font-size: .76rem; white-space: nowrap; }
+/* ★ 运行方式徽标跟随外观页的 HSL 自定义主题色，透明底色保留原有轻量层次。 */
+.proactive-badge { padding: 4px 9px; border-radius: 999px; background: hsl(var(--theme-color-h) var(--theme-color-s) var(--theme-color-l) / 0.12); color: var(--primary-btn-text); font-size: .76rem; white-space: nowrap; }
 #proactive-execution-mode { width: 100%; padding: 9px 10px; border: 1px solid rgba(120,120,140,.25); border-radius: 12px; background: rgba(255,255,255,.82); color: inherit; box-sizing: border-box; }
 .proactive-worker-check { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; gap: 10px; align-items: stretch; margin-top: 10px; }
 .proactive-worker-check > div { display: grid; gap: 4px; padding: 9px 10px; border: 1px solid rgba(120,120,140,.18); border-radius: 10px; background: rgba(255,255,255,.38); }
@@ -11485,14 +11486,21 @@ body.dark-mode .heart-note-setting-row input { background: rgba(255, 255, 255, 0
 .proactive-save-button { width: 100%; min-height: 40px; margin-top: 14px; padding: 9px 12px; }
 .proactive-settings-grid .proactive-save-button { grid-column: 1 / -1; margin-top: 2px; }
 .proactive-character-list { display: grid; gap: 10px; margin-top: 13px; }
-.proactive-character-item { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 14px; background: rgba(125,125,150,.07); }
+.proactive-character-item { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 14px; background: rgba(0, 0, 0, 0.06); }
 .proactive-character-avatar { width: 38px; height: 38px; flex: 0 0 38px; border-radius: 50%; object-fit: cover; display: grid; place-items: center; background: rgba(120,120,150,.12); }
 .proactive-character-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proactive-character-item input { width: 18px; height: 18px; }
 .proactive-manual-card select { margin-top: 12px; }
 /* ★ 运行日志卡片沿用后台任务状态的浅底面板，条目共用中性的诊断日志样式。 */
 .proactive-log-card { padding: 12px; background: rgba(0, 0, 0, 0.05); border-color: rgba(0, 0, 0, 0.15); }
-.proactive-status-summary { margin: 12px 0; padding: 10px 12px; border-radius: 12px; background: rgba(125,125,150,.07); font-size: .84rem; line-height: 1.55; white-space: pre-line; }
+.proactive-status-summary { 
+    margin: 0px 0 12px 0; 
+    padding: 10px 12px; 
+    border-radius: 12px; 
+    background: rgba(0, 0, 0, 0.06); 
+    font-size: .84rem; 
+    white-space: pre-line; 
+}
 .proactive-event-list { display: grid; gap: 6px; max-height: 360px; overflow-y: auto; }
 
 body.dark-mode .proactive-card {
